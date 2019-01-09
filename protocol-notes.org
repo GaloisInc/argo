@@ -1,0 +1,108 @@
+* Protocol
+
+ - Start with Cryptol part of API
+ - Replace existing =cryptol-server= binary, raiding it for useful
+   functionality
+ - We want to support at least what the Cryptol REPL supports, plus
+   some SAW things.
+
+* Ideas
+
+
+* States
+
+A state is represented as a JSON array of the sequence of commands
+that gives rise to it. Each command will reply with a state; however,
+this state may be a minimized version, where commands that did not
+have an effect have been stripped out or where a sequence of commands
+that modify the state have been coalesced into a single command.
+
+The state passed by a client should always have been constructed by
+the server, not directly by the client.
+
+* Application datatypes
+
+These are datatypes used in the protocol, along with their JSON encodings.
+
+** Input datatypes
+*** Cryptol expressions
+
+A Cryptol expression is one of the following:
+ - A string containing concrete Cryptol syntax
+
+ - A JSON object that represents a handle to an existing expression,
+   previously sent from the server. These should be treated as opaque
+   tokens.
+
+ - An object with the following keys:
+   - =type= :: a Cryptol type, which must describe a finite bit
+               sequence (e.g. not a function, not an infinite stream)
+   - =encoding= :: the literal string ="base64"=
+   - =data= :: A base64-encoded bitstring
+
+*** Cryptol types
+
+A Cryptol type is one of the following:
+ - A string containing concrete Cryptol type syntax
+
+ - A JSON object that represents a handle to an existing type,
+   previously sent from the server. These should be treated as opaque
+   tokens.
+
+** Output datatypes
+
+*** Cryptol types
+
+An output Cryptol type consists of an object with at least the
+following fields:
+ - ="line"= :: the concrete syntax of the type, on one line
+ - ="formatted"= :: a pretty-printed version of the type
+ - ="handle"= :: an abstract token representing the type
+
+
+* Cryptol commands
+
+All commands that are specific to Cryptol 
+
+Each command from the Cryptol REPL, except for =:e= and =:!=, should be part of
+the protocol. Here's the output of =:help=:
+
+#+BEGIN_EXAMPLE
+  :t, :type            check the type of an expression
+  :b, :browse          display the current environment
+  :?, :help            display a brief description of a function or a type
+  :s, :set             set an environmental option (:set on its own displays current values)
+  :check               use random testing to check that the argument always returns true (if no argument, check all properties)
+  :exhaust             use exhaustive testing to prove that the argument always returns true (if no argument, check all properties)
+  :prove               use an external solver to prove that the argument always returns true (if no argument, check all properties)
+  :sat                 use a solver to find a satisfying assignment for which the argument returns true (if no argument, find an assignment for all properties)
+  :debug_specialize    do type specialization on a closed expression
+  :eval                evaluate an expression with the reference evaluator
+  :ast                 print out the pre-typechecked AST of a given term
+  :extract-coq         print out the post-typechecked AST of all currently defined terms, in a Coq parseable format
+  :q, :quit            exit the REPL
+  :l, :load            load a module
+  :r, :reload          reload the currently loaded module
+  :e, :edit            edit the currently loaded module
+  :!                   execute a command in the shell
+  :cd                  set the current working directory
+  :m, :module          load a module
+  :w, :writeByteArray  write data of type `fin n => [n][8]` to a file
+  :readByteArray       read data from a file as type `fin n => [n][8]`, binding the value to variable `it`
+#+END_EXAMPLE
+
+In the following list, keys refer to method names, and values are the
+contents of the =params= object. In addition to the listed fields,
+every =params= object should additionally have the field =state=,
+giving the state in which the command should execute.
+
+ - =cryptol type= :: Check the type of an expression.
+   - ="params"= ::
+     - =expression= :: A Cryptol expression
+   - Result: A Cryptol type
+
+
+
+** Cryptol error messages
+
+* SAW commands

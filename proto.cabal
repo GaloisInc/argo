@@ -50,6 +50,7 @@ library
   -- Modules exported by the library.
   exposed-modules:
                       JSONRPC
+                    , Netstrings
 
   -- Modules included in this library but not exported.
   -- other-modules:
@@ -61,10 +62,14 @@ library
   build-depends:       base ^>=4.11.1.0
                      , lens
                      , aeson
+                     , binary
                      , bytestring
                      , containers
+                     , cryptol == 2.6.0
+                     , scotty
                      , text
                      , scientific ^>=0.3
+                     , wai
 
   -- Directories containing source files.
   hs-source-dirs:      src
@@ -78,7 +83,7 @@ executable proto
   main-is:             Main.lhs
 
   -- Modules included in this executable, other than Main.
-  -- other-modules:
+  other-modules:       JSONRPC, Netstrings
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
@@ -87,10 +92,14 @@ executable proto
   build-depends:       base ^>=4.11.1.0
                      , lens
                      , aeson
+                     , binary
                      , bytestring
                      , containers
+                     , cryptol == 2.6.0
+                     , scotty
                      , text
                      , scientific ^>=0.3
+                     , wai
 
   -- Directories containing source files.
   hs-source-dirs:      src

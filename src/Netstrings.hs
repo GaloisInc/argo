@@ -26,6 +26,8 @@ data BadNetstring = BadLength | MissingColon (Maybe Word8) | MissingComma (Maybe
 
 instance Exception BadNetstring
 
+-- TODO: Let's make a newtype wrapper for encoded netstrings
+
 toNetstring :: ByteString -> ByteString
 toNetstring bytes =
   BS.toLazyByteString $
@@ -36,6 +38,7 @@ toNetstring bytes =
 
 -- >>> toNetstring "hello"
 -- "5:hello,"
+
 
 -- | Read a netstring from a handle
 netstringFromHandle :: Handle -> IO ByteString
@@ -66,12 +69,13 @@ fromNetstring input =
     case BS.uncons rest of
       Nothing -> throw (MissingColon Nothing)
       Just (c, rest')
-        | isColon c -> let (content, rest'') = BS.splitAt (fromIntegral len) rest'
-                       in
-                         case BS.uncons rest'' of
-                           Nothing -> throw (MissingComma Nothing)
-                           Just (b, done) | isComma b -> (content, done)
-                                          | otherwise -> throw (MissingComma (Just b))
+        | isColon c ->
+            let (content, rest'') = BS.splitAt (fromIntegral len) rest'
+            in
+              case BS.uncons rest'' of
+                Nothing -> throw (MissingComma Nothing)
+                Just (b, done) | isComma b -> (content, done)
+                               | otherwise -> throw (MissingComma (Just b))
         | otherwise -> throw (MissingColon (Just c))
 
 isDigit :: Word8 -> Bool
@@ -97,6 +101,5 @@ asLength len =
     go acc (d:ds) = go (acc * 10 + d) ds
 
 -- >>> :set -XOverloadedStrings
--- >>> netstring "5:hello,aldskf"
--- ("5",5,"hello",",aldskf")
+-- >>> fromNetstring "5:hello,aldskf"
 -- ("hello","aldskf")

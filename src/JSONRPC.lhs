@@ -207,21 +207,23 @@ is Nothing.
 >                                           ]
 >                withMVar outH $ \h -> h (JSON.encode response)
 >           Query impl ->
->             do answer <- withMVar theState $ flip impl params
+>             do answer <- readMVar theState >>= flip impl params
 >                let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
 >                                           , "id" .= reqID
 >                                           , "result" .= answer
 >                                           ]
 >                withMVar outH $ \h -> h (JSON.encode response)
 >           Notification impl ->
->                modifyMVar theState (fmap (,()) . flip impl params)
+>                modifyMVar theState $
+>                \s -> do s' <- impl s params
+>                         return (s', ())
 >
 >   where
 >     requireID :: Method s -> Maybe RequestID -> IO ()
 >     requireID (Command _)      (Just _) = return ()
 >     requireID (Query _)        (Just _) = return ()
 >     requireID (Notification _) Nothing  = return ()
->     requireID _                _        = throw invalidRequest
+>     requireID _                _        = throwIO invalidRequest
 
 One way to run a server is on stdio, listening for requests on stdin
 and replying on stdout. In this system, each request must be on a

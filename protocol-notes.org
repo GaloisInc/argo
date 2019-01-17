@@ -60,6 +60,15 @@ following fields:
  - ="handle"= :: an abstract token representing the type
 
 
+* Protocol Commands
+
+** Load module
+
+ - Method :: ="load module"=
+ - Params :: An object with keys:
+   - ="file"= :: A path
+   - ="state"= :: A state representation
+
 * Cryptol commands
 
 All commands that are specific to Cryptol 

@@ -35,21 +35,21 @@ cryptolMethods :: [(Text, Method ServerState)]
 cryptolMethods =
   [("load module", Command loadModule)]
   where
-    loadModule s params =
+    loadModule rid s params =
       case JSON.fromJSON params of
-        JSON.Error msg -> throw (badParams params)
+        JSON.Error msg -> throw (badParams rid params)
         JSON.Success (LoadModuleParams fn) ->
-          do (s', x) <- runModuleCmd s (loadModuleByPath fn)
+          do (s', x) <- runModuleCmd rid s (loadModuleByPath fn)
              return (s', JSON.toJSON ())
 
 theEvalOpts :: EvalOpts
 theEvalOpts = EvalOpts quietLogger (PPOpts False 10 25)
 
-runModuleCmd :: ServerState -> ModuleCmd a -> IO (ServerState, a)
-runModuleCmd s cmd =
+runModuleCmd :: RequestID -> ServerState -> ModuleCmd a -> IO (ServerState, a)
+runModuleCmd rid s cmd =
      do out <- cmd (theEvalOpts, view moduleEnv s)
         case out of
-          (Left x, warns) -> error "TODO"
+          (Left x, warns) -> throw (cantLoadMod rid (JSON.toJSON (show (x, warns))))
           (Right (x, newEnv), warns) -> return (set moduleEnv newEnv s, x)
 
 data LoadModuleParams =
@@ -77,13 +77,20 @@ instance JSON.FromJSON ServerHistory where
                "load module" -> HistLoadModule <$> (o .: "params")
                _ -> empty
 
--- TODO add request ID (it should be passed to commands and such, I suppose)
-badParams :: JSON.Value -> JSONRPCException
-badParams params =
+cantLoadMod :: RequestID -> JSON.Value -> JSONRPCException
+cantLoadMod rid mod =
+  JSONRPCException { errorCode = 3
+                   , message = "Can't load module"
+                   , errorData = Just mod
+                   , errorID = Just rid
+                   }
+
+badParams :: RequestID -> JSON.Value -> JSONRPCException
+badParams rid params =
   JSONRPCException { errorCode = 2
                    , message = "Bad params"
                    , errorData = Just params
-                   , errorID = Nothing
+                   , errorID = Just rid
                    }
 
 data LoadedModule = LoadedModule

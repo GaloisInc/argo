@@ -53,9 +53,9 @@ Methods come in three forms:
  - notifications, which can modify state but do not return an answer.
 
 > data Method s where
->   Command      :: (s -> JSON.Value -> IO (s, JSON.Value)) -> Method s
->   Query        :: (s -> JSON.Value -> IO JSON.Value)      -> Method s
->   Notification :: (s -> JSON.Value -> IO s)               -> Method s
+>   Command      :: (RequestID -> s -> JSON.Value -> IO (s, JSON.Value)) -> Method s
+>   Query        :: (RequestID -> s -> JSON.Value -> IO JSON.Value)      -> Method s
+>   Notification :: (             s -> JSON.Value -> IO s)               -> Method s
 
 An application is a state and a mapping from names to methods.
 
@@ -197,33 +197,35 @@ is Nothing.
 >     case M.lookup method $ view appMethods app of
 >       Nothing -> throw $ methodNotFound reqID (Just method)
 >       Just m ->
->         requireID m reqID *>
 >         case m of
 >           Command impl ->
->             do answer <- modifyMVar theState $ flip impl params
+>             do rid <- requireID reqID
+>                answer <- modifyMVar theState $ \s -> impl rid s params
 >                let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
 >                                           , "id" .= reqID
 >                                           , "result" .= answer
 >                                           ]
 >                withMVar outH $ \h -> h (JSON.encode response)
 >           Query impl ->
->             do answer <- readMVar theState >>= flip impl params
+>             do rid <- requireID reqID
+>                answer <- readMVar theState >>= \s -> impl rid s params
 >                let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
 >                                           , "id" .= reqID
 >                                           , "result" .= answer
 >                                           ]
 >                withMVar outH $ \h -> h (JSON.encode response)
 >           Notification impl ->
+>             do requireNoID reqID
 >                modifyMVar theState $
->                \s -> do s' <- impl s params
->                         return (s', ())
+>                 \s -> do s' <- impl s params
+>                          return (s', ())
 >
 >   where
->     requireID :: Method s -> Maybe RequestID -> IO ()
->     requireID (Command _)      (Just _) = return ()
->     requireID (Query _)        (Just _) = return ()
->     requireID (Notification _) Nothing  = return ()
->     requireID _                _        = throwIO invalidRequest
+>     requireID (Just rid) = return rid
+>     requireID Nothing  = throwIO invalidRequest
+>
+>     requireNoID (Just _) = throwIO invalidRequest
+>     requireNoID Nothing = return ()
 
 One way to run a server is on stdio, listening for requests on stdin
 and replying on stdout. In this system, each request must be on a

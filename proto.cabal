@@ -59,7 +59,7 @@ library
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       base ^>=4.11.1.0
+  build-depends:       base >=4.11.1.0 && <4.13
                      , lens
                      , aeson
                      , binary
@@ -70,6 +70,7 @@ library
                      , text
                      , scientific ^>=0.3
                      , wai
+                     , sbv < 8.0
 
   -- Directories containing source files.
   hs-source-dirs:      src
@@ -106,4 +107,3 @@ executable proto
 
   -- Base language which the package is written in.
   default-language:    Haskell2010
-

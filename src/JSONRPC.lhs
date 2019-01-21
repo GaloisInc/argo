@@ -191,8 +191,14 @@ is Nothing.
 >     JSON.object
 >       [ "jsonrpc" .= jsonRPCVersion
 >       , "method"  .= view requestMethod req
->       , "id"      .= view requestID req
+>       , "id"      .= view requestID     req
 >       , "params"  .= view requestParams req ]
+>   toEncoding req =
+>     JSON.pairs $
+>       "jsonrpc" .= jsonRPCVersion         <>
+>       "method"  .= view requestMethod req <>
+>       "id"      .= view requestID     req <>
+>       "params"  .= view requestParams req
 
 > handleRequest :: forall s . (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
 > handleRequest out app req =

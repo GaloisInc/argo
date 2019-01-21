@@ -186,6 +186,13 @@ is Nothing.
 >       (o .: "jsonrpc" `suchThat` (== jsonRPCVersion)) *>
 >       (Request <$> o .: "method" <*> o .:! "id" <*> o .: "params")
 
+> instance JSON.ToJSON Request where
+>   toJSON req =
+>     JSON.object
+>       [ "jsonrpc" .= jsonRPCVersion
+>       , "method"  .= view requestMethod req
+>       , "id"      .= view requestID req
+>       , "params"  .= view requestParams req ]
 
 > handleRequest :: forall s . (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
 > handleRequest out app req =
@@ -245,16 +252,24 @@ and replying on stdout. In this system, each request must be on a
 line for itself, and no newlines are otherwise allowed.
 
 > serveStdIO :: App s -> IO ()
-> serveStdIO app = init >>= loop
+> serveStdIO = serveHandles stdin stdout
+
+> serveHandles ::
+>   Handle {- ^ input handle    -} ->
+>   Handle {- ^ output handle   -} ->
+>   App s  {- ^ RPC application -} ->
+>   IO ()
+> serveHandles hIn hOut app = init >>= loop
 >   where
 >     newline = 0x0a -- ASCII/UTF8
 >
->     init = (,) <$> locked BS.putStr <*> (BS.split newline <$> BS.hGetContents stdin)
+>     init = (,) <$> locked (BS.hPutStr hOut)
+>                <*> (BS.split newline <$> BS.hGetContents hIn)
 >
 >     loop (out, input) =
 >       case input of
 >         [] -> return ()
->         (l:rest) ->
+>         l:rest ->
 >           do forkIO $
 >                (case JSON.eitherDecode l of
 >                   Left msg -> throw (parseError (T.pack msg))
@@ -270,13 +285,19 @@ line for itself, and no newlines are otherwise allowed.
 >     reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
 >     reportOtherException = undefined  -- TODO: convert to JSONRPCException
 
-
 > serveStdIONS :: App s -> IO ()
-> serveStdIONS app =
->   do hSetBinaryMode stdin True
->      hSetBuffering stdin NoBuffering
->      input <- newMVar stdin
->      output <- locked (BS.hPut stdout . toNetstring)
+> serveStdIONS = serveHandlesNS stdin stdout
+
+> serveHandlesNS ::
+>   Handle {- ^ input handle    -} ->
+>   Handle {- ^ output handle   -} ->
+>   App s  {- ^ RPC application -} ->
+>   IO ()
+> serveHandlesNS hIn hOut app =
+>   do hSetBinaryMode hIn True
+>      hSetBuffering hIn NoBuffering
+>      input <- newMVar hIn
+>      output <- locked (BS.hPut hOut . toNetstring)
 >      loop output input
 >   where
 >     loop :: (BS.ByteString -> IO ()) -> MVar Handle -> IO ()
@@ -292,12 +313,6 @@ line for itself, and no newlines are otherwise allowed.
 >     reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
 >     reportError output exn =
 >       output (JSON.encode exn)
-
-
-Another way is on a socket with netstrings
-
-
-
 
 Finally, HTTP also works.
 

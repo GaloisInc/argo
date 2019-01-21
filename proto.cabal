@@ -50,7 +50,8 @@ library
   -- Modules exported by the library.
   exposed-modules:
                       JSONRPC
-                    , Netstrings
+                      JSONRPC.Socket
+                      Netstrings
 
   -- Modules included in this library but not exported.
   -- other-modules:
@@ -71,6 +72,8 @@ library
                      , scientific ^>=0.3
                      , wai
                      , sbv < 8.0
+                     , network ^>=3.0
+                     , async ^>=2.2
 
   -- Directories containing source files.
   hs-source-dirs:      src

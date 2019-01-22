@@ -187,6 +187,8 @@ is Nothing.
 >       (Request <$> o .: "method" <*> o .:! "id" <*> o .: "params")
 
 
+TODO: Don't make outH be an mvar here, push the locking into a (ByteString -> IO ())
+
 > handleRequest :: forall s . MVar (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
 > handleRequest outH app req =
 >   let method   = view requestMethod req
@@ -195,7 +197,7 @@ is Nothing.
 >       theState = view appState app
 >   in
 >     case M.lookup method $ view appMethods app of
->       Nothing -> throw $ methodNotFound reqID (Just method)
+>       Nothing -> throwIO $ methodNotFound reqID (Just method)
 >       Just m ->
 >         case m of
 >           Command impl ->
@@ -264,13 +266,14 @@ line for itself, and no newlines are otherwise allowed.
 >       do line <- withMVar input $ netstringFromHandle
 >          forkIO $
 >                (case JSON.eitherDecode line of
->                   Left msg -> throw (parseError (T.pack msg))
+>                   Left msg -> throwIO (parseError (T.pack msg))
 >                   Right req -> handleRequest output app req)
 >                  `catch` reportError output
+>                  -- TODO add a catch for other errors that throws a JSON-RPC wrapper
 >          loop output input
 >     reportError :: MVar (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
 >     reportError output exn =
->       withMVar output ($ (JSON.encode exn))
+>       withMVar output (\h -> h (JSON.encode exn))
 
 
 Another way is on a socket with netstrings

@@ -38,7 +38,7 @@
   "Quit the test process."
   (interactive)
   (when proto-test-proc
-    (kill-process proto-test-proc)
+    (ignore-errors (kill-process proto-test-proc))
     (setq proto-test-proc nil)
     (setq proto-test--output "")))
 

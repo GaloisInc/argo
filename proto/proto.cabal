@@ -65,9 +65,10 @@ library
                      , binary
                      , bytestring
                      , containers
-                     , cryptol == 2.6.0
+                     , cryptol == 2.6.1
                      , scotty
                      , text
+                     , unordered-containers ^>=0.2
                      , scientific ^>=0.3
                      , wai
 
@@ -95,9 +96,10 @@ executable proto
                      , binary
                      , bytestring
                      , containers
-                     , cryptol == 2.6.0
+                     , cryptol == 2.6.1
                      , scotty
                      , text
+                     , unordered-containers ^>=0.2
                      , scientific ^>=0.3
                      , wai
 

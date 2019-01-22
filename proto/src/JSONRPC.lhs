@@ -187,10 +187,22 @@ is Nothing.
 >       (Request <$> o .: "method" <*> o .:! "id" <*> o .: "params")
 
 
-TODO: Don't make outH be an mvar here, push the locking into a (ByteString -> IO ())
+> instance JSON.ToJSON Request where
+>   toJSON req =
+>     JSON.object
+>       [ "jsonrpc" .= jsonRPCVersion
+>       , "method"  .= view requestMethod req
+>       , "id"      .= view requestID     req
+>       , "params"  .= view requestParams req ]
+>   toEncoding req =
+>     JSON.pairs $
+>       "jsonrpc" .= jsonRPCVersion         <>
+>       "method"  .= view requestMethod req <>
+>       "id"      .= view requestID     req <>
+>       "params"  .= view requestParams req
 
-> handleRequest :: forall s . MVar (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
-> handleRequest outH app req =
+> handleRequest :: forall s . (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
+> handleRequest out app req =
 >   let method   = view requestMethod req
 >       params   = view requestParams req
 >       reqID    = view requestID req
@@ -207,7 +219,7 @@ TODO: Don't make outH be an mvar here, push the locking into a (ByteString -> IO
 >                                           , "id" .= reqID
 >                                           , "result" .= answer
 >                                           ]
->                withMVar outH $ \h -> h (JSON.encode response)
+>                out (JSON.encode response)
 >           Query impl ->
 >             do rid <- requireID reqID
 >                answer <- readMVar theState >>= \s -> impl rid s params
@@ -215,7 +227,7 @@ TODO: Don't make outH be an mvar here, push the locking into a (ByteString -> IO
 >                                           , "id" .= reqID
 >                                           , "result" .= answer
 >                                           ]
->                withMVar outH $ \h -> h (JSON.encode response)
+>                out (JSON.encode response)
 >           Notification impl ->
 >             do requireNoID reqID
 >                modifyMVar theState $
@@ -229,39 +241,73 @@ TODO: Don't make outH be an mvar here, push the locking into a (ByteString -> IO
 >     requireNoID (Just _) = throwIO invalidRequest
 >     requireNoID Nothing = return ()
 
+
+Given an IO action, return an atomic-ified version of that same action, such
+ that it closes over a lock. This is useful for synchronizing on output to
+ handles.
+
+> locked :: (a -> IO b) -> IO (a -> IO b)
+> locked action = do
+>   lock <- newMVar ()
+>   pure $ \output -> do
+>     withMVar lock $ \_ ->
+>       action output
+
+
 One way to run a server is on stdio, listening for requests on stdin
 and replying on stdout. In this system, each request must be on a
 line for itself, and no newlines are otherwise allowed.
 
 > serveStdIO :: App s -> IO ()
-> serveStdIO app = init >>= loop
+> serveStdIO = serveHandles stdin stdout
+
+> serveHandles ::
+>   Handle {- ^ input handle    -} ->
+>   Handle {- ^ output handle   -} ->
+>   App s  {- ^ RPC application -} ->
+>   IO ()
+> serveHandles hIn hOut app = init >>= loop
 >   where
 >     newline = 0x0a -- ASCII/UTF8
->     init = (,) <$> newMVar (BS.hPut stdout) <*> (BS.split newline <$> BS.hGetContents stdin)
->     loop (output, input) =
+>
+>     init = (,) <$> locked (BS.hPutStr hOut)
+>                <*> (BS.split newline <$> BS.hGetContents hIn)
+>
+>     loop (out, input) =
 >       case input of
 >         [] -> return ()
->         (l:rest) ->
+>         l:rest ->
 >           do forkIO $
 >                (case JSON.eitherDecode l of
 >                   Left msg -> throw (parseError (T.pack msg))
->                   Right req -> handleRequest output app req)
->                `catch` reportError output
->              loop (output, rest)
->     reportError :: MVar (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
->     reportError output exn =
->       withMVar output ($ (JSON.encode exn <> BS.singleton newline))
-
+>                   Right req -> handleRequest out app req)
+>                `catch` reportError out
+>                `catch` reportOtherException out
+>              loop (out, rest)
+>
+>     reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
+>     reportError out exn =
+>       out (JSON.encode exn <> BS.singleton newline)
+>
+>     reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
+>     reportOtherException = undefined  -- TODO: convert to JSONRPCException
 
 > serveStdIONS :: App s -> IO ()
-> serveStdIONS app =
->   do hSetBinaryMode stdin True
->      hSetBuffering stdin NoBuffering
->      input <- newMVar stdin
->      output <- newMVar (BS.hPut stdout . toNetstring)
+> serveStdIONS = serveHandlesNS stdin stdout
+
+> serveHandlesNS ::
+>   Handle {- ^ input handle    -} ->
+>   Handle {- ^ output handle   -} ->
+>   App s  {- ^ RPC application -} ->
+>   IO ()
+> serveHandlesNS hIn hOut app =
+>   do hSetBinaryMode hIn True
+>      hSetBuffering hIn NoBuffering
+>      input <- newMVar hIn
+>      output <- locked (BS.hPut hOut . toNetstring)
 >      loop output input
 >   where
->     loop :: MVar (BS.ByteString -> IO ()) -> MVar Handle -> IO ()
+>     loop :: (BS.ByteString -> IO ()) -> MVar Handle -> IO ()
 >     loop output input =
 >       do line <- withMVar input $ netstringFromHandle
 >          forkIO $
@@ -271,14 +317,10 @@ line for itself, and no newlines are otherwise allowed.
 >                  `catch` reportError output
 >                  -- TODO add a catch for other errors that throws a JSON-RPC wrapper
 >          loop output input
->     reportError :: MVar (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
+>
+>     reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
 >     reportError output exn =
->       withMVar output (\h -> h (JSON.encode exn))
-
-
-Another way is on a socket with netstrings
-
-
+>       output (JSON.encode exn)
 
 
 Finally, HTTP also works.
@@ -291,9 +333,9 @@ Finally, HTTP also works.
 >        body <- liftIO $ strictRequestBody req
 >        -- NOTE: Making the assumption that WAI forks a thread - TODO: verify this
 >        stream $ \put flush ->
->          do output <- newMVar (\ str -> put (fromByteString (BS.toStrict str)) *> flush)
+>          do output <- locked (\ str -> put (fromByteString (BS.toStrict str)) *> flush)
 >             let reportError = \ (exn :: JSONRPCException) ->
->                                 withMVar output ($ (JSON.encode exn <> BS.singleton newline))
+>                                 output (JSON.encode exn <> BS.singleton newline)
 >             (case JSON.eitherDecode body of
 >                Left msg -> throw (parseError (T.pack msg))
 >                Right req -> handleRequest output app req)

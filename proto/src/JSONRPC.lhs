@@ -243,15 +243,15 @@ is Nothing.
 
 
 Given an IO action, return an atomic-ified version of that same action, such
- that it closes over a lock. This is useful for synchronizing on output to
- handles.
+that it closes over a lock. This is useful for synchronizing on output to
+handles.
 
 > locked :: (a -> IO b) -> IO (a -> IO b)
-> locked action = do
->   lock <- newMVar ()
->   pure $ \output -> do
->     withMVar lock $ \_ ->
->       action output
+> locked action =
+>   do lock <- newMVar ()
+>      pure $ \output ->
+>        withMVar lock $ \_ ->
+>          action output
 
 
 One way to run a server is on stdio, listening for requests on stdin

@@ -67,6 +67,7 @@ library
                      , bytestring
                      , containers
                      , cryptol == 2.6.1
+                     , directory
                      , scotty
                      , text
                      , unordered-containers ^>=0.2
@@ -101,6 +102,7 @@ executable proto
                      , bytestring
                      , containers
                      , cryptol == 2.6.1
+                     , directory
                      , scotty
                      , text
                      , unordered-containers ^>=0.2

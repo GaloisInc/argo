@@ -12,6 +12,7 @@ import qualified Data.Aeson as JSON
 import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson.Types as JSON
 import Data.Text (Text)
+import System.Directory (doesDirectoryExist, setCurrentDirectory)
 
 import JSONRPC
 
@@ -31,13 +32,93 @@ import Cryptol.Utils.Logger (quietLogger)
 import Debug.Trace
 
 main :: IO ()
-main =
+main = realMain -- otherMain
+
+realMain =
   do initSt <- initialState
      theApp <- mkApp initSt cryptolMethods
      serveStdIONS theApp
+  where bogus = [("echo", Command (\r s p -> return (s, p)))]
+
+
+otherMain = serveStdIONS =<< mkApp (0 :: Integer) [ ("get", Query $ \r s p -> return (JSON.toJSON s))
+                                                  , ("increment", Command $ \r s p -> return (s + 1, JSON.toJSON s))
+                                                  ]
+
+cryptolMethods :: [(Text, Method ServerState)]
+cryptolMethods =
+  [ ("change directory", Command $ runCryptolServerCommand cd)
+  , ("load module", Command $ runCryptolServerCommand loadModule)
+  , ("evaluate expression", Command $ runCryptolServerCommand evalExpression)
+  ]
+  where
+
+    cd =
+      do (ChangeDirectoryParams newDir) <- params
+         exists <- liftIO $ doesDirectoryExist newDir
+         if exists
+           then do liftIO $ setCurrentDirectory newDir
+                   return (JSON.toJSON ())
+           else do rid <- getRequestID
+                   liftIO $ throwIO (dirNotFound rid newDir)
+
+    loadModule =
+      do (LoadModuleParams fn) <- params
+         x <- runModuleCmd (loadModuleByPath fn)
+         return (JSON.toJSON ())
+
+    evalExpression =
+      do (EvalExprParams str) <- params
+         case parseExpr str of
+            Left err -> do rid <- getRequestID; liftIO $ throwIO (cryptolParseErr rid str err)
+            Right e ->
+              do (expr, ty, schema) <- runModuleCmd (checkExpr e)
+                 -- TODO: see Cryptol REPL for how to check whether we
+                 -- can actually evaluate things, which we can't do in
+                 -- a parameterized module
+                 me <- view moduleEnv <$> getState
+                 let cfg = meSolverConfig me
+                 perhapsDef <- liftIO $ SMT.withSolver cfg (\s -> defaultReplExpr s ty schema)
+                 case perhapsDef of
+                   Nothing -> error "TODO"
+                   Just (tys, def1) ->
+                     do -- TODO: warnDefaults here
+                        let su = listParamSubst tys
+                        let theType = (apSubst su (sType schema))
+                        res <- runModuleCmd (evalExpr def1)
+                        return (JSON.toJSON (show res, show theType))
+
 
 initialState :: IO ServerState
 initialState = ServerState Nothing <$> initialModuleEnv
+
+
+data ChangeDirectoryParams =
+  ChangeDirectoryParams { newDirectory :: FilePath }
+
+instance JSON.FromJSON ChangeDirectoryParams where
+  parseJSON =
+    JSON.withObject "params for \"change directory\"" $
+    \o -> ChangeDirectoryParams <$> o .: "directory"
+
+
+data LoadModuleParams =
+  LoadModuleParams { loadModuleMod :: FilePath }
+
+instance JSON.FromJSON LoadModuleParams where
+  parseJSON =
+    JSON.withObject "params for \"load module\"" $
+    \o -> LoadModuleParams <$> o .: "file"
+
+
+data EvalExprParams =
+  EvalExprParams { evalExprExpression :: Text }
+
+instance JSON.FromJSON EvalExprParams where
+  parseJSON =
+    JSON.withObject "params for \"evaluate expression\"" $
+    \o -> EvalExprParams <$> o .: "expression"
+
 
 
 
@@ -122,7 +203,7 @@ instance HasParams CryptolServerNotification where
 
 params :: (MonadIO m, HasRequestID m, HasParams m, JSON.FromJSON a) => m a
 params =
-  do ps <- params
+  do ps <- getParams
      case JSON.fromJSON ps of
        JSON.Error msg ->
          do rid <- getRequestID
@@ -160,61 +241,10 @@ runModuleCmd cmd =
               return x
 
 
-cryptolMethods :: [(Text, Method ServerState)]
-cryptolMethods =
-  [ ("load module", Command $ runCryptolServerCommand loadModule)
-  , ("evaluate expression", Command $ runCryptolServerCommand evalExpression)]
-  where
-    loadModule = trace "alsdkfj" $
-      do (LoadModuleParams fn) <- params
-         x <- runModuleCmd (loadModuleByPath fn)
-         return (JSON.toJSON ())
-
-    evalExpression =
-      do (EvalExprParams str) <- params
-         liftIO $ trace "foo" $ return ()
-         case parseExpr str of
-            Left err -> do rid <- getRequestID; liftIO $ throwIO (cryptolParseErr rid str err)
-            Right e ->
-              do (expr, ty, schema) <- runModuleCmd (checkExpr e)
-                 -- TODO: see Cryptol REPL for how to check whether we
-                 -- can actually evaluate things, which we can't do in
-                 -- a parameterized module
-                 me <- view moduleEnv <$> getState
-                 liftIO $ trace "food" $ return ()
-                 let cfg = meSolverConfig me
-                 perhapsDef <- liftIO $ SMT.withSolver cfg (\s -> defaultReplExpr s ty schema)
-                 case perhapsDef of
-                   Nothing -> error "TODO"
-                   Just (tys, def1) ->
-                     do -- TODO: warnDefaults here
-                        trace "foody" $ return ()
-                        let su = listParamSubst tys
-                        let theType = (apSubst su (sType schema))
-                        res <- runModuleCmd (evalExpr def1)
-                        trace "foodies" $ return ()
-                        return (JSON.toJSON (show res, show theType))
 
 theEvalOpts :: EvalOpts
 theEvalOpts = EvalOpts quietLogger (PPOpts False 10 25)
 
-
-data LoadModuleParams =
-  LoadModuleParams { loadModuleMod :: FilePath }
-
-
-instance JSON.FromJSON LoadModuleParams where
-  parseJSON =
-    JSON.withObject "params for \"load module\"" $
-    \o -> LoadModuleParams <$> o .: "file"
-
-data EvalExprParams =
-  EvalExprParams { evalExprExpression :: Text }
-
-instance JSON.FromJSON EvalExprParams where
-  parseJSON =
-    JSON.withObject "params for \"evaluate expression\"" $
-    \o -> EvalExprParams <$> o .: "expression"
 
 
 
@@ -239,9 +269,18 @@ cantLoadMod rid mod =
                    , errorID = Just rid
                    }
 
+dirNotFound :: RequestID -> FilePath -> JSONRPCException
+dirNotFound rid dir =
+  JSONRPCException { errorCode = 3
+                   , message = "Directory doesn't exist"
+                   , errorData = Just (JSON.toJSON dir)
+                   , errorID = Just rid
+                   }
+
+
 cryptolParseErr :: RequestID -> Text -> _ -> JSONRPCException
 cryptolParseErr rid expr err =
-  JSONRPCException { errorCode = 3
+  JSONRPCException { errorCode = 4
                    , message = "There was a Cryptol parse error."
                    , errorData = Just $ JSON.object ["input" .= expr, "error" .= show err]
                    , errorID = Just rid

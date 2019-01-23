@@ -27,12 +27,83 @@
 (require 'cl-lib)
 (require 'comint)
 (require 'dired)
+(require 'json)
 
 (defvar proto-test-proc nil "The process being tested.")
 (defvar proto-test--output "" "The process's output so far.")
 
-(defvar proto-test-receive-functions '(proto-test-record-reply)
+(defvar proto-test-receive-functions '(proto-test-record-reply proto-test--cryptol-listen)
   "A list of functions to be called with the decoded output from the process.")
+
+(defvar proto-test--cryptol-continuations (make-hash-table))
+(defvar proto-test--cryptol-failure-continuations (make-hash-table))
+
+(defun proto-test--cryptol-listen (reply)
+  "Listen for REPLY to known Cryptol messages."
+  (let ((json-object-type 'hash-table)
+        (json-key-type 'string))
+    (let* ((decoded (json-read-from-string reply))
+           (status (cond ((gethash "error" decoded nil) 'error)
+                         ((gethash "result" decoded nil) 'result)
+                         (t (error "Invalid response")))))
+      (pcase status
+        ('error
+         (let ((the-id (gethash "id" decoded nil)))
+           (when the-id
+             (let ((fail-cont (gethash the-id proto-test--cryptol-failure-continuations))
+                   (error-info (gethash "error" decoded)))
+               (if fail-cont
+                   (funcall fail-cont
+                            (gethash "code" error-info)
+                            (gethash "message" error-info)
+                            (gethash "data" error-info))
+                 (error "Got error response: %S" reply))))))
+        ('result
+         (let* ((the-id (gethash "id" decoded))
+                (the-cont (gethash the-id proto-test--cryptol-continuations)))
+           (funcall the-cont (gethash "result" decoded))))))))
+
+(defun proto-test--cryptol-send (method params cont &optional fail-cont)
+  "Send the message with METHOD and PARAMS as in `proto-test'.
+Additionally register a continuation CONT to handle the reply,
+and optionally a failure continuation FAIL-CONT to handle
+errors."
+  (let* ((the-id (proto-test--next-id))
+         (message (list :jsonrpc "2.0"
+                        :id the-id
+                        :method method
+                        :params params)))
+    (puthash the-id cont proto-test--cryptol-continuations)
+    (when fail-cont (puthash the-id fail-cont proto-test--cryptol-failure-continuations))
+    (proto-test-send (json-encode-plist message))))
+
+(defun proto-test-cryptol-change-directory (dir)
+  "Change to directory DIR in Cryptol."
+  (interactive "DNew directory: ")
+  (proto-test--cryptol-send "change directory" `(:state [] :directory ,dir)
+                            (lambda (_)
+                              (message "Changed directory"))))
+
+(defun proto-test-cryptol-load-file (file)
+  "Load FILE in Cryptol."
+  (interactive "fFile to load: ")
+  (proto-test--cryptol-send "load module"
+                            `(:state [] :file ,file)
+                            (lambda (res)
+                              (message "Loaded file %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When loading file, got error %s (%S) with info %S" code err-message err-data))))
+
+
+(defun proto-test-cryptol-eval (expr)
+  "Eval EXPR in Cryptol."
+  (interactive "MExpression to eval: ")
+  (proto-test--cryptol-send "evaluate expression"
+                            `(:state [] :expression ,expr)
+                            (lambda (res)
+                              (message "The result is %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When evaluating %S, got error %s (%S) with info %S" expr code err-message err-data))))
 
 (defun proto-test-quit ()
   "Quit the test process."

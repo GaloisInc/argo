@@ -1,0 +1,5 @@
+packages:
+  proto
+
+optional-packages:
+  deps/cryptol/

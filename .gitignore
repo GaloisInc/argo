@@ -37,3 +37,4 @@ tags
 wiki
 wip
 .ghc.environment.*
+.dir-locals.el

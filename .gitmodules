@@ -1,0 +1,3 @@
+[submodule "deps/cryptol"]
+	path = deps/cryptol
+	url = git@github.com:GaloisInc/cryptol.git

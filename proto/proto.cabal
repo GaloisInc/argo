@@ -89,7 +89,12 @@ executable proto
   main-is:             Main.hs
 
   -- Modules included in this executable, other than Main.
-  other-modules:       JSONRPC, Netstrings
+  other-modules:       JSONRPC
+                     , Netstrings
+                     , CryptolServer
+                     , CryptolServer.ChangeDir
+                     , CryptolServer.EvalExpr
+                     , CryptolServer.LoadModule
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:

@@ -18,7 +18,7 @@
 > , serveStdIONS
 > , serveHandlesNS
 > -- *
-> , RequestID()
+> , RequestID(..)
 > ) where
 
 > import Control.Applicative

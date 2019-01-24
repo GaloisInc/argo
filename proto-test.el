@@ -204,6 +204,16 @@ instead."
     (with-current-buffer proto-test-history-buffer
       (read-only-mode 1))))
 
+(defun proto-test-clear-history-buffer ()
+  "Clear the contents of the history buffer, if it exists."
+  (interactive)
+  (when (and proto-test-history-buffer
+             (bufferp proto-test-history-buffer)
+             (buffer-live-p proto-test-history-buffer))
+    (with-current-buffer proto-test-history-buffer
+      (let ((buffer-read-only nil))
+        (erase-buffer)))))
+
 (defun proto-test-record-history-item (str what)
   "Record a history entry of STR as a WHAT."
   (proto-test-ensure-history-buffer)

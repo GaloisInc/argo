@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.EvalExpr where
-
+module CryptolServer.EvalExpr (evalExpression) where
 
 import Control.Exception
 import Control.Lens hiding ((.=))
@@ -24,7 +23,7 @@ import JSONRPC
 
 evalExpression :: CryptolServerCommand JSON.Value
 evalExpression =
-  do (EvalExprParams str) <- params
+  do EvalExprParams str <- params
      case parseExpr str of
         Left err -> do rid <- getRequestID; liftIO $ throwIO (cryptolParseErr rid str err)
         Right e ->
@@ -37,11 +36,11 @@ evalExpression =
              perhapsDef <- liftIO $ SMT.withSolver cfg (\s -> defaultReplExpr s ty schema)
              case perhapsDef of
                Nothing -> error "TODO"
-               Just (tys, def1) ->
+               Just (tys, checked) ->
                  do -- TODO: warnDefaults here
                     let su = listParamSubst tys
-                    let theType = (apSubst su (sType schema))
-                    res <- runModuleCmd (evalExpr def1)
+                    let theType = apSubst su (sType schema)
+                    res <- runModuleCmd (evalExpr checked)
                     return (JSON.toJSON (show res, show theType))
 
 data EvalExprParams =

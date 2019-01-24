@@ -32,7 +32,6 @@ realMain =
   do initSt <- initialState
      theApp <- mkApp initSt cryptolMethods
      serveStdIONS theApp
-  where bogus = [("echo", Command (\r s p -> return (s, p)))]
 
 
 cryptolMethods :: [(Text, Method ServerState)]
@@ -43,20 +42,10 @@ cryptolMethods =
   ]
 
 
-
-
 parseParams v = (,) <$> JSON.parseJSON v <*> (JSON.withObject "state" (\o -> o .: "state") v)
 
-data ServerHistory =
-  HistLoadModule LoadModuleParams
 
-instance JSON.FromJSON ServerHistory where
-  parseJSON =
-    JSON.withObject ("history entry") $
-    \o -> do (cmd :: Text) <- o .: "command"
-             case cmd of
-               "load module" -> HistLoadModule <$> (o .: "params")
-               _ -> empty
+
 
 
 

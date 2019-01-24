@@ -1,16 +1,21 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- Netstrings are a nicer way to send JSON over a socket, because they
--- account for the possibility of malformed JSON much more cleanly.
 
--- A netstring is an ASCII-encoded sequence of digits representing a
+-- | A netstring is an ASCII-encoded sequence of digits representing a
 -- number N, followed by an ASCII colon, followed by N bytes, followed
 -- by an ASCII comma. This allows receivers to know how much is needed.
-
+--
 -- Definition: http://cr.yp.to/proto/netstrings.txt
-
-module Netstrings where
+--
+-- Netstrings allow malformed JSON to be more robustly detected when
+-- using JSON-RPC.
+module Netstrings
+  ( toNetstring
+  , fromNetstring
+  , netstringFromHandle
+  )
+where
 
 import Control.Exception
 import Data.ByteString.Lazy (ByteString)
@@ -28,6 +33,7 @@ instance Exception BadNetstring
 
 -- TODO: Let's make a newtype wrapper for encoded netstrings
 
+-- | Encode a bytestring as a netstring
 toNetstring :: ByteString -> ByteString
 toNetstring bytes =
   BS.toLazyByteString $

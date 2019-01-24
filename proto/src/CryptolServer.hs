@@ -119,7 +119,7 @@ params =
      case JSON.fromJSON ps of
        JSON.Error msg ->
          do rid <- getRequestID
-            throw (badParams rid ps)
+            liftIO $ throwIO (badParams rid ps)
        JSON.Success decoded -> return decoded
 
 class HasRequestID m where
@@ -143,7 +143,7 @@ setState = modifyState . const
 runModuleCmd :: (MonadIO m, HasRequestID m, HasServerState m, SetsServerState m) => ModuleCmd a -> m a
 runModuleCmd cmd =
     do rid <- getRequestID
-       s <- getState
+       s   <- getState
        out <- liftIO $ cmd (theEvalOpts, view moduleEnv s)
        case out of
          (Left x, warns) ->

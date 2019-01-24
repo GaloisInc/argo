@@ -5,7 +5,21 @@
 > {-# LANGUAGE ScopedTypeVariables #-}
 > {-# LANGUAGE TupleSections #-}
 > {-# LANGUAGE TypeApplications #-}
-> module JSONRPC where
+> -- | An implementation of the basic primitives of JSON-RPC 2.0.
+> module JSONRPC (
+> -- * Primary interface to JSON-RPC
+>   App
+> , mkApp
+> , Method(..)
+> , JSONRPCException(..)
+> -- * Serving applications over transports
+> , serveStdIO
+> , serveHandles
+> , serveStdIONS
+> , serveHandlesNS
+> -- *
+> , RequestID()
+> ) where
 
 > import Control.Applicative
 > import Control.Concurrent
@@ -52,13 +66,17 @@ Methods come in three forms:
  - queries, which return an answer but do not modify state; and
  - notifications, which can modify state but do not return an answer.
 
+> -- | A server is a mapping from method names to these methods.
 > data Method s where
+>   -- | A Command can both modify the server's state and send a reply to the user.
 >   Command      :: (RequestID -> s -> JSON.Value -> IO (s, JSON.Value)) -> Method s
+>   -- | A Query can send a reply to the user, but it has a read-only view of the server's state.
 >   Query        :: (RequestID -> s -> JSON.Value -> IO JSON.Value)      -> Method s
+>   -- | A Notification can modify the server state, but it cannot reply to the user.
 >   Notification :: (             s -> JSON.Value -> IO s)               -> Method s
 
-An application is a state and a mapping from names to methods.
 
+> -- | An application is a state and a mapping from names to methods.
 > data App s =
 >   App { _appState :: MVar s
 >       , _appMethods :: Map Text (Method s)
@@ -70,18 +88,21 @@ An application is a state and a mapping from names to methods.
 > appMethods :: Simple Lens (App s) (Map Text (Method s))
 > appMethods = lens _appMethods (\a s -> a { _appMethods = s })
 
-> mkApp :: s -> [(Text, Method s)] -> IO (App s)
+> -- | Construct an application from an initial state and a mapping from method names to methods.
+> mkApp ::
+>   s {- ^ the initial state -} ->
+>   [(Text, Method s)] {- ^ method names paired with their implementations -} ->
+>   IO (App s)
 > mkApp initState methods =
 >   App <$> newMVar initState <*> pure (M.fromList methods)
 
-JSON RPC exceptions should be thrown by method implementations when
-they want to return an error.
-
+> -- | JSON RPC exceptions should be thrown by method implementations when
+> -- they want to return an error.
 > data JSONRPCException =
->   JSONRPCException { errorCode :: Integer
->                    , message :: Text
->                    , errorData :: Maybe JSON.Value
->                    , errorID :: Maybe RequestID
+>   JSONRPCException { errorCode :: Integer -- ^ The error code to be returned. From -32768 to -32000 is reserved by the protocol.
+>                    , message :: Text      -- ^ A single-sentence summary of the error
+>                    , errorData :: Maybe JSON.Value -- ^ More error data that might be useful. @Nothing@ will cause the field to be omitted.
+>                    , errorID :: Maybe RequestID -- ^ The request ID, if one is available. @Nothing@ omits it, because JSON-RPC defines a meaning for null.
 >                    }
 >   deriving Show
 
@@ -136,6 +157,8 @@ A JSON-RPC request ID is:
     it is assumed to be a notification. The value SHOULD normally not
     be Null [1] and Numbers SHOULD NOT contain fractional parts
 
+> -- | Request IDs come from clients, and are used to match responses
+> -- with commands.
 > data RequestID = IDText !Text | IDNum !Scientific | IDNull
 >   deriving (Eq, Ord, Show)
 
@@ -254,13 +277,15 @@ handles.
 >          action output
 
 
-One way to run a server is on stdio, listening for requests on stdin
-and replying on stdout. In this system, each request must be on a
-line for itself, and no newlines are otherwise allowed.
-
+> -- | One way to run a server is on stdio, listening for requests on stdin
+> -- and replying on stdout. In this system, each request must be on a
+> -- line for itself, and no newlines are otherwise allowed.
 > serveStdIO :: App s -> IO ()
 > serveStdIO = serveHandles stdin stdout
 
+> -- | Serve an application, listening for input on one handle and
+> -- sending output to another. Each request must be on a line for
+> -- itself, and no newlines are otherwise allowed.
 > serveHandles ::
 >   Handle {- ^ input handle    -} ->
 >   Handle {- ^ output handle   -} ->
@@ -292,9 +317,12 @@ line for itself, and no newlines are otherwise allowed.
 >     reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
 >     reportOtherException = undefined  -- TODO: convert to JSONRPCException
 
+> -- | Serve an application on stdio, with messages encoded as netstrings.
 > serveStdIONS :: App s -> IO ()
 > serveStdIONS = serveHandlesNS stdin stdout
 
+> -- | Serve an application on arbitrary handles, with messages
+> -- encoded as netstrings.
 > serveHandlesNS ::
 >   Handle {- ^ input handle    -} ->
 >   Handle {- ^ output handle   -} ->

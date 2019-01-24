@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.ChangeDir where
+module CryptolServer.ChangeDir (cd) where
 
 import Control.Exception
 import Control.Monad.IO.Class
@@ -12,7 +12,7 @@ import JSONRPC
 
 cd :: CryptolServerCommand JSON.Value
 cd =
-  do (ChangeDirectoryParams newDir) <- params
+  do ChangeDirectoryParams newDir <- params
      exists <- liftIO $ doesDirectoryExist newDir
      if exists
        then do liftIO $ setCurrentDirectory newDir

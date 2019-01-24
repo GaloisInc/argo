@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.LoadModule where
+module CryptolServer.LoadModule (loadModule) where
 
 import Control.Exception
 import Control.Monad.IO.Class
@@ -15,7 +15,7 @@ import JSONRPC
 
 loadModule :: CryptolServerCommand JSON.Value
 loadModule =
-  do (LoadModuleParams fn) <- params
+  do LoadModuleParams fn <- params
      x <- runModuleCmd (loadModuleByPath fn)
      return (JSON.toJSON ())
 

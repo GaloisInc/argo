@@ -21,6 +21,9 @@ listenQueueDepth = 10
 -- | Start listening on the given address and serve the given RPC
 -- application for all connecting clients. Messages are expected
 -- to use netstring-wrapped JSON RPC format.
+--
+-- A reasonable default host name is "::", and a reasonable default
+-- service name is a port number as a string, e.g. "10000".
 serveSocket ::
   N.HostName    {- ^ host              -} ->
   N.ServiceName {- ^ port              -} ->

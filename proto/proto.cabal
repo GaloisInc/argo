@@ -45,21 +45,7 @@ category:            Language
 -- README.
 extra-source-files:  CHANGELOG.md
 
-
-library
-  -- Modules exported by the library.
-  exposed-modules:
-                      JSONRPC
-                      JSONRPC.Socket
-                      Netstrings
-
-  -- Modules included in this library but not exported.
-  -- other-modules:
-
-  -- LANGUAGE extensions used by modules in this package.
-  -- other-extensions:
-
-  -- Other library packages from which modules are imported.
+common deps
   build-depends:       base >=4.11.1.0 && <4.13
                      , lens
                      , aeson
@@ -77,6 +63,24 @@ library
                      , network ^>=3.0
                      , async ^>=2.2
 
+
+library
+  import:             deps
+  -- Modules exported by the library.
+  exposed-modules:
+                      JSONRPC
+                      JSONRPC.Socket
+                      Netstrings
+
+  -- Modules included in this library but not exported.
+  -- other-modules:
+
+  -- LANGUAGE extensions used by modules in this package.
+  -- other-extensions:
+
+  -- Other library packages from which modules are imported.
+
+
   -- Directories containing source files.
   hs-source-dirs:      src
 
@@ -85,6 +89,7 @@ library
 
 
 executable proto
+  import:              deps
   -- .hs or .lhs file containing the Main module.
   main-is:             Main.hs
 
@@ -99,23 +104,21 @@ executable proto
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
 
-  -- Other library packages from which modules are imported.
-  build-depends:       base ^>=4.11.1.0
-                     , lens
-                     , aeson
-                     , binary
-                     , bytestring
-                     , containers
-                     , cryptol == 2.6.1
-                     , directory
-                     , scotty
-                     , text
-                     , unordered-containers ^>=0.2
-                     , scientific ^>=0.3
-                     , wai
+
 
   -- Directories containing source files.
   hs-source-dirs:      src
 
   -- Base language which the package is written in.
   default-language:    Haskell2010
+
+test-suite test-proto
+  import:              deps
+  default-language:    Haskell2010
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Test.hs
+  build-depends:       proto
+                     , quickcheck-instances
+                     , tasty
+                     , tasty-quickcheck

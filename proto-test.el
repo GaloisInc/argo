@@ -61,7 +61,8 @@
         ('result
          (let* ((the-id (gethash "id" decoded))
                 (the-cont (gethash the-id proto-test--cryptol-continuations)))
-           (funcall the-cont (gethash "result" decoded))))))))
+           (when the-cont
+             (funcall the-cont (gethash "result" decoded)))))))))
 
 (defun proto-test--cryptol-send (method params cont &optional fail-cont)
   "Send the message with METHOD and PARAMS as in `proto-test'.

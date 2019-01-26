@@ -20,6 +20,7 @@ import JSONRPC
 import Debug.Trace
 
 import CryptolServer
+import CryptolServer.Call
 import CryptolServer.ChangeDir
 import CryptolServer.EvalExpr
 import CryptolServer.LoadModule
@@ -39,14 +40,8 @@ cryptolMethods =
   [ ("change directory", Command $ runCryptolServerCommand cd)
   , ("load module", Command $ runCryptolServerCommand loadModule)
   , ("evaluate expression", Command $ runCryptolServerCommand evalExpression)
+  , ("call", Command $ runCryptolServerCommand call)
   ]
 
 
 parseParams v = (,) <$> JSON.parseJSON v <*> (JSON.withObject "state" (\o -> o .: "state") v)
-
-
-
-
-
-
-

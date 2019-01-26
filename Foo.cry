@@ -2,3 +2,6 @@ module Foo where
 
 x : [8]
 x = 0xff
+
+add : {a} (fin a) => [a] -> [a] -> [a]
+add = (+)

@@ -1,0 +1,13 @@
+resolver: lts-13.5
+
+packages:
+- proto
+
+extra-deps:
+- deps/cryptol
+- GraphSCC-1.0.4
+- base-compat-0.9.3
+- monadLib-3.9
+- network-3.0.0.0
+- panic-0.4.0.1
+- simple-smt-0.9.3

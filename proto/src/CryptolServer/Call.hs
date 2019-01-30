@@ -7,6 +7,7 @@ module CryptolServer.Call (call) where
 import Control.Applicative
 import Control.Exception (throwIO)
 import Control.Lens hiding ((.:), (.=))
+import Control.Monad (unless)
 import Control.Monad.IO.Class
 import Data.Aeson as JSON hiding (Encoding, Value, decode)
 import qualified Data.Aeson as JSON
@@ -14,6 +15,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.HashMap.Strict as HM
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
@@ -24,8 +26,10 @@ import Numeric (showHex)
 import Cryptol.Eval (evalSel)
 import Cryptol.Eval.Monad
 import Cryptol.Eval.Value
-import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, getPrimMap, loadModuleByPath, loadModuleByName)
-import Cryptol.ModuleSystem.Env (initialModuleEnv, meSolverConfig)
+import Cryptol.IR.FreeVars (freeVars, FreeVars, tyDeps, valDeps)
+import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, getPrimMap, loadModuleByPath, loadModuleByName, meLoadedModules)
+import Cryptol.ModuleSystem.Env (initialModuleEnv, isLoadedParamMod, meSolverConfig)
+import Cryptol.ModuleSystem.Name (NameInfo(Declared), nameInfo)
 import Cryptol.Parser
 import Cryptol.Parser.AST (Expr(..), Type(..), PName(..), Ident(..), Literal(..), Named(..), NumInfo(..))
 import Cryptol.Parser.Position (Located(..), emptyRange)
@@ -54,6 +58,8 @@ call =
      -- TODO: see Cryptol REPL for how to check whether we
      -- can actually evaluate things, which we can't do in
      -- a parameterized module
+     evalAllowed ty
+     evalAllowed schema
      me <- view moduleEnv <$> getState
      let cfg = meSolverConfig me
      perhapsDef <- liftIO $ SMT.withSolver cfg (\s -> defaultReplExpr s ty schema)
@@ -74,6 +80,20 @@ call =
     noDefaults xs@(_:_) =
       do rid <- getRequestID
          raise (unwantedDefaults xs)
+
+
+    evalAllowed x =
+      do me <- view moduleEnv <$> getState
+         let ds      = freeVars x
+             badVals = foldr badName Set.empty (valDeps ds)
+             bad     = foldr badName badVals (tyDeps ds)
+             badName nm bs =
+               case nameInfo nm of
+                 Declared m _
+                   | isLoadedParamMod m (meLoadedModules me) -> Set.insert nm bs
+                 _ -> bs
+         unless (Set.null bad) $
+           raise (evalInParamMod (Set.toList bad))
 
 readBack :: RequestID -> PrimMap -> TC.Type -> Value -> Eval ArgSpec
 readBack rid prims ty val =
@@ -307,8 +327,6 @@ invalidType ty rid =
     , errorID = Just rid
     }
 
-
-
 unwantedDefaults defs rid =
   JSONRPCException
     { errorCode = 35
@@ -317,6 +335,13 @@ unwantedDefaults defs rid =
     , errorID = Just rid
     }
 
+evalInParamMod mods rid =
+  JSONRPCException
+    { errorCode = 36
+    , message = "Can't evaluate Cryptol in a parameterized module."
+    , errorData = Just (toJSON (map pretty mods))
+    , errorID = Just rid
+    }
 
 -- TODO add tests that this is big-endian
 -- | Interpret a ByteString as an Integer

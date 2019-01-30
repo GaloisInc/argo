@@ -18,24 +18,24 @@ import JSONRPC
 
 
 
-badParams :: RequestID -> JSON.Value -> JSONRPCException
-badParams rid params =
+badParams ::  JSON.Value -> RequestID -> JSONRPCException
+badParams params rid =
   JSONRPCException { errorCode = 2
                    , message = "Bad params"
                    , errorData = Just params
                    , errorID = Just rid
                    }
 
-cantLoadMod :: RequestID -> JSON.Value -> JSONRPCException
-cantLoadMod rid mod =
+cantLoadMod :: JSON.Value -> RequestID -> JSONRPCException
+cantLoadMod mod rid =
   JSONRPCException { errorCode = 3
                    , message = "Can't load module"
                    , errorData = Just mod
                    , errorID = Just rid
                    }
 
-cryptolError :: RequestID -> JSON.Value -> JSONRPCException
-cryptolError rid mod =
+cryptolError :: JSON.Value -> RequestID -> JSONRPCException
+cryptolError mod rid =
   JSONRPCException { errorCode = 4
                    , message = "Cryptol error"
                    , errorData = Just mod
@@ -44,7 +44,9 @@ cryptolError rid mod =
 
 
 newtype CryptolServerCommand a =
-  CryptolServerCommand { runCryptolServerCommand ::  RequestID -> ServerState -> JSON.Value -> IO (ServerState, a) }
+  CryptolServerCommand
+    { runCryptolServerCommand :: RequestID -> ServerState -> JSON.Value -> IO (ServerState, a)
+    }
 
 instance Functor CryptolServerCommand where
   fmap f (CryptolServerCommand g) =
@@ -82,7 +84,9 @@ instance MonadIO CryptolServerQuery where
   liftIO m = CryptolServerQuery $ \r s p -> m
 
 newtype CryptolServerNotification a =
-  CryptolServerNotification { runCryptolServerNotification :: JSON.Value -> ServerState -> IO (a, ServerState) }
+  CryptolServerNotification
+    { runCryptolServerNotification :: JSON.Value -> ServerState -> IO (a, ServerState)
+    }
 
 instance Functor CryptolServerNotification where
   fmap f (CryptolServerNotification g) =
@@ -95,7 +99,10 @@ instance Applicative CryptolServerNotification where
 instance Monad CryptolServerNotification where
   return x = CryptolServerNotification $ \p s -> return (x, s)
   (CryptolServerNotification f) >>= g =
-    CryptolServerNotification $ \p s -> f p s >>= \(x, s') -> runCryptolServerNotification (g x) p s'
+    CryptolServerNotification $
+      \p s ->
+        do (x, s') <- f p s
+           runCryptolServerNotification (g x) p s'
 
 
 class HasServerState m where
@@ -128,7 +135,7 @@ params =
      case JSON.fromJSON ps of
        JSON.Error msg ->
          do rid <- getRequestID
-            liftIO $ throwIO (badParams rid ps)
+            raise (badParams ps)
        JSON.Success decoded -> return decoded
 
 class HasRequestID m where
@@ -151,12 +158,11 @@ setState = modifyState . const
 
 runModuleCmd :: (MonadIO m, HasRequestID m, HasServerState m, SetsServerState m) => ModuleCmd a -> m a
 runModuleCmd cmd =
-    do rid <- getRequestID
-       s   <- getState
+    do s   <- getState
        out <- liftIO $ cmd (theEvalOpts, view moduleEnv s)
        case out of
          (Left x, warns) ->
-           liftIO $ throwIO (cryptolError rid (JSON.toJSON (pretty x, map pretty warns)))
+           raise (cryptolError (JSON.toJSON (pretty x, map pretty warns)))
          (Right (x, newEnv), warns) ->
            do setState (set moduleEnv newEnv s)
               return x
@@ -190,3 +196,14 @@ initialState = ServerState Nothing <$> initialModuleEnv
 
 theEvalOpts :: EvalOpts
 theEvalOpts = EvalOpts quietLogger (PPOpts False 10 25)
+
+
+type CryptolServerException = RequestID -> JSONRPCException
+
+raise ::
+  (HasRequestID m, MonadIO m) =>
+  CryptolServerException ->
+  m a
+raise e =
+  do rid <- getRequestID
+     liftIO $ throwIO (e rid)

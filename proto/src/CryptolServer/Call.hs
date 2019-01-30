@@ -5,7 +5,7 @@
 module CryptolServer.Call (call) where
 
 import Control.Applicative
-import Control.Exception
+import Control.Exception (throwIO)
 import Control.Lens hiding ((.:), (.=))
 import Control.Monad.IO.Class
 import Data.Aeson as JSON hiding (Encoding, Value, decode)
@@ -60,7 +60,7 @@ call =
      case perhapsDef of
        Nothing -> error "TODO"
        Just (tys, checked) ->
-         do -- TODO: check if there was defaulting, and throw an error if so
+         do noDefaults tys
             let su = listParamSubst tys
             let theType = apSubst su (sType schema)
             res <- runModuleCmd (evalExpr checked)
@@ -68,6 +68,12 @@ call =
             rid <- getRequestID
             val <- observe $ readBack rid prims theType res
             return (JSON.object ["value" .= val, "type" .= pretty theType])
+
+  where
+    noDefaults [] = return ()
+    noDefaults xs@(_:_) =
+      do rid <- getRequestID
+         raise (unwantedDefaults xs)
 
 readBack :: RequestID -> PrimMap -> TC.Type -> Value -> Eval ArgSpec
 readBack rid prims ty val =
@@ -220,7 +226,7 @@ decode Base64 txt =
     case Base64.decode bytes of
       Left err ->
         do rid <- getRequestID
-           liftIO $ throwIO (invalidBase64 rid bytes err)
+           raise (invalidBase64 bytes err)
       Right decoded -> return $ bytesToInt decoded
 decode Hex txt =
   squish <$> traverse hexDigit (T.unpack txt)
@@ -250,7 +256,7 @@ hexDigit 'e' = pure 14
 hexDigit 'E' = pure 14
 hexDigit 'f' = pure 15
 hexDigit 'F' = pure 15
-hexDigit c   = getRequestID >>= liftIO . throwIO . invalidHex c
+hexDigit c   = raise (invalidHex c)
 
 
 getExpr :: ArgSpec -> CryptolServerCommand (Expr PName)
@@ -274,8 +280,8 @@ getExpr (Tuple projs) =
   ETuple <$> traverse getExpr projs
 
 
-invalidBase64 :: RequestID -> ByteString -> String -> JSONRPCException
-invalidBase64 rid invalidData msg =
+invalidBase64 :: ByteString -> String -> CryptolServerException
+invalidBase64 invalidData msg rid =
   JSONRPCException
     { errorCode = 32
     , message = T.pack msg
@@ -283,7 +289,7 @@ invalidBase64 rid invalidData msg =
     , errorID = Just rid
     }
 
-invalidHex :: Char -> RequestID -> JSONRPCException
+invalidHex :: Char -> CryptolServerException
 invalidHex invalidData rid =
   JSONRPCException
     { errorCode = 33
@@ -292,12 +298,22 @@ invalidHex invalidData rid =
     , errorID = Just rid
     }
 
-invalidType :: TC.Type -> RequestID -> JSONRPCException
+invalidType :: TC.Type -> CryptolServerException
 invalidType ty rid =
   JSONRPCException
     { errorCode = 34
     , message = "Can't convert Cryptol data from this type to JSON"
     , errorData = Just (JSON.toJSON (T.pack (show ty)))
+    , errorID = Just rid
+    }
+
+
+
+unwantedDefaults defs rid =
+  JSONRPCException
+    { errorCode = 35
+    , message = "Execution would have required these defaults"
+    , errorData = Just (JSON.toJSON (T.pack (show defs)))
     , errorID = Just rid
     }
 

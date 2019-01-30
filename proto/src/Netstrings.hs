@@ -11,8 +11,11 @@
 -- Netstrings allow malformed JSON to be more robustly detected when
 -- using JSON-RPC.
 module Netstrings
-  ( toNetstring
-  , fromNetstring
+  ( Netstring
+  , encodeNetstring
+  , decodeNetstring
+  , netstring
+  , parseNetstring
   , netstringFromHandle
   )
 where
@@ -33,9 +36,23 @@ instance Exception BadNetstring
 
 -- TODO: Let's make a newtype wrapper for encoded netstrings
 
--- | Encode a bytestring as a netstring
-toNetstring :: ByteString -> ByteString
-toNetstring bytes =
+newtype Netstring
+  = Netstring ByteString
+
+instance Show Netstring where
+  show (Netstring s) = "(netstring " ++ show s ++ ")"
+
+-- | Construct a new netstring from a bytestring
+netstring :: ByteString -> Netstring
+netstring = Netstring
+
+-- | Get the underlying bytestring in a netstring
+decodeNetstring :: Netstring -> ByteString
+decodeNetstring (Netstring s) = s
+
+-- | Encode a netstring as a bytestring, which will contain its length
+encodeNetstring :: Netstring -> ByteString
+encodeNetstring (Netstring bytes) =
   BS.toLazyByteString $
     BS.stringUtf8 (show (BS.length bytes)) <>
     BS.charUtf8 ':' <>
@@ -47,28 +64,29 @@ toNetstring bytes =
 
 
 -- | Read a netstring from a handle
-netstringFromHandle :: Handle -> IO ByteString
+netstringFromHandle :: Handle -> IO Netstring
 netstringFromHandle h =
   do l <- len Nothing
      bytes <- BS.hGet h l
      c <- BS.head <$> BS.hGet h 1
-     if isComma c then return bytes else throw (MissingComma (Just c))
-
+     if isComma c
+       then return (Netstring bytes)
+       else throwIO (MissingComma (Just c))
   where
     len Nothing =
       do x <- BS.head <$> BS.hGet h 1
          if not (isDigit x)
-           then throw BadLength
+           then throwIO BadLength
            else len (Just (asDigit x))
     len (Just acc) =
       do x <- BS.head <$> BS.hGet h 1
          if | isColon x -> return acc
             | isDigit x -> len (Just (10 * acc + asDigit x))
-            | otherwise -> throw (MissingColon (Just x))
+            | otherwise -> throwIO (MissingColon (Just x))
 
 -- | Attempt to split a ByteString into a prefix that is a valid netstring, and an arbitrary suffix
-fromNetstring :: ByteString -> (ByteString, ByteString)
-fromNetstring input =
+parseNetstring :: ByteString -> (Netstring, ByteString)
+parseNetstring input =
   let (lenBytes, rest) = BS.span isDigit input
       len = asLength lenBytes
   in
@@ -80,7 +98,7 @@ fromNetstring input =
             in
               case BS.uncons rest'' of
                 Nothing -> throw (MissingComma Nothing)
-                Just (b, done) | isComma b -> (content, done)
+                Just (b, done) | isComma b -> (netstring content, done)
                                | otherwise -> throw (MissingComma (Just b))
         | otherwise -> throw (MissingColon (Just c))
 
@@ -107,5 +125,5 @@ asLength len =
     go acc (d:ds) = go (acc * 10 + d) ds
 
 -- >>> :set -XOverloadedStrings
--- >>> fromNetstring "5:hello,aldskf"
+-- >>> parseNetstring "5:hello,aldskf"
 -- ("hello","aldskf")

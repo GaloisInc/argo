@@ -332,14 +332,14 @@ handles.
 >   do hSetBinaryMode hIn True
 >      hSetBuffering hIn NoBuffering
 >      input <- newMVar hIn
->      output <- locked (BS.hPut hOut . toNetstring)
+>      output <- locked (BS.hPut hOut)
 >      loop output input
 >   where
 >     loop :: (BS.ByteString -> IO ()) -> MVar Handle -> IO ()
 >     loop output input =
 >       do line <- withMVar input $ netstringFromHandle
 >          forkIO $
->                (case JSON.eitherDecode line of
+>                (case JSON.eitherDecode (decodeNetstring line) of
 >                   Left msg -> throwIO (parseError (T.pack msg))
 >                   Right req -> handleRequest output app req)
 >                  `catch` reportError output

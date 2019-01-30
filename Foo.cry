@@ -1,7 +1,7 @@
 module Foo where
 
 x : [8]
-x = 0xff
+x = 255
 
 add : {a} (fin a) => [a] -> [a] -> [a]
 add = (+)

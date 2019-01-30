@@ -12,6 +12,7 @@ import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, loadModu
 import Cryptol.ModuleSystem.Env (initialModuleEnv, meSolverConfig)
 import Cryptol.Parser.AST (ModName)
 import Cryptol.Utils.Logger (quietLogger)
+import Cryptol.Utils.PP (pretty)
 
 import JSONRPC
 
@@ -29,6 +30,14 @@ cantLoadMod :: RequestID -> JSON.Value -> JSONRPCException
 cantLoadMod rid mod =
   JSONRPCException { errorCode = 3
                    , message = "Can't load module"
+                   , errorData = Just mod
+                   , errorID = Just rid
+                   }
+
+cryptolError :: RequestID -> JSON.Value -> JSONRPCException
+cryptolError rid mod =
+  JSONRPCException { errorCode = 4
+                   , message = "Cryptol error"
                    , errorData = Just mod
                    , errorID = Just rid
                    }
@@ -147,7 +156,7 @@ runModuleCmd cmd =
        out <- liftIO $ cmd (theEvalOpts, view moduleEnv s)
        case out of
          (Left x, warns) ->
-           liftIO $ throwIO (cantLoadMod rid (JSON.toJSON (show (x, warns))))
+           liftIO $ throwIO (cryptolError rid (JSON.toJSON (pretty x, map pretty warns)))
          (Right (x, newEnv), warns) ->
            do setState (set moduleEnv newEnv s)
               return x

@@ -38,6 +38,7 @@ instance Exception BadNetstring
 
 newtype Netstring
   = Netstring ByteString
+  deriving (Eq, Ord)
 
 instance Show Netstring where
   show (Netstring s) = "(netstring " ++ show s ++ ")"

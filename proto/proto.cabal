@@ -120,6 +120,11 @@ test-suite test-proto
   default-language:    Haskell2010
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
+                     , src
+  other-modules:       CryptolServer
+                     , CryptolServer.Call
+                     , JSONRPC
+                     , Netstrings
   main-is:             Test.hs
   build-depends:       proto
                      , quickcheck-instances

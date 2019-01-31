@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
-module CryptolServer.Call (call) where
+module CryptolServer.Call (ArgSpec(..), Encoding(..), call) where
 
 import Control.Applicative
 import Control.Exception (throwIO)
@@ -14,6 +14,7 @@ import qualified Data.Aeson as JSON
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as Base64
+import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -99,11 +100,12 @@ readBack :: RequestID -> PrimMap -> TC.Type -> Value -> Eval ArgSpec
 readBack rid prims ty val =
   case TC.tNoUser ty of
     TC.TRec tfs ->
-      Record <$> sequence [ do fv <- evalSel val (RecordSel f Nothing)
-                               fa <- readBack rid prims t fv
-                               return (identText f, fa)
-                          | (f, t) <- tfs
-                          ]
+      Record . HM.fromList <$>
+        sequence [ do fv <- evalSel val (RecordSel f Nothing)
+                      fa <- readBack rid prims t fv
+                      return (identText f, fa)
+                 | (f, t) <- tfs
+                 ]
     TC.TCon (TC (TCTuple _)) ts ->
       Tuple <$> sequence [ do v <- evalSel val (TupleSel n Nothing)
                               a <- readBack rid prims t v
@@ -147,6 +149,7 @@ instance FromJSON CallParams where
     \o -> CallParams <$> o .: "function" <*> o .: "arguments"
 
 data Encoding = Base64 | Hex
+  deriving (Eq, Show, Ord)
 
 instance JSON.FromJSON Encoding where
   parseJSON =
@@ -160,9 +163,11 @@ data ArgSpec =
     Bit Bool
   | Unit
   | Num Encoding Text Integer -- ^ data and bitwidth
-  | Record [(Text, ArgSpec)]
+  | Record (HashMap Text ArgSpec)
   | Sequence [ArgSpec]
   | Tuple [ArgSpec]
+
+  deriving (Eq, Ord, Show)
 
 data ArgSpecTag = TagNum | TagRecord | TagSequence | TagTuple | TagUnit
 
@@ -182,6 +187,7 @@ instance JSON.ToJSON ArgSpecTag where
   toJSON TagRecord   = "record"
   toJSON TagSequence = "sequence"
   toJSON TagTuple    = "tuple"
+  toJSON TagUnit     = "unit"
 
 instance JSON.FromJSON ArgSpec where
   parseJSON v = bool v <|> obj v
@@ -200,7 +206,7 @@ instance JSON.FromJSON ArgSpec where
                 TagRecord ->
                   do fields <- o .: "data"
                      flip (withObject "record data") fields $
-                       \fs -> Record . HM.toList <$> traverse parseJSON fs
+                       \fs -> Record <$> traverse parseJSON fs
                 TagSequence ->
                   do contents <- o .: "data"
                      flip (withArray "sequence") contents $
@@ -226,7 +232,7 @@ instance JSON.ToJSON ArgSpec where
   toJSON (Record fields) =
     object [ "expression" .= TagRecord
            , "data" .= object [ name .= toJSON val
-                              | (name, val) <- fields
+                              | (name, val) <- HM.toList fields
                               ]
            ]
   toJSON (Sequence elts) =
@@ -291,7 +297,7 @@ getExpr (Num enc txt w) =
        (ELit (ECNum d DecLit))
        (TSeq (TNum w) TBit)
 getExpr (Record fields) =
-  fmap ERecord $ for fields $
+  fmap ERecord $ for (HM.toList fields) $
   \(name, spec) ->
     Named (Located emptyRange (mkIdent name)) <$> getExpr spec
 getExpr (Sequence elts) =

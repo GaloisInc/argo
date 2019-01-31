@@ -3,7 +3,7 @@
 module Main where
 
 import Data.Aeson as JSON (fromJSON, toJSON, Result(..))
-
+import Data.ByteString.Lazy (ByteString)
 
 import Test.QuickCheck.Instances.ByteString
 import Test.QuickCheck.Instances.Scientific
@@ -25,14 +25,14 @@ netstringProps :: TestTree
 netstringProps =
   testGroup "QuickCheck properties for netstrings"
     [ testProperty "fromNetstring . toNetstring is identity, with no leftover " $
-      \ bs -> parseNetstring (encodeNetstring (netstring bs)) == (netstring bs, "")
+      \ (bs :: ByteString) -> parseNetstring (encodeNetstring (netstring bs)) == (netstring bs, "")
     , testProperty "doubly encoding and decoding is identity, with no leftover at either step " $
-      \ bs -> let encode = encodeNetstring . netstring
-                  (once, rest) = parseNetstring (encode (encode bs))
-              in rest == "" && parseNetstring (decodeNetstring once) == (netstring bs, "")
+      \ (bs :: ByteString) ->
+        let (once, rest) = parseNetstring (encodeNetstring (netstring bs))
+              in rest == "" && parseNetstring (encodeNetstring once) == (netstring bs, "")
     , testProperty "decoding leaves the right amount behind" $
-      \ bs rest ->
-        parseNetstring (encodeNetstring (netstring bs) <> rest) == (netstring bs, rest)
+      \ (bs :: ByteString) (rest :: ByteString) ->
+        parseNetstring ((encodeNetstring (netstring bs)) <> rest) == (netstring bs, rest)
     ]
 
 instance Arbitrary RequestID where

@@ -332,7 +332,7 @@ handles.
 >   do hSetBinaryMode hIn True
 >      hSetBuffering hIn NoBuffering
 >      input <- newMVar hIn
->      output <- locked (BS.hPut hOut)
+>      output <- locked (BS.hPut hOut . encodeNetstring . netstring)
 >      loop output input
 >   where
 >     loop :: (BS.ByteString -> IO ()) -> MVar Handle -> IO ()

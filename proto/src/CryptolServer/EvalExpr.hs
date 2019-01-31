@@ -25,7 +25,7 @@ evalExpression :: CryptolServerCommand JSON.Value
 evalExpression =
   do EvalExprParams str <- params
      case parseExpr str of
-        Left err -> do rid <- getRequestID; liftIO $ throwIO (cryptolParseErr rid str err)
+        Left err -> raise (cryptolParseErr str err)
         Right e ->
           do (expr, ty, schema) <- runModuleCmd (checkExpr e)
              -- TODO: see Cryptol REPL for how to check whether we
@@ -52,8 +52,12 @@ instance JSON.FromJSON EvalExprParams where
     \o -> EvalExprParams <$> o .: "expression"
 
 
-
-cryptolParseErr rid expr err =
+cryptolParseErr ::
+  (ToJSON expr, Show err) =>
+  expr {- ^ the input that couldn't be parsed -} ->
+  err {- ^ the parse error from Cryptol -} ->
+  CryptolServerException
+cryptolParseErr expr err rid =
   JSONRPCException { errorCode = 4
                    , message = "There was a Cryptol parse error."
                    , errorData = Just $ JSON.object ["input" .= expr, "error" .= show err]

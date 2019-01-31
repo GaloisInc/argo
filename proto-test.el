@@ -52,16 +52,19 @@
            (when the-id
              (let ((fail-cont (gethash the-id proto-test--cryptol-failure-continuations))
                    (error-info (gethash "error" decoded)))
-               (if fail-cont
-                   (funcall fail-cont
-                            (gethash "code" error-info)
-                            (gethash "message" error-info)
-                            (gethash "data" error-info))
-                 (error "Got error response: %S" reply))))))
+               (cond (fail-cont
+                      (funcall fail-cont
+                               (gethash "code" error-info)
+                               (gethash "message" error-info)
+                               (gethash "data" error-info)))
+                     ((gethash the-id proto-test--cryptol-continuations)
+                      (message "Got error response: %S" reply))
+                     (t nil))))))
         ('result
          (let* ((the-id (gethash "id" decoded))
                 (the-cont (gethash the-id proto-test--cryptol-continuations)))
-           (funcall the-cont (gethash "result" decoded))))))))
+           (when the-cont
+             (funcall the-cont (gethash "result" decoded)))))))))
 
 (defun proto-test--cryptol-send (method params cont &optional fail-cont)
   "Send the message with METHOD and PARAMS as in `proto-test'.
@@ -103,7 +106,131 @@ errors."
                             (lambda (res)
                               (message "The result is %S" res))
                             (lambda (code err-message &optional err-data)
-                              (error "When evaluating %S, got error %s (%S) with info %S" expr code err-message err-data))))
+                              (error "When evaluating %S, got error %s (%S) with info %S"
+                                     expr code err-message err-data))))
+
+(defun proto-test-cryptol-call (fun args)
+  "Call FUN with ARGS."
+  (interactive (let ((fun (read-string "Cryptol function to call: ")))
+                 (list fun
+                       (proto-test-cryptol-get-args fun))))
+  (proto-test--cryptol-send "call"
+                            `(:function ,fun :arguments ,args)
+                            (lambda (res)
+                              (message "The result is %S" res)
+                              (lambda (code err-message &optional err-data)
+                                (error "When calling %S with args %S, got error %s (%S) with info %S"
+                                       fun args code err-message err-data)
+                                ))))
+
+(defvar proto-test--cryptol-get-arg-context '()
+  "The context to show in the argument-getting prompt.")
+
+(cl-defun proto-test--cryptol-get-arg-prompt (str)
+  "Get a prompt based on STR for an argument, taking into account `proto-test--cryptol-get-arg-context'."
+  (if proto-test--cryptol-get-arg-context
+      (concat "⟨" (mapconcat #'identity (reverse proto-test--cryptol-get-arg-context) " → ") "⟩ " str)
+    str))
+
+(cl-defmacro proto-test--with-arg-context (ctx &body body)
+  "Evaluate BODY in a prompt context extended by CTX."
+  (declare (indent 1))
+  `(let ((proto-test--cryptol-get-arg-context (cons ,ctx proto-test--cryptol-get-arg-context)))
+     ,@body))
+
+(defun proto-test--to-ordinal (num)
+  "Find a string that is the ordinal form of NUM."
+  (format "%s%s"
+          num
+          (pcase (mod num 10)
+            (1 "st")
+            (2 "nd")
+            (3 "rd")
+            (_ "th"))))
+
+(defun proto-test-cryptol-get-args (&optional fun)
+  "Prompt for zero or more arguments to FUN, using `proto-test-cryptol-get-arg'."
+  (interactive)
+  (let ((args '())
+        (go t))
+    (while go
+      (let ((the-arg
+             (proto-test--with-arg-context (concat (proto-test--to-ordinal (1+ (length args)))
+                                                   " arg"
+                                                   (if fun (format " to %s" fun) ""))
+               (proto-test-cryptol-get-arg))))
+        (if the-arg
+            (push the-arg args)
+          (setq go nil))))
+    (reverse args)))
+
+(cl-defmacro proto-test-hash (&rest args)
+  "Make a hash table of key-value lists in ARGS."
+  (let ((table (cl-gensym "table")))
+    `(let ((,table (make-hash-table)))
+       ,@(cl-loop for item in args
+                  collecting (pcase item
+                               (`(,k ,v)
+                                `(puthash ,k ,v ,table))))
+       ,table)))
+
+(defun proto-test-cryptol-get-arg ()
+  "Prompt the user for an argument to the \"call\" method.
+Returns nil when no argument provided."
+  (interactive)
+  (pcase (completing-read (proto-test--cryptol-get-arg-prompt "What kind of argument? ")
+                          '("bitvector" "unit" "single bit" "record" "sequence" "tuple"))
+    ("bitvector"
+     (proto-test--with-arg-context "a bitvector"
+       (let* ((encoding (completing-read (proto-test--cryptol-get-arg-prompt "Which encoding? ")
+                                         '("hex" "base64")))
+              (width (read-number (proto-test--cryptol-get-arg-prompt "How many bits wide? ")))
+              (the-data (read-string (proto-test--cryptol-get-arg-prompt (format "Data (%s): " encoding)))))
+         (proto-test-hash (:expression "bits")
+                          (:encoding encoding)
+                          (:width width)
+                          (:data the-data)))))
+    ("unit" (list :expression "unit"))
+    ("single bit"
+     (proto-test--with-arg-context "a single bit"
+       (let ((b (completing-read (proto-test--cryptol-get-arg-prompt "Which bit?") '("true" "false"))))
+         (pcase b
+           ("true" t)
+           ("false" 'json-false)))))
+    ("record"
+     (proto-test--with-arg-context "record"
+       (let (fields
+             (go t))
+         (while go
+           (let ((name (read-string (proto-test--cryptol-get-arg-prompt "Field name (empty when done): "))))
+             (if (equal name "")
+                 (setq go nil)
+               (let ((value (proto-test--with-arg-context (concat "field " name)
+                              (proto-test-cryptol-get-arg))))
+                 (push (intern (concat ":" name)) fields)
+                 (push value fields)))))
+         (proto-test-hash (:expression "record")
+                          (:data (reverse fields))))))
+    ("sequence"
+     (proto-test--with-arg-context "sequence"
+       (let ((elts '())
+             (go t))
+         (while go
+           (proto-test--with-arg-context (format "at %s" (length elts))
+             (let ((this-elt (proto-test-cryptol-get-arg)))
+               (if this-elt
+                   (push this-elt elts)
+                 (setq go nil)))))
+         (proto-test-hash (:expression "sequence")
+                          (:data (reverse elts))))))
+    ("tuple"
+     (proto-test--with-arg-context "tuple"
+       (let ((size (read-number (proto-test--cryptol-get-arg-prompt "Size: "))))
+         (proto-test-hash (:expression "tuple")
+                          (:data (cl-loop for i from 0 to size
+                                          collecting (proto-test--with-arg-context (format ".%s" i)
+                                                       (proto-test-cryptol-get-arg))))))))
+    (_ nil)))
 
 (defun proto-test-quit ()
   "Quit the test process."

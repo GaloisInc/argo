@@ -50,6 +50,7 @@ common deps
                      , lens
                      , aeson
                      , binary
+                     , base64-bytestring
                      , bytestring
                      , containers
                      , cryptol == 2.6.1
@@ -57,6 +58,7 @@ common deps
                      , scotty
                      , text
                      , unordered-containers ^>=0.2
+                     , vector
                      , scientific ^>=0.3
                      , wai
                      , sbv < 8.0
@@ -97,6 +99,7 @@ executable proto
   other-modules:       JSONRPC
                      , Netstrings
                      , CryptolServer
+                     , CryptolServer.Call
                      , CryptolServer.ChangeDir
                      , CryptolServer.EvalExpr
                      , CryptolServer.LoadModule

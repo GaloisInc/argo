@@ -17,8 +17,7 @@ cd =
      if exists
        then do liftIO $ setCurrentDirectory newDir
                return (toJSON ())
-       else do rid <- getRequestID
-               liftIO $ throwIO (dirNotFound rid newDir)
+       else raise (dirNotFound newDir)
 
 data ChangeDirectoryParams =
   ChangeDirectoryParams { newDirectory :: FilePath }
@@ -28,8 +27,8 @@ instance FromJSON ChangeDirectoryParams where
     withObject "params for \"change directory\"" $
     \o -> ChangeDirectoryParams <$> o .: "directory"
 
-dirNotFound :: RequestID -> FilePath -> JSONRPCException
-dirNotFound rid dir =
+dirNotFound :: FilePath -> CryptolServerException
+dirNotFound dir rid =
   JSONRPCException { errorCode = 3
                    , message = "Directory doesn't exist"
                    , errorData = Just (toJSON dir)

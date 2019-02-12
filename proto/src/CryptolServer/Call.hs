@@ -8,7 +8,7 @@ module CryptolServer.Call (ArgSpec(..), Encoding(..), call) where
 import Control.Applicative
 import Control.Exception (throwIO)
 import Control.Lens hiding ((.:), (.=))
-import Control.Monad (unless)
+import Control.Monad (guard, unless)
 import Control.Monad.IO.Class
 import Data.Aeson as JSON hiding (Encoding, Value, decode)
 import qualified Data.Aeson as JSON
@@ -17,6 +17,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as Base64
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
+import qualified Data.Scientific as Sc
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -116,6 +117,9 @@ readBack rid prims ty val =
     TC.TCon (TC TCBit) [] ->
       case val of
         VBit b -> pure (Bit b)
+    TC.TCon (TC TCInteger) [] ->
+      case val of
+        VInteger i -> pure (Integer i)
     TC.TCon (TC TCSeq) [TC.tNoUser -> len, TC.tNoUser -> contents]
       | len == TC.tZero ->
         return Unit
@@ -161,12 +165,13 @@ instance JSON.FromJSON Encoding where
       _        -> empty
 
 data ArgSpec =
-    Bit Bool
+    Bit !Bool
   | Unit
-  | Num Encoding Text Integer -- ^ data and bitwidth
-  | Record (HashMap Text ArgSpec)
-  | Sequence [ArgSpec]
-  | Tuple [ArgSpec]
+  | Num !Encoding !Text !Integer -- ^ data and bitwidth
+  | Record !(HashMap Text ArgSpec)
+  | Sequence ![ArgSpec]
+  | Tuple ![ArgSpec]
+  | Integer !Integer
 
   deriving (Eq, Ord, Show)
 
@@ -195,6 +200,15 @@ instance JSON.FromJSON ArgSpec where
     where
       bool =
         withBool "boolean" $ pure . Bit
+      integer =
+        -- Note: this means that we should not expose this API to the
+        -- public, but only to systems that will validate input
+        -- integers. Otherwise, they can use this to allocate a
+        -- gigantic integer that fills up all memory.
+        withScientific "integer" $ \s ->
+          case Sc.floatingOrInteger s of
+            Left fl -> empty
+            Right i -> pure (Integer i)
 
       obj =
         withObject "argument" $
@@ -224,6 +238,7 @@ instance ToJSON Encoding where
 instance JSON.ToJSON ArgSpec where
   toJSON Unit = object [ "expression" .= TagUnit ]
   toJSON (Bit b) = JSON.Bool b
+  toJSON (Integer i) = JSON.Number (fromInteger i)
   toJSON (Num enc dat w) =
     object [ "expression" .= TagNum
            , "data" .= String dat

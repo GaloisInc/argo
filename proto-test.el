@@ -178,7 +178,7 @@ errors."
 Returns nil when no argument provided."
   (interactive)
   (pcase (completing-read (proto-test--cryptol-get-arg-prompt "What kind of argument? ")
-                          '("bitvector" "unit" "single bit" "record" "sequence" "tuple"))
+                          '("bitvector" "unit" "single bit" "integer" "record" "sequence" "tuple"))
     ("bitvector"
      (proto-test--with-arg-context "a bitvector"
        (let* ((encoding (completing-read (proto-test--cryptol-get-arg-prompt "Which encoding? ")
@@ -196,6 +196,14 @@ Returns nil when no argument provided."
          (pcase b
            ("true" t)
            ("false" 'json-false)))))
+    ("integer"
+     (proto-test--with-arg-context "an integer"
+       (let ((input nil))
+         (while (not (integerp input))
+           (setq input (read (read-string (proto-test--cryptol-get-arg-prompt "Integer (base 10): "))))
+           (unless (integerp input)
+             (message "Not an integer: %s" input)))
+         input)))
     ("record"
      (proto-test--with-arg-context "record"
        (let (fields

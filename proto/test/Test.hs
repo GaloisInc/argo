@@ -65,6 +65,7 @@ instance Arbitrary ArgSpec where
           oneof [ Bit <$> arbitrary
                 , pure Unit
                 , Num <$> arbitrary <*> arbitrary <*> arbitrary
+                , Integer <$> arbitrary
                 ]
         | otherwise =
           choose (0, n) >>=

@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 module CryptolServer.Call (ArgSpec(..), Encoding(..), call) where
 
 import Control.Applicative
@@ -115,7 +116,7 @@ readBack rid prims ty val =
     TC.TCon (TC TCBit) [] ->
       case val of
         VBit b -> pure (Bit b)
-    TC.TCon (TC TCSeq) [len, contents]
+    TC.TCon (TC TCSeq) [TC.tNoUser -> len, TC.tNoUser -> contents]
       | len == TC.tZero ->
         return Unit
       | contents == TC.TCon (TC TCBit) []

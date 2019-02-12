@@ -115,13 +115,12 @@ errors."
                  (list fun
                        (proto-test-cryptol-get-args fun))))
   (proto-test--cryptol-send "call"
-                            `(:function ,fun :arguments ,args)
+                            `(:function ,fun :arguments ,(or args []))
                             (lambda (res)
                               (message "The result is %S" res)
                               (lambda (code err-message &optional err-data)
                                 (error "When calling %S with args %S, got error %s (%S) with info %S"
-                                       fun args code err-message err-data)
-                                ))))
+                                       fun args code err-message err-data)))))
 
 (defvar proto-test--cryptol-get-arg-context '()
   "The context to show in the argument-getting prompt.")

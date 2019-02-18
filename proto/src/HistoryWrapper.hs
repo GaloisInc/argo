@@ -31,6 +31,7 @@ methodsToCommands ::
   [(Text, Command s)] {- ^ commands only -}
 methodsToCommands = itoListOf (folded . ifolded <. folding extractCommand)
 
+-- | Extract the components of methods that affect the server's state.
 extractCommand :: Method s -> Maybe (Command s)
 extractCommand (Command      f) = Just $ \s p -> fst <$> f IDNull s p
 extractCommand (Notification f) = Just $ \s p -> f s p
@@ -38,6 +39,17 @@ extractCommand (Query        _) = Nothing
 
 ------------------------------------------------------------------------
 
+-- | Wrap a JSON RPC method to use explicit state representation.
+--
+-- Commands are wrapped as commands. The result is paired up with the
+-- new steps list via 'injectSteps'
+--
+-- Queries are wrapped as commands. The result is passed through directly.
+-- Because queries do not alter the state, we don't return a new list
+-- of state steps. The result is simply passed through.
+--
+-- Notifications are perhaps surprisingly wrapped as commands, too. The
+-- new list of steps is returned as the result directly.
 wrapMethod ::
   [(Text, Command s)]   {- ^ commands              -} ->
   s                     {- ^ initial state         -} ->
@@ -61,11 +73,11 @@ wrapMethod commands startState name (Query f) =
      return (hs, result)
 
 wrapMethod commands startState name (Notification f) =
-  Notification $ \hs params ->
+  Command $ \_rId hs params ->
   do (steps, params') <- extractStepsIO params
      s                <- runCommands commands steps startState
      _s'              <- f s params'
-     return hs
+     return (hs, toJSON (steps ++ [(name, params')]))
 
 ------------------------------------------------------------------------
 
@@ -86,12 +98,21 @@ extractSteps v
   , let v' = Object (HashMap.delete stateKey o) = Just (steps, v')
 extractSteps _ = Nothing
 
-injectSteps :: [(Text, Value)] -> Value -> Value
+-- | Combine a command result and the current sequence of steps
+-- together into a single JSON value.
+injectSteps ::
+  [(Text, Value)] {- ^ command steps  -} ->
+  Value           {- ^ command result -} ->
+  Value           {- ^ combined value -}
 injectSteps steps result =
   Object (HashMap.fromList [(stateKey, toJSON steps), ("answer", result)])
 
 
-runCommands :: [(Text, Command s)] -> [(Text, Value)] -> s -> IO s
+runCommands ::
+  [(Text, Command s)] {- ^ command handlers -} ->
+  [(Text, Value)]     {- ^ step sequence    -} ->
+  s                   {- ^ starting state   -} ->
+  IO s                {- ^ sequenced state  -}
 runCommands commands history s0 = foldM go s0 history
   where
     go s (name, params) =

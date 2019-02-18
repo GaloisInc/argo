@@ -98,6 +98,7 @@ executable proto
   -- Modules included in this executable, other than Main.
   other-modules:       JSONRPC
                      , Netstrings
+                     , HistoryWrapper
                      , CryptolServer
                      , CryptolServer.Call
                      , CryptolServer.ChangeDir

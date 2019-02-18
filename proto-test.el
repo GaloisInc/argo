@@ -31,6 +31,7 @@
 
 (defvar proto-test-proc nil "The process being tested.")
 (defvar proto-test--output "" "The process's output so far.")
+(defvar proto-test-state '[] "The method calls that make up the cryptol state")
 
 (defvar proto-test-receive-functions '(proto-test-record-reply proto-test--cryptol-listen)
   "A list of functions to be called with the decoded output from the process.")
@@ -75,7 +76,7 @@ errors."
          (message (list :jsonrpc "2.0"
                         :id the-id
                         :method method
-                        :params params)))
+                        :params (append (list :state proto-test-state) params))))
     (puthash the-id cont proto-test--cryptol-continuations)
     (when fail-cont (puthash the-id fail-cont proto-test--cryptol-failure-continuations))
     (proto-test-send (json-encode-plist message))))
@@ -83,7 +84,7 @@ errors."
 (defun proto-test-cryptol-change-directory (dir)
   "Change to directory DIR in Cryptol."
   (interactive "DNew directory: ")
-  (proto-test--cryptol-send "change directory" `(:state [] :directory ,dir)
+  (proto-test--cryptol-send "change directory" `(:directory ,dir)
                             (lambda (_)
                               (message "Changed directory"))))
 
@@ -91,7 +92,7 @@ errors."
   "Load FILE in Cryptol."
   (interactive "fFile to load: ")
   (proto-test--cryptol-send "load module"
-                            `(:state [] :file ,file)
+                            `(:file ,file)
                             (lambda (res)
                               (message "Loaded file %S" res))
                             (lambda (code err-message &optional err-data)
@@ -102,7 +103,7 @@ errors."
   "Eval EXPR in Cryptol."
   (interactive "MExpression to eval: ")
   (proto-test--cryptol-send "evaluate expression"
-                            `(:state [] :expression ,expr)
+                            `(:expression ,expr)
                             (lambda (res)
                               (message "The result is %S" res))
                             (lambda (code err-message &optional err-data)
@@ -245,7 +246,8 @@ Returns nil when no argument provided."
   (when proto-test-proc
     (ignore-errors (kill-process proto-test-proc))
     (setq proto-test-proc nil)
-    (setq proto-test--output "")))
+    (setq proto-test--output "")
+    (setq proto-test-state '[])))
 
 (defun proto-test-start (prog)
   "Run the tester on PROG."
@@ -260,7 +262,8 @@ Returns nil when no argument provided."
 			  (and filename (file-relative-name filename))))))
   (proto-test-quit)
   (setq proto-test-proc (apply #'start-process "the-test" "the-test" (split-string prog)))
-  (set-process-filter proto-test-proc 'proto-test-process-filter))
+  (set-process-filter proto-test-proc 'proto-test-process-filter)
+  (setq proto-test-state '[]))
 
 
 (defun proto-test-process-filter (_proc output)

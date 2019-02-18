@@ -31,7 +31,7 @@
 
 (defvar proto-test-proc nil "The process being tested.")
 (defvar proto-test--output "" "The process's output so far.")
-(defvar proto-test-state '[] "The method calls that make up the cryptol state")
+(defvar proto-test--state '[] "The method calls that make up the cryptol state")
 
 (defvar proto-test-receive-functions '(proto-test-record-reply proto-test--cryptol-listen)
   "A list of functions to be called with the decoded output from the process.")
@@ -63,9 +63,13 @@
                      (t nil))))))
         ('result
          (let* ((the-id (gethash "id" decoded))
-                (the-cont (gethash the-id proto-test--cryptol-continuations)))
+                (the-cont (gethash the-id proto-test--cryptol-continuations))
+                (the-result (gethash "result" decoded))
+                (the-answer (gethash "answer" the-result))
+                (the-state (gethash "state" the-result)))
+           (setq proto-test--state the-state)
            (when the-cont
-             (funcall the-cont (gethash "result" decoded)))))))))
+             (funcall the-cont the-answer))))))))
 
 (defun proto-test--cryptol-send (method params cont &optional fail-cont)
   "Send the message with METHOD and PARAMS as in `proto-test'.
@@ -76,7 +80,7 @@ errors."
          (message (list :jsonrpc "2.0"
                         :id the-id
                         :method method
-                        :params (append (list :state proto-test-state) params))))
+                        :params (append (list :state proto-test--state) params))))
     (puthash the-id cont proto-test--cryptol-continuations)
     (when fail-cont (puthash the-id fail-cont proto-test--cryptol-failure-continuations))
     (proto-test-send (json-encode-plist message))))
@@ -247,7 +251,7 @@ Returns nil when no argument provided."
     (ignore-errors (kill-process proto-test-proc))
     (setq proto-test-proc nil)
     (setq proto-test--output "")
-    (setq proto-test-state '[])))
+    (setq proto-test--state '[])))
 
 (defun proto-test-start (prog)
   "Run the tester on PROG."
@@ -263,7 +267,7 @@ Returns nil when no argument provided."
   (proto-test-quit)
   (setq proto-test-proc (apply #'start-process "the-test" "the-test" (split-string prog)))
   (set-process-filter proto-test-proc 'proto-test-process-filter)
-  (setq proto-test-state '[]))
+  (setq proto-test--state '[]))
 
 
 (defun proto-test-process-filter (_proc output)

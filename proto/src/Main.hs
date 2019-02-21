@@ -26,6 +26,7 @@ import CryptolServer.EvalExpr
 import CryptolServer.LoadModule
 
 import HistoryWrapper
+import CacheTree
 
 
 main :: IO ()
@@ -34,7 +35,8 @@ main = realMain
 realMain :: IO ()
 realMain =
   do initSt <- initialState
-     theApp <- mkApp HistoryWrapper (historyWrapper cryptolMethods initSt)
+     cache  <- newCache initSt
+     theApp <- mkApp (HistoryWrapper cache) (historyWrapper cryptolMethods)
      serveStdIONS theApp
 
 

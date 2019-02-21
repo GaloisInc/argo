@@ -10,17 +10,19 @@ import Control.Lens
 import Data.Text (Text)
 import Data.Aeson (Result(..), Value(..), fromJSON, toJSON)
 import qualified Data.HashMap.Strict as HashMap
+import CacheTree
 
 data HistoryWrapper s = HistoryWrapper
+  { historyCache :: Cache s (Text, Value)
+  }
 
 type Command s = s -> Value -> IO s
 
 historyWrapper ::
   [(Text, Method s)] {- ^ all methods   -} ->
-  s                  {- ^ initial state -} ->
   [(Text, Method (HistoryWrapper s))]
-historyWrapper methods startState =
-  [(name, wrapMethod commands startState name m) | (name, m) <- methods]
+historyWrapper methods =
+  [(name, wrapMethod commands name m) | (name, m) <- methods]
   where
     commands = methodsToCommands methods
 
@@ -52,32 +54,33 @@ extractCommand (Query        _) = Nothing
 -- new list of steps is returned as the result directly.
 wrapMethod ::
   [(Text, Command s)]   {- ^ commands              -} ->
-  s                     {- ^ initial state         -} ->
   Text                  {- ^ method name           -} ->
   Method s              {- ^ method implementation -} ->
   Method (HistoryWrapper s)
 
-wrapMethod commands startState name (Command f) =
-  Command $ \rId hs params ->
+wrapMethod commands name (Command f) =
+  Query $ \rId hs params ->
   do (steps, params') <- extractStepsIO params
-     s                <- runCommands commands steps startState
-     (_s', result)    <- f rId s params'
-     let result' = injectSteps (steps ++ [(name, params')]) result
-     return (hs, result')
+     let cmd           = (name, params')
+     c                <- cacheLookup (runCommand commands) (historyCache hs) steps
+     (s', result)     <- f rId (cacheRoot c) params'
+     _                <- cacheAdvance (\_ _ -> return s') c cmd
+     let steps'        = steps ++ [cmd]
+     return (injectSteps steps' result)
 
-wrapMethod commands startState name (Query f) =
-  Command $ \rId hs params ->
+wrapMethod commands name (Query f) =
+  Query $ \rId hs params ->
   do (steps, params') <- extractStepsIO params
-     s                <- runCommands commands steps startState
-     result           <- f rId s params'
-     return (hs, result)
+     c                <- cacheLookup (runCommand commands) (historyCache hs) steps
+     result           <- f rId (cacheRoot c) params'
+     return result
 
-wrapMethod commands startState name (Notification f) =
-  Command $ \_rId hs params ->
+wrapMethod commands name (Notification f) =
+  Query $ \_rId hs params ->
   do (steps, params') <- extractStepsIO params
-     s                <- runCommands commands steps startState
-     _s'              <- f s params'
-     return (hs, toJSON (steps ++ [(name, params')]))
+     let steps'        = steps ++ [(name, params')]
+     _                <- cacheLookup (runCommand commands) (historyCache hs) steps'
+     return (toJSON steps')
 
 ------------------------------------------------------------------------
 
@@ -108,14 +111,12 @@ injectSteps steps result =
   Object (HashMap.fromList [(stateKey, toJSON steps), ("answer", result)])
 
 
-runCommands ::
+runCommand ::
   [(Text, Command s)] {- ^ command handlers -} ->
-  [(Text, Value)]     {- ^ step sequence    -} ->
+  (Text, Value)       {- ^ step sequence    -} ->
   s                   {- ^ starting state   -} ->
   IO s                {- ^ sequenced state  -}
-runCommands commands history s0 = foldM go s0 history
-  where
-    go s (name, params) =
-      case lookup name commands of
-        Nothing -> fail ("Unknown command: " ++ show name)
-        Just impl -> impl s params
+runCommand commands (name, params) s =
+  case lookup name commands of
+    Nothing   -> fail ("Unknown command: " ++ show name)
+    Just impl -> impl s params

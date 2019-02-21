@@ -64,6 +64,7 @@ common deps
                      , sbv < 8.0
                      , network
                      , async ^>=2.2
+                     , hashable ^>= 1.2
 
 
 library
@@ -98,6 +99,7 @@ executable proto
   -- Modules included in this executable, other than Main.
   other-modules:       JSONRPC
                      , Netstrings
+                     , CacheTree
                      , HistoryWrapper
                      , CryptolServer
                      , CryptolServer.Call

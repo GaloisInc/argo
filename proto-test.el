@@ -80,7 +80,7 @@ errors."
          (message (list :jsonrpc "2.0"
                         :id the-id
                         :method method
-                        :params (append (list :state proto-test--state) params))))
+                        :params (cons :state (cons proto-test--state params))))
     (puthash the-id cont proto-test--cryptol-continuations)
     (when fail-cont (puthash the-id fail-cont proto-test--cryptol-failure-continuations))
     (proto-test-send (json-encode-plist message))))

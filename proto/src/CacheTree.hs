@@ -12,7 +12,7 @@ import           Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
-import qualified Crypto.Hash.SHA1 as SHA1
+
 import           Data.Hashable (Hashable)
 
 data Cache s c = Cache

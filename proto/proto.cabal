@@ -93,11 +93,15 @@ library
 
 executable proto
   import:              deps
+
+  build-depends:       optparse-applicative ^>= 0.14
+
   -- .hs or .lhs file containing the Main module.
   main-is:             Main.hs
 
   -- Modules included in this executable, other than Main.
   other-modules:       JSONRPC
+                     , JSONRPC.Socket
                      , Netstrings
                      , CacheTree
                      , HistoryWrapper

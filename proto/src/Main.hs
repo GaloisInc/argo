@@ -12,12 +12,12 @@ import qualified Data.Aeson as JSON
 import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson.Types as JSON
 import Data.Text (Text)
+import qualified Options.Applicative as Opt
 import System.Directory (doesDirectoryExist, setCurrentDirectory)
 
 import JSONRPC
+import JSONRPC.Socket
 
-
-import Debug.Trace
 
 import CryptolServer
 import CryptolServer.Call
@@ -28,16 +28,39 @@ import CryptolServer.LoadModule
 import HistoryWrapper
 import CacheTree
 
-
 main :: IO ()
-main = realMain
+main =
+  do opts <- Opt.execParser options
+     realMain opts
 
-realMain :: IO ()
-realMain =
+
+data Options =
+  Options
+    { transportOpt :: TransportOpt
+    }
+
+newtype Port = Port String
+
+data TransportOpt = StdIONetstring | SocketNetstring Port
+
+options :: Opt.ParserInfo Options
+options = Opt.info (Options <$> transport) (Opt.fullDesc)
+
+transport :: Opt.Parser TransportOpt
+transport = socket <|> stdio
+  where
+    socket = SocketNetstring . Port <$> Opt.strOption (Opt.long "socket" <> Opt.metavar "PORT" )
+    stdio = Opt.flag StdIONetstring StdIONetstring (Opt.long "stdio" <> Opt.help "Use netstrings over stdio")
+
+
+realMain :: Options -> IO ()
+realMain opts =
   do initSt <- initialState
      cache  <- newCache initSt
      theApp <- mkApp (HistoryWrapper cache) (historyWrapper cryptolMethods)
-     serveStdIONS theApp
+     case transportOpt opts of
+       StdIONetstring -> serveStdIONS theApp
+       SocketNetstring (Port p) -> serveSocket "127.0.0.1" p theApp
 
 
 cryptolMethods :: [(Text, Method ServerState)]

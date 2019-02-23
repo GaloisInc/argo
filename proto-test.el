@@ -31,7 +31,7 @@
 
 (defvar proto-test-proc nil "The process being tested.")
 (defvar proto-test--output "" "The process's output so far.")
-(defvar proto-test--state '[] "The method calls that make up the cryptol state")
+(defvar proto-test--state '[] "The method calls that make up the cryptol state.")
 
 (defvar proto-test-receive-functions '(proto-test-record-reply proto-test--cryptol-listen)
   "A list of functions to be called with the decoded output from the process.")
@@ -80,7 +80,7 @@ errors."
          (message (list :jsonrpc "2.0"
                         :id the-id
                         :method method
-                        :params (cons :state (cons proto-test--state params))))
+                        :params (cons :state (cons proto-test--state params)))))
     (puthash the-id cont proto-test--cryptol-continuations)
     (when fail-cont (puthash the-id fail-cont proto-test--cryptol-failure-continuations))
     (proto-test-send (json-encode-plist message))))
@@ -247,11 +247,11 @@ Returns nil when no argument provided."
 (defun proto-test-quit ()
   "Quit the test process."
   (interactive)
+  (setq proto-test--output "")
+  (setq proto-test--state '[])
   (when proto-test-proc
     (ignore-errors (kill-process proto-test-proc))
-    (setq proto-test-proc nil)
-    (setq proto-test--output "")
-    (setq proto-test--state '[])))
+    (setq proto-test-proc nil)))
 
 (defun proto-test-start (prog)
   "Run the tester on PROG."
@@ -268,6 +268,17 @@ Returns nil when no argument provided."
   (setq proto-test-proc (apply #'start-process "the-test" "the-test" (split-string prog)))
   (set-process-filter proto-test-proc 'proto-test-process-filter)
   (setq proto-test--state '[]))
+
+
+(defun proto-test-start-socket (port)
+  "Run the tester for a socket on PORT."
+  (interactive "nPort: ")
+  (let ((port-string (format "%s" port)))
+    (proto-test-quit)
+    (setq proto-test-proc
+          (open-network-stream "proto-connection" "foo" "127.0.0.1" port-string))
+    (set-process-filter proto-test-proc 'proto-test-process-filter)
+    (setq proto-test--state '[])))
 
 
 (defun proto-test-process-filter (_proc output)

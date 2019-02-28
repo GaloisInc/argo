@@ -8,7 +8,7 @@ import qualified Data.Text as T
 import System.Directory
 
 import CryptolServer
-import JSONRPC
+import Argo.JSONRPC
 
 cd :: CryptolServerCommand JSON.Value
 cd =

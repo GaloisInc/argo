@@ -15,8 +15,8 @@ import Data.Text (Text)
 import qualified Options.Applicative as Opt
 import System.Directory (doesDirectoryExist, setCurrentDirectory)
 
-import Argo.JSONRPC
-import Argo.JSONRPC.Socket
+import JSONRPC
+import JSONRPC.Socket
 
 
 import CryptolServer
@@ -25,8 +25,8 @@ import CryptolServer.ChangeDir
 import CryptolServer.EvalExpr
 import CryptolServer.LoadModule
 
-import Argo.HistoryWrapper
-import Argo.CacheTree
+import HistoryWrapper
+import CacheTree
 
 main :: IO ()
 main =

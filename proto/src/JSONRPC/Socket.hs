@@ -1,5 +1,5 @@
 {-# Language OverloadedStrings #-}
-module Argo.JSONRPC.Socket (serveSocket) where
+module JSONRPC.Socket (serveSocket) where
 
 import Control.Concurrent       (forkFinally)
 import Control.Concurrent.Async (forConcurrently_)
@@ -10,7 +10,7 @@ import qualified Data.Map as Map
 
 import qualified Network.Socket as N
 
-import Argo.JSONRPC (App, serveHandlesNS)
+import JSONRPC (App, serveHandlesNS)
 
 -- | Arbitrarily chosen value for number of connects to hold
 -- in queue during a burst of connections before they are

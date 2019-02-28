@@ -10,7 +10,7 @@ import System.Directory
 import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, loadModuleByPath, loadModuleByName)
 
 import CryptolServer
-import Argo.JSONRPC
+import JSONRPC
 
 
 loadModule :: CryptolServerCommand JSON.Value

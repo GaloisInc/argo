@@ -10,7 +10,7 @@
 --
 -- Netstrings allow malformed JSON to be more robustly detected when
 -- using JSON-RPC.
-module Argo.Netstring
+module Netstrings
   ( Netstring
   , encodeNetstring
   , decodeNetstring

@@ -6,7 +6,7 @@
 > {-# LANGUAGE TupleSections #-}
 > {-# LANGUAGE TypeApplications #-}
 > -- | An implementation of the basic primitives of JSON-RPC 2.0.
-> module Argo.JSONRPC (
+> module JSONRPC (
 > -- * Primary interface to JSON-RPC
 >   App
 > , mkApp
@@ -46,7 +46,7 @@
 
 > import Debug.Trace
 
-> import Argo.Netstring
+> import Netstrings
 
 We only support JSON-RPC 2.0.
 

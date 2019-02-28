@@ -1,6 +1,5 @@
 packages:
-  argo/
-  cryptol-server/
+  proto
 
 optional-packages:
   deps/cryptol/

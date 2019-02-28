@@ -1,4 +1,4 @@
-# Revision history for cryptol-server
+# Revision history for proto
 
 ## 0.1.0.0 -- YYYY-mm-dd
 

@@ -1,17 +1,16 @@
 {-# Language OverloadedStrings #-}
-module Argo.HistoryWrapper
+module HistoryWrapper
   ( HistoryWrapper(..)
   , historyWrapper
   ) where
 
-import Argo.JSONRPC
-import Argo.CacheTree
-
+import JSONRPC
 import Control.Monad
 import Control.Lens
 import Data.Text (Text)
 import Data.Aeson (Result(..), Value(..), fromJSON, toJSON)
 import qualified Data.HashMap.Strict as HashMap
+import CacheTree
 
 data HistoryWrapper s = HistoryWrapper
   { historyCache :: Cache s (Text, Value)

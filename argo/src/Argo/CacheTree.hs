@@ -1,5 +1,5 @@
 {-# Language BangPatterns #-}
-module CacheTree
+module Argo.CacheTree
   ( Cache(..)
   , newCache
   , cacheLookup
@@ -15,51 +15,52 @@ import qualified Data.ByteString as ByteString
 
 import           Data.Hashable (Hashable)
 
-data Cache s c = Cache
-  { cacheRoot :: s
-  , cacheBranches :: MVar (HashMap c (MVar (Cache s c)))
+data Cache st cmd = Cache
+  { cacheRoot :: st
+  , cacheBranches :: !(MVar (HashMap cmd (MVar (Cache st cmd))))
   }
 
-newCache :: s -> IO (Cache s c)
-newCache s = Cache s <$> newMVar HashMap.empty
+newCache :: st -> IO (Cache st cmd)
+newCache initialState =
+  Cache initialState <$> newMVar HashMap.empty
 
 cacheLookup ::
-  Eq c =>
-  Hashable c =>
-  (c -> s -> IO s)      {- ^ run command -} ->
-  (s -> IO Bool)        {- ^ validate    -} ->
-  Cache s c             {- ^ cache       -} ->
-  [c]                   {- ^ commands    -} ->
-  IO (Cache s c)
+  Eq cmd =>
+  Hashable cmd =>
+  (cmd -> st -> IO st)  {- ^ run command -} ->
+  (st -> IO Bool)       {- ^ validate    -} ->
+  Cache st cmd          {- ^ cache       -} ->
+  [cmd]                 {- ^ commands    -} ->
+  IO (Cache st cmd)
 cacheLookup runStep validate = foldM (cacheAdvance runStep validate)
 
 -- | Validation must return true when cached server state is valid.
 cacheAdvance ::
-  Eq c =>
-  Hashable c =>
-  (c -> s -> IO s)      {- ^ run command -} ->
-  (s -> IO Bool)        {- ^ validate    -} ->
-  Cache s c             {- ^ cache       -} ->
-  c                     {- ^ command     -} ->
-  IO (Cache s c)
-cacheAdvance runStep validate (Cache s var) step =
+  Eq cmd =>
+  Hashable cmd =>
+  (cmd -> st -> IO st) {- ^ run command -} ->
+  (st -> IO Bool)      {- ^ validate    -} ->
+  Cache st cmd         {- ^ cache       -} ->
+  cmd                  {- ^ command     -} ->
+  IO (Cache st cmd)
+cacheAdvance runStep validate (Cache st var) cmd =
   do (found, nextVar) <-
        modifyMVar var $ \hashMap ->
-         case HashMap.lookup step hashMap of
+         case HashMap.lookup cmd hashMap of
            Just nextVar -> return (hashMap, (True, nextVar))
            Nothing ->
              do nextVar <- newEmptyMVar
-                let !hashMap' = HashMap.insert step nextVar hashMap
+                let !hashMap' = HashMap.insert cmd nextVar hashMap
                 return (hashMap', (False, nextVar))
 
      if found then
        modifyMVar nextVar $ \c ->
          do valid <- validate (cacheRoot c)
             c' <- if valid then return c
-                  else newCache =<< runStep step s
+                  else newCache =<< runStep cmd st
             return (c', c')
 
      else
-       do cache <- newCache =<< runStep step s
+       do cache <- newCache =<< runStep cmd st
           putMVar nextVar cache
           return cache

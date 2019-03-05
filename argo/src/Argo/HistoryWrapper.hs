@@ -1,16 +1,17 @@
 {-# Language OverloadedStrings #-}
-module HistoryWrapper
+module Argo.HistoryWrapper
   ( HistoryWrapper(..)
   , historyWrapper
   ) where
 
-import JSONRPC
+import Argo.JSONRPC
+import Argo.CacheTree
+
 import Control.Monad
 import Control.Lens
 import Data.Text (Text)
 import Data.Aeson (Result(..), Value(..), fromJSON, toJSON)
 import qualified Data.HashMap.Strict as HashMap
-import CacheTree
 
 data HistoryWrapper s = HistoryWrapper
   { historyCache :: Cache s (Text, Value)
@@ -111,7 +112,6 @@ injectSteps ::
   Value           {- ^ combined value -}
 injectSteps steps result =
   Object (HashMap.fromList [(stateKey, toJSON steps), ("answer", result)])
-
 
 runCommand ::
   [(Text, Command s)] {- ^ command handlers -} ->

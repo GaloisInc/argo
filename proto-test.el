@@ -324,9 +324,9 @@ instead."
                     (setq start (1+ i)))
                    ((app cl-digit-char-p (and x (pred numberp)))
                     (setq len (+ (* len 10) x)))
-                   (_ (error "Expected more length or colon, got '%c' at %s" ch i)))
+                   (_ (error "Expected more length or colon, got '%c' at %s\nUnderlying message: %s" ch i str)))
                (pcase (cl-digit-char-p ch)
-                 ('nil (error "Expected length, got '%c' at %s" ch i))
+                 ('nil (error "Expected length, got '%c' at %s.\nUnderlying message: %s" ch i str))
                  (n (setq len n)))))
             ;; in the body state, we are finding the boundaries of the message
             ('body
@@ -335,7 +335,7 @@ instead."
                    ((equal ch ?,)
                     (setq end i)
                     (throw the-tag (cons (substring str start end) (substring str (1+ end)))))
-                   (t (error "Expected literal comma, got '%c' at %s" ch i))))))
+                   (t (error "Expected literal comma, got '%c' at %s\nUnderlying message: %s" ch i str))))))
       (throw the-tag nil))))
 
 (defun proto-test-send (str)

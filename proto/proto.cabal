@@ -61,7 +61,7 @@ common deps
                      , vector
                      , scientific ^>=0.3
                      , wai
-                     , sbv < 8.0
+                     , sbv ^>= 8.0
                      , network
                      , async ^>=2.2
                      , hashable ^>= 1.2

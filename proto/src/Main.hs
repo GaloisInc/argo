@@ -57,7 +57,7 @@ realMain :: Options -> IO ()
 realMain opts =
   do initSt <- initialState
      cache  <- newCache initSt
-     theApp <- mkApp (HistoryWrapper cache) (historyWrapper cryptolMethods)
+     theApp <- mkApp (HistoryWrapper cache) (historyWrapper validateServerState cryptolMethods)
      case transportOpt opts of
        StdIONetstring -> serveStdIONS theApp
        SocketNetstring (Port p) -> serveSocket "127.0.0.1" p theApp

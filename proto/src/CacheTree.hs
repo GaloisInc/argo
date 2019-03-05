@@ -27,19 +27,22 @@ cacheLookup ::
   Eq c =>
   Hashable c =>
   (c -> s -> IO s)      {- ^ run command -} ->
+  (s -> IO Bool)        {- ^ validate    -} ->
   Cache s c             {- ^ cache       -} ->
   [c]                   {- ^ commands    -} ->
   IO (Cache s c)
-cacheLookup runStep = foldM (cacheAdvance runStep)
+cacheLookup runStep validate = foldM (cacheAdvance runStep validate)
 
+-- | Validation must return true when cached server state is valid.
 cacheAdvance ::
   Eq c =>
   Hashable c =>
   (c -> s -> IO s)      {- ^ run command -} ->
+  (s -> IO Bool)        {- ^ validate    -} ->
   Cache s c             {- ^ cache       -} ->
   c                     {- ^ command     -} ->
   IO (Cache s c)
-cacheAdvance runStep (Cache s var) step =
+cacheAdvance runStep validate (Cache s var) step =
   do (found, nextVar) <-
        modifyMVar var $ \hashMap ->
          case HashMap.lookup step hashMap of
@@ -50,7 +53,11 @@ cacheAdvance runStep (Cache s var) step =
                 return (hashMap', (False, nextVar))
 
      if found then
-       do readMVar nextVar
+       modifyMVar nextVar $ \c ->
+         do valid <- validate (cacheRoot c)
+            c' <- if valid then return c
+                  else newCache =<< runStep step s
+            return (c', c')
 
      else
        do cache <- newCache =<< runStep step s

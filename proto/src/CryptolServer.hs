@@ -9,7 +9,8 @@ import qualified Data.Aeson as JSON
 
 import Cryptol.Eval.Monad (EvalOpts(..), PPOpts(..))
 import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, loadModuleByPath, loadModuleByName)
-import Cryptol.ModuleSystem.Env (initialModuleEnv, meSolverConfig)
+import Cryptol.ModuleSystem.Env (getLoadedModules, lmCanonicalPath, lmFingerprint, meLoadedModules, initialModuleEnv, meSolverConfig)
+import Cryptol.ModuleSystem.Fingerprint
 import Cryptol.Parser.AST (ModName)
 import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP (pretty)
@@ -207,3 +208,16 @@ raise ::
 raise e =
   do rid <- getRequestID
      liftIO $ throwIO (e rid)
+
+-- | Check that all of the modules loaded in the Cryptol environment
+-- currently have fingerprints that match those when they were loaded.
+validateServerState :: ServerState -> IO Bool
+validateServerState =
+  foldr check (return True) . getLoadedModules . meLoadedModules . view moduleEnv
+  where
+    check lm continue =
+      do fp <- fingerprintFile (lmCanonicalPath lm)
+         if fp == Just (lmFingerprint lm) then
+           continue
+         else
+           return False

@@ -19,10 +19,11 @@ data HistoryWrapper s = HistoryWrapper
 type Command s = s -> Value -> IO s
 
 historyWrapper ::
+  (s -> IO Bool)     {- ^ validate      -} ->
   [(Text, Method s)] {- ^ all methods   -} ->
   [(Text, Method (HistoryWrapper s))]
-historyWrapper methods =
-  [(name, wrapMethod commands name m) | (name, m) <- methods]
+historyWrapper validate methods =
+  [(name, wrapMethod commands validate name m) | (name, m) <- methods]
   where
     commands = methodsToCommands methods
 
@@ -54,32 +55,33 @@ extractCommand (Query        _) = Nothing
 -- new list of steps is returned as the result directly.
 wrapMethod ::
   [(Text, Command s)]   {- ^ commands              -} ->
+  (s -> IO Bool)        {- ^ validate              -} ->
   Text                  {- ^ method name           -} ->
   Method s              {- ^ method implementation -} ->
   Method (HistoryWrapper s)
 
-wrapMethod commands name (Command f) =
+wrapMethod commands validate name (Command f) =
   Query $ \rId hs params ->
   do (steps, params') <- extractStepsIO params
      let cmd           = (name, params')
-     c                <- cacheLookup (runCommand commands) (historyCache hs) steps
+     c                <- cacheLookup (runCommand commands) validate (historyCache hs) steps
      (s', result)     <- f rId (cacheRoot c) params'
-     _                <- cacheAdvance (\_ _ -> return s') c cmd
+     _                <- cacheAdvance (\_ _ -> return s') (\_ -> return True) c cmd
      let steps'        = steps ++ [cmd]
      return (injectSteps steps' result)
 
-wrapMethod commands name (Query f) =
+wrapMethod commands validate name (Query f) =
   Query $ \rId hs params ->
   do (steps, params') <- extractStepsIO params
-     c                <- cacheLookup (runCommand commands) (historyCache hs) steps
+     c                <- cacheLookup (runCommand commands) validate (historyCache hs) steps
      result           <- f rId (cacheRoot c) params'
      return result
 
-wrapMethod commands name (Notification f) =
+wrapMethod commands validate name (Notification f) =
   Query $ \_rId hs params ->
   do (steps, params') <- extractStepsIO params
      let steps'        = steps ++ [(name, params')]
-     _                <- cacheLookup (runCommand commands) (historyCache hs) steps'
+     _                <- cacheLookup (runCommand commands) validate (historyCache hs) steps'
      return (toJSON steps')
 
 ------------------------------------------------------------------------

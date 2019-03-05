@@ -15,44 +15,43 @@ import qualified Data.ByteString as ByteString
 
 import           Data.Hashable (Hashable)
 
-data Cache s c = Cache
-  { cacheRoot :: s
-  , cacheBranches :: MVar (HashMap c (MVar (Cache s c)))
+data Cache st cmd = Cache
+  { cacheRoot :: st
+  , cacheBranches :: !(MVar (HashMap cmd (MVar (Cache st cmd))))
   }
 
-newCache :: s -> IO (Cache s c)
-newCache s = Cache s <$> newMVar HashMap.empty
+newCache :: st -> IO (Cache st cmd)
+newCache initialState =
+  Cache initialState <$> newMVar HashMap.empty
 
 cacheLookup ::
-  Eq c =>
-  Hashable c =>
-  (c -> s -> IO s)      {- ^ run command -} ->
-  Cache s c             {- ^ cache       -} ->
-  [c]                   {- ^ commands    -} ->
-  IO (Cache s c)
+  (Hashable cmd, Eq cmd) =>
+  (cmd -> st -> IO st)  {- ^ run command -} ->
+  Cache st cmd          {- ^ cache       -} ->
+  [cmd]                 {- ^ commands    -} ->
+  IO (Cache st cmd)
 cacheLookup runStep = foldM (cacheAdvance runStep)
 
 cacheAdvance ::
-  Eq c =>
-  Hashable c =>
-  (c -> s -> IO s)      {- ^ run command -} ->
-  Cache s c             {- ^ cache       -} ->
-  c                     {- ^ command     -} ->
-  IO (Cache s c)
-cacheAdvance runStep (Cache s var) step =
+  (Hashable cmd, Eq cmd) =>
+  (cmd -> st -> IO st)  {- ^ run command -} ->
+  Cache st cmd          {- ^ cache       -} ->
+  cmd                   {- ^ command     -} ->
+  IO (Cache st cmd)
+cacheAdvance runStep (Cache st var) cmd =
   do (found, nextVar) <-
        modifyMVar var $ \hashMap ->
-         case HashMap.lookup step hashMap of
+         case HashMap.lookup cmd hashMap of
            Just nextVar -> return (hashMap, (True, nextVar))
            Nothing ->
              do nextVar <- newEmptyMVar
-                let !hashMap' = HashMap.insert step nextVar hashMap
+                let !hashMap' = HashMap.insert cmd nextVar hashMap
                 return (hashMap', (False, nextVar))
 
      if found then
        do readMVar nextVar
 
      else
-       do cache <- newCache =<< runStep step s
+       do cache <- newCache =<< runStep cmd st
           putMVar nextVar cache
           return cache

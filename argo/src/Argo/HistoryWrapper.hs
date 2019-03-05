@@ -111,7 +111,6 @@ injectSteps ::
 injectSteps steps result =
   Object (HashMap.fromList [(stateKey, toJSON steps), ("answer", result)])
 
-
 runCommand ::
   [(Text, Command s)] {- ^ command handlers -} ->
   (Text, Value)       {- ^ step sequence    -} ->

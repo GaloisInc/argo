@@ -1,5 +1,6 @@
 packages:
-  proto
+  argo/
+  cryptol-remote-api/
 
 optional-packages:
   deps/cryptol/

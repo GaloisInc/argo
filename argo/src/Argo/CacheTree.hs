@@ -1,5 +1,5 @@
 {-# Language BangPatterns #-}
-module CacheTree
+module Argo.CacheTree
   ( Cache(..)
   , newCache
   , cacheLookup

@@ -14,7 +14,7 @@ import Cryptol.Parser.AST (ModName)
 import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP (pretty)
 
-import JSONRPC
+import Argo.JSONRPC
 
 
 

@@ -19,7 +19,7 @@ import Cryptol.TypeCheck.Subst (apSubst, listParamSubst)
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 
 import CryptolServer
-import JSONRPC
+import Argo.JSONRPC
 
 evalExpression :: CryptolServerCommand JSON.Value
 evalExpression =

@@ -1,7 +1,8 @@
 resolver: lts-13.5
 
 packages:
-- proto
+- argo
+- cryptol-remote-api
 
 extra-deps:
 - deps/cryptol

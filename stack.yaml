@@ -1,4 +1,4 @@
-resolver: lts-13.5
+resolver: lts-13.10
 
 packages:
 - argo
@@ -7,9 +7,12 @@ packages:
 extra-deps:
 - deps/cryptol
 - GraphSCC-1.0.4
-- base-compat-0.9.3
+- base-compat-0.10.5
 - monadLib-3.9
-- network-3.0.0.0
+- network-3.0.1.0
 - panic-0.4.0.1
-- simple-smt-0.9.3
+- simple-smt-0.9.4
 - sbv-8.0
+
+# stack's metadata gets out of date
+allow-newer: true

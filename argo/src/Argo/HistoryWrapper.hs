@@ -17,7 +17,7 @@ data HistoryWrapper s = HistoryWrapper
   { historyCache :: Cache s (Text, Value)
   }
 
-type Command s = s -> Value -> IO s
+type HistoryCommand s = s -> Value -> IO s
 
 historyWrapper ::
   (s -> IO Bool)     {- ^ validate      -} ->
@@ -32,11 +32,11 @@ historyWrapper validate methods =
 -- are the ones we'll need to remember because they can update the state.
 methodsToCommands ::
   [(Text, Method s)]  {- ^ all methods   -} ->
-  [(Text, Command s)] {- ^ commands only -}
+  [(Text, HistoryCommand s)] {- ^ commands only -}
 methodsToCommands = itoListOf (folded . ifolded <. folding extractCommand)
 
 -- | Extract the components of methods that affect the server's state.
-extractCommand :: Method s -> Maybe (Command s)
+extractCommand :: Method s -> Maybe (HistoryCommand s)
 extractCommand (Command      f) = Just $ \s p -> fst <$> f IDNull s p
 extractCommand (Notification f) = Just $ \s p -> f s p
 extractCommand (Query        _) = Nothing
@@ -55,7 +55,7 @@ extractCommand (Query        _) = Nothing
 -- Notifications are perhaps surprisingly wrapped as commands, too. The
 -- new list of steps is returned as the result directly.
 wrapMethod ::
-  [(Text, Command s)]   {- ^ commands              -} ->
+  [(Text, HistoryCommand s)]   {- ^ commands              -} ->
   (s -> IO Bool)        {- ^ validate              -} ->
   Text                  {- ^ method name           -} ->
   Method s              {- ^ method implementation -} ->
@@ -114,7 +114,7 @@ injectSteps steps result =
   Object (HashMap.fromList [(stateKey, toJSON steps), ("answer", result)])
 
 runCommand ::
-  [(Text, Command s)] {- ^ command handlers -} ->
+  [(Text, HistoryCommand s)] {- ^ command handlers -} ->
   (Text, Value)       {- ^ step sequence    -} ->
   s                   {- ^ starting state   -} ->
   IO s                {- ^ sequenced state  -}

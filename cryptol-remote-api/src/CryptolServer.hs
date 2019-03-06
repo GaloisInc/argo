@@ -17,16 +17,6 @@ import Cryptol.Utils.PP (pretty)
 
 import Argo.JSONRPC
 
-
-
-badParams ::  JSON.Value -> RequestID -> JSONRPCException
-badParams params rid =
-  JSONRPCException { errorCode = 2
-                   , message = "Bad params"
-                   , errorData = Just params
-                   , errorID = Just rid
-                   }
-
 cantLoadMod :: JSON.Value -> RequestID -> JSONRPCException
 cantLoadMod mod rid =
   JSONRPCException { errorCode = 3
@@ -42,120 +32,6 @@ cryptolError mod rid =
                    , errorData = Just mod
                    , errorID = Just rid
                    }
-
-
-newtype CryptolServerCommand a =
-  CryptolServerCommand
-    { runCryptolServerCommand :: RequestID -> ServerState -> JSON.Value -> IO (ServerState, a)
-    }
-
-instance Functor CryptolServerCommand where
-  fmap f (CryptolServerCommand g) =
-    CryptolServerCommand $ \r s p -> do (s', x) <- g r s p; return (s', f x)
-
-instance Applicative CryptolServerCommand where
-  pure = return
-  (<*>) = ap
-
-instance Monad CryptolServerCommand where
-  return x = CryptolServerCommand $ \r s p -> return (s, x)
-  (CryptolServerCommand f) >>= g =
-    CryptolServerCommand $ \r s p -> f r s p >>= \(s', x) -> runCryptolServerCommand (g x) r s' p
-
-instance MonadIO CryptolServerCommand where
-  liftIO m = CryptolServerCommand $ \r s p -> do x <- m ; return (s, x)
-
-newtype CryptolServerQuery a =
-  CryptolServerQuery { runCryptolServerQuery :: RequestID -> ServerState -> JSON.Value -> IO a }
-
-instance Functor CryptolServerQuery where
-  fmap f (CryptolServerQuery g) =
-    CryptolServerQuery $ \r s p -> f <$> g r s p
-
-instance Applicative CryptolServerQuery where
-  pure = return
-  (<*>) = ap
-
-instance Monad CryptolServerQuery where
-  return x = CryptolServerQuery $ \_ _ _ -> return x
-  (CryptolServerQuery f) >>= g =
-    CryptolServerQuery $ \r s p -> f r s p >>= \x -> runCryptolServerQuery (g x) r s p
-
-instance MonadIO CryptolServerQuery where
-  liftIO m = CryptolServerQuery $ \r s p -> m
-
-newtype CryptolServerNotification a =
-  CryptolServerNotification
-    { runCryptolServerNotification :: JSON.Value -> ServerState -> IO (a, ServerState)
-    }
-
-instance Functor CryptolServerNotification where
-  fmap f (CryptolServerNotification g) =
-    CryptolServerNotification $ \p s -> do (x, s') <- g p s ; return (f x, s')
-
-instance Applicative CryptolServerNotification where
-  pure = return
-  (<*>) = ap
-
-instance Monad CryptolServerNotification where
-  return x = CryptolServerNotification $ \p s -> return (x, s)
-  (CryptolServerNotification f) >>= g =
-    CryptolServerNotification $
-      \p s ->
-        do (x, s') <- f p s
-           runCryptolServerNotification (g x) p s'
-
-
-class HasServerState m where
-  getState :: m ServerState
-
-instance HasServerState CryptolServerCommand where
-  getState = CryptolServerCommand $ \_ s _ -> return (s, s)
-
-instance HasServerState CryptolServerQuery where
-  getState = CryptolServerQuery $ \_ s _ -> return s
-
-instance HasServerState CryptolServerNotification where
-  getState = CryptolServerNotification $ \p s -> return (s, s)
-
-class HasParams m where
-  getParams :: m JSON.Value
-
-instance HasParams CryptolServerCommand where
-  getParams = CryptolServerCommand $ \r s p -> return (s, p)
-
-instance HasParams CryptolServerQuery where
-  getParams = CryptolServerQuery $ \r s p -> return p
-
-instance HasParams CryptolServerNotification where
-  getParams = CryptolServerNotification $ \p s -> return (p, s)
-
-params :: (MonadIO m, HasRequestID m, HasParams m, JSON.FromJSON a) => m a
-params =
-  do ps <- getParams
-     case JSON.fromJSON ps of
-       JSON.Error msg ->
-         do rid <- getRequestID
-            raise (badParams ps)
-       JSON.Success decoded -> return decoded
-
-class HasRequestID m where
-  getRequestID :: m RequestID
-
-instance HasRequestID CryptolServerCommand where
-  getRequestID = CryptolServerCommand $ \r s p -> return (s, r)
-
-instance HasRequestID CryptolServerQuery where
-  getRequestID = CryptolServerQuery $ \r s p -> return r
-
-class SetsServerState m where
-  modifyState :: (ServerState -> ServerState) -> m ()
-
-instance SetsServerState CryptolServerCommand where
-  modifyState f = CryptolServerCommand $ \r s p -> return (f s, ())
-
-setState :: SetsServerState m => ServerState -> m ()
-setState = modifyState . const
 
 runModuleCmd :: (MonadIO m, HasRequestID m, HasServerState m, SetsServerState m) => ModuleCmd a -> m a
 runModuleCmd cmd =
@@ -194,20 +70,8 @@ moduleEnv = lens _moduleEnv (\v n -> v { _moduleEnv = n })
 initialState :: IO ServerState
 initialState = ServerState Nothing <$> initialModuleEnv
 
-
 theEvalOpts :: EvalOpts
 theEvalOpts = EvalOpts quietLogger (PPOpts False 10 25)
-
-
-type CryptolServerException = RequestID -> JSONRPCException
-
-raise ::
-  (HasRequestID m, MonadIO m) =>
-  CryptolServerException ->
-  m a
-raise e =
-  do rid <- getRequestID
-     liftIO $ throwIO (e rid)
 
 -- | Check that all of the modules loaded in the Cryptol environment
 -- currently have fingerprints that match those when they were loaded.

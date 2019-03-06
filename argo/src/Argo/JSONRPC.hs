@@ -1,3 +1,7 @@
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTSyntax #-}
@@ -5,30 +9,55 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
 -- | An implementation of the basic primitives of JSON-RPC 2.0.
-module Argo.JSONRPC (
--- * Primary interface to JSON-RPC
-  App
-, mkApp
-, Method(..)
-, JSONRPCException(..)
--- * Serving applications over transports
-, serveStdIO
-, serveHandles
-, serveStdIONS
-, serveHandlesNS
--- *
-, RequestID(..)
-) where
+module Argo.JSONRPC
+  ( -- * Primary interface to JSON-RPC
+    App
+  , mkApp
+  , Method(..)
+  , Command
+  , Query
+  , Notification
+  , HasParams(..)
+  , HasServerState(..)
+  , SetsServerState(..)
+  -- * JSON-RPC exceptions
+  , JSONRPCException(..)
+  , raise
+  , parseError
+  , methodNotFound
+  , invalidRequest
+  , invalidParams
+  , internalError
+  -- * Serving applications over transports
+  , serveStdIO
+  , serveHandles
+  , serveStdIONS
+  , serveHandlesNS
+  -- *
+  , RequestID(..)
+  ) where
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.MVar
-import Control.Exception
+import Control.Monad
+import Control.Monad.Reader
+import Control.Monad.State
+import Control.Exception hiding (TypeError)
 import Control.Lens hiding ((.=))
 import Control.Monad.IO.Class
 import qualified Data.Aeson as JSON
 import Data.Aeson ((.:), (.:!), (.=))
+import Data.Coerce
+import GHC.Exts (Constraint)
+import GHC.TypeLits
 import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
 import Data.Binary.Builder
 import qualified Data.ByteString.Lazy as BS
@@ -42,7 +71,7 @@ import qualified Data.Text as T
 import GHC.Stack
 import Network.Wai (strictRequestBody)
 import System.IO
-import Web.Scotty
+import Web.Scotty hiding (raise)
 
 import Debug.Trace
 
@@ -66,14 +95,81 @@ Methods come in three forms:
  - notifications, which can modify state but do not return an answer.
 -}
 
+
 -- | A server is a mapping from method names to these methods.
 data Method s where
-  -- | A Command can both modify the server's state and send a reply to the user.
-  Command      :: (RequestID -> s -> JSON.Value -> IO (s, JSON.Value)) -> Method s
-  -- | A Query can send a reply to the user, but it has a read-only view of the server's state.
-  Query        :: (RequestID -> s -> JSON.Value -> IO JSON.Value)      -> Method s
-  -- | A Notification can modify the server state, but it cannot reply to the user.
-  Notification :: (             s -> JSON.Value -> IO s)               -> Method s
+  Command      :: Command      s JSON.Value -> Method s
+  Query        :: Query        s JSON.Value -> Method s
+  Notification :: Notification s ()         -> Method s
+
+-- | A Command can both modify the server's state and send a reply to the user.
+newtype Command s a
+  = C (RequestID -> s -> JSON.Value -> IO (a, s))
+  deriving (Functor, Applicative, Monad, MonadIO)
+       via (ReaderT RequestID (StateT s (ReaderT JSON.Value IO)))
+
+-- | A Query can send a reply to the user, but it has a read-only view of the
+-- server's state.
+newtype Query s a
+  = Q (RequestID -> s -> JSON.Value -> IO a)
+  deriving (Functor, Applicative, Monad, MonadIO)
+       via (ReaderT RequestID (ReaderT s (ReaderT JSON.Value IO)))
+
+-- | A Notification can modify the server state, but it cannot reply to the user.
+newtype Notification s a
+  = N (s -> JSON.Value -> IO (a, s))
+  deriving (Functor, Applicative, Monad, MonadIO)
+       via (StateT s (ReaderT JSON.Value IO))
+
+-- | Characterizes monads which have access to an ambient context of JSON-RPC
+-- call parameters: 'Command', 'Query', and 'Notification'
+class    HasParams m                where getParams :: m JSON.Value
+instance HasParams (Command s)      where getParams = C $ \_ s p -> pure (p, s)
+instance HasParams (Query s)        where getParams = Q $ \_ _ p -> pure  p
+instance HasParams (Notification s) where getParams = N $ \  s p -> pure (p, s)
+
+-- | Characterizes monads which have access to an ambient context of the
+-- JSON-RPC request ID: 'Command' and 'Query' (not 'Notification')
+class    HasRequestID m             where getRequestID :: m RequestID
+instance HasRequestID (Command s)   where getRequestID = C $ \r s _ -> pure (r, s)
+instance HasRequestID (Query s)     where getRequestID = Q $ \r _ _ -> pure  r
+-- NOTE: significantly, there is no instance for Notification, because there is
+-- no request ID associated with a notification
+
+-- | Characterizes monads which have access to the state of the application
+-- server: 'Command', 'Query', and 'Notification'
+class    HasServerState s m | m -> s       where getState :: m s
+instance HasServerState s (Command s)      where getState = C $ \r s _ -> pure (s, s)
+instance HasServerState s (Query s)        where getState = Q $ \_ s _ -> pure  s
+instance HasServerState s (Notification s) where getState = N $ \  s _ -> pure (s, s)
+
+-- | Characterizes monads which can modify the state of the application server:
+-- 'Command' and 'Notification' (not 'Query')
+class HasServerState s m => SetsServerState s m where
+  modifyState :: (s -> s) -> m ()
+instance SetsServerState s (Command s) where
+  modifyState f = C $ \_ s _ -> pure ((), f s)
+instance SetsServerState s (Notification s) where
+  modifyState f = N $ \  s _ -> pure ((), f s)
+-- NOTE: significantly, there is no instance for Query, because queries are not
+-- allowed to modify the server state
+
+-- | Raise a 'JSONRPCException', flagging it for the client with the current
+-- request ID
+raise :: (HasRequestID m, MonadIO m) => (RequestID -> JSONRPCException) -> m a
+raise e =
+  do rid <- getRequestID
+     liftIO $ throwIO (e rid)
+
+-- | Parse something out of the current parameters, or else fail, constructing
+params :: (MonadIO m, HasRequestID m, HasParams m, JSON.FromJSON a) => m a
+params =
+  do ps <- getParams
+     case JSON.fromJSON ps of
+       JSON.Error msg ->
+         do rid <- getRequestID
+            raise (invalidParams ps)
+       JSON.Success decoded -> return decoded
 
 -- | An application is a state and a mapping from names to methods.
 data App s =
@@ -87,7 +183,8 @@ appState = lens _appState (\a s -> a { _appState = s })
 appMethods :: Simple Lens (App s) (Map Text (Method s))
 appMethods = lens _appMethods (\a s -> a { _appMethods = s })
 
--- | Construct an application from an initial state and a mapping from method names to methods.
+-- | Construct an application from an initial state and a mapping from method
+-- names to methods.
 mkApp ::
   s {- ^ the initial state -} ->
   [(Text, Method s)] {- ^ method names paired with their implementations -} ->
@@ -98,10 +195,17 @@ mkApp initState methods =
 -- | JSON RPC exceptions should be thrown by method implementations when
 -- they want to return an error.
 data JSONRPCException =
-  JSONRPCException { errorCode :: Integer -- ^ The error code to be returned. From -32768 to -32000 is reserved by the protocol.
-                   , message :: Text      -- ^ A single-sentence summary of the error
-                   , errorData :: Maybe JSON.Value -- ^ More error data that might be useful. @Nothing@ will cause the field to be omitted.
-                   , errorID :: Maybe RequestID -- ^ The request ID, if one is available. @Nothing@ omits it, because JSON-RPC defines a meaning for null.
+  JSONRPCException { errorCode :: Integer
+                     -- ^ The error code to be returned. From -32768 to -32000
+                     -- is reserved by the protocol.
+                   , message :: Text
+                     -- ^ A single-sentence summary of the error
+                   , errorData :: Maybe JSON.Value
+                     -- ^ More error data that might be useful. @Nothing@ will
+                     -- cause the field to be omitted.
+                   , errorID :: Maybe RequestID
+                     -- ^ The request ID, if one is available. @Nothing@ omits
+                     -- it, because JSON-RPC defines a meaning for null.
                    }
   deriving Show
 
@@ -127,6 +231,16 @@ The spec defines some errors and reserves some error codes (from
 -32768 to -32000) for its own use.
 -}
 
+-- | A method was provided with incorrect parameters
+invalidParams ::  JSON.Value -> RequestID -> JSONRPCException
+invalidParams params rid =
+  JSONRPCException { errorCode = -32602
+                   , message = "Invalid params"
+                   , errorData = Just params
+                   , errorID = Just rid
+                   }
+
+-- | The input string could not be parsed as JSON
 parseError :: Text -> JSONRPCException
 parseError msg =
   JSONRPCException { errorCode = -32700
@@ -135,6 +249,7 @@ parseError msg =
                    , errorID   = Nothing
                    }
 
+-- | The method called does not exist
 methodNotFound :: JSON.ToJSON a => Maybe RequestID -> Maybe a -> JSONRPCException
 methodNotFound theID meth =
   JSONRPCException { errorCode = -32601
@@ -142,10 +257,21 @@ methodNotFound theID meth =
                    , errorData = JSON.toJSON <$> meth
                    , errorID   = theID
                    }
+
+-- | The request issued is not valid
 invalidRequest :: JSONRPCException
 invalidRequest =
   JSONRPCException { errorCode = -32600
-                   , message   = "Invalid Request"
+                   , message   = "Invalid request"
+                   , errorData = Nothing
+                   , errorID   = Nothing
+                   }
+
+-- | Some unspecified bad thing happened in the server
+internalError :: JSONRPCException
+internalError =
+  JSONRPCException { errorCode = -32603
+                   , message   = "Internal error"
                    , errorData = Nothing
                    , errorID   = Nothing
                    }
@@ -237,15 +363,16 @@ handleRequest out app req =
       Nothing -> throwIO $ methodNotFound reqID (Just method)
       Just m ->
         case m of
-          Command impl ->
+          Command (C impl) ->
             do rid <- requireID reqID
-               answer <- modifyMVar theState $ \s -> impl rid s params
+               answer <- modifyMVar theState $
+                 \s -> (\(a, s) -> (s, a)) <$> impl rid s params
                let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                           , "id" .= reqID
                                           , "result" .= answer
                                           ]
                out (JSON.encode response)
-          Query impl ->
+          Query (Q impl) ->
             do rid <- requireID reqID
                answer <- readMVar theState >>= \s -> impl rid s params
                let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
@@ -253,10 +380,10 @@ handleRequest out app req =
                                           , "result" .= answer
                                           ]
                out (JSON.encode response)
-          Notification impl ->
+          Notification (N impl) ->
             do requireNoID reqID
                modifyMVar theState $
-                \s -> do s' <- impl s params
+                \s -> do ((), s') <- impl s params
                          return (s', ())
 
   where

@@ -1,6 +1,7 @@
 packages:
   argo/
   cryptol-remote-api/
+  saw-remote-api/
 
 optional-packages:
   deps/cryptol/

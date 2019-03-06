@@ -12,3 +12,4 @@ extra-deps:
 - network-3.0.0.0
 - panic-0.4.0.1
 - simple-smt-0.9.3
+- sbv-8.0

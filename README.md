@@ -7,7 +7,7 @@
 Requirements:
 
 * cabal-2.4.1.0
-* GHC-8.4.4
+* GHC-8.6.4
 
 Any easy to way get GHC and cabal-install installed is to use ghcup;
 however any other method will be fine.
@@ -15,7 +15,8 @@ however any other method will be fine.
 https://github.com/haskell/ghcup/blob/master/README.md
 
 ```
-$ ghcup install 8.4.4
+$ ghcup install 8.6.4
+$ ghcup set 8.6.4 # optional
 $ ghcup install-cabal
 ```
 
@@ -27,7 +28,7 @@ project. This can be achieved with `v2-configure` as seen below.
 This project has multiple targets. To build them all you can specify `all`.
 
 ```
-$ cabal v2-configure -w ghc-8.4.4
+$ cabal v2-configure -w ghc-8.6.4
 $ cabal v2-build all
 ```
 

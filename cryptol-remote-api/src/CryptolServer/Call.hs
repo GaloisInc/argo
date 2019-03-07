@@ -52,8 +52,9 @@ import CryptolServer
 
 
 
-call :: CryptolServerCommand JSON.Value
+call :: CryptolServerQuery JSON.Value
 call =
+  cryptolCommandToQuery $
   do CallParams fun rawArgs <- params
      args <- traverse getExpr rawArgs
      let appExpr = mkEApp (EVar (UnQual (mkIdent fun))) args

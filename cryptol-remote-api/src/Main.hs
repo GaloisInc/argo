@@ -68,6 +68,6 @@ cryptolMethods :: [(Text, Method ServerState)]
 cryptolMethods =
   [ ("change directory",        Command $ runCryptolServerCommand cd)
   , ("load module",             Command $ runCryptolServerCommand loadModule)
-  , ("evaluate expression",     Command $ runCryptolServerCommand evalExpression)
-  , ("call",                    Command $ runCryptolServerCommand call)
+  , ("evaluate expression",     Query   $ runCryptolServerQuery evalExpression)
+  , ("call",                    Query   $ runCryptolServerQuery call)
   ]

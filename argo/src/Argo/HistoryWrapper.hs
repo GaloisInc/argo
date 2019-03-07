@@ -8,14 +8,14 @@ import Argo.JSONRPC
 import Argo.CacheTree
 
 import Control.Monad
+import Control.Monad.IO.Class
 import Control.Lens
 import Data.Text (Text)
 import Data.Aeson (Result(..), Value(..), fromJSON, toJSON)
 import qualified Data.HashMap.Strict as HashMap
 
-data HistoryWrapper s = HistoryWrapper
-  { historyCache :: Cache s (Text, Value)
-  }
+data HistoryWrapper s =
+  HistoryWrapper { historyCache :: Cache s (Text, Value) }
 
 type HistoryCommand s = s -> Value -> IO s
 
@@ -37,8 +37,8 @@ methodsToCommands = itoListOf (folded . ifolded <. folding extractCommand)
 
 -- | Extract the components of methods that affect the server's state.
 extractCommand :: Method s -> Maybe (HistoryCommand s)
-extractCommand (Command      f) = Just $ \s p -> fst <$> f IDNull s p
-extractCommand (Notification f) = Just $ \s p -> f s p
+extractCommand (Command      c) = Just $ \s p -> fst <$> runCommand IDNull s p c
+extractCommand (Notification n) = Just $ \s p -> fst <$> runNotification s p n
 extractCommand (Query        _) = Nothing
 
 ------------------------------------------------------------------------
@@ -56,33 +56,38 @@ extractCommand (Query        _) = Nothing
 -- new list of steps is returned as the result directly.
 wrapMethod ::
   [(Text, HistoryCommand s)]   {- ^ commands              -} ->
-  (s -> IO Bool)        {- ^ validate              -} ->
-  Text                  {- ^ method name           -} ->
-  Method s              {- ^ method implementation -} ->
+  (s -> IO Bool)               {- ^ validate              -} ->
+  Text                         {- ^ method name           -} ->
+  Method s                     {- ^ method implementation -} ->
   Method (HistoryWrapper s)
 
-wrapMethod commands validate name (Command f) =
-  Query $ \rId hs params ->
-  do (steps, params') <- extractStepsIO params
+wrapMethod commands validate name (Command command) =
+  Query $
+  do (steps, params') <- extractStepsIO =<< params
+     rId              <- getRequestID
+     hs               <- getState
      let cmd           = (name, params')
-     c                <- cacheLookup (runCommand commands) validate (historyCache hs) steps
-     (s', result)     <- f rId (cacheRoot c) params'
+     c                <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
+     (s', result)     <- runCommand rId (cacheRoot c) params' command
      _                <- cacheAdvance (\_ _ -> return s') (\_ -> return True) c cmd
      let steps'        = steps ++ [cmd]
      return (injectSteps steps' result)
 
-wrapMethod commands validate name (Query f) =
-  Query $ \rId hs params ->
-  do (steps, params') <- extractStepsIO params
-     c                <- cacheLookup (runCommand commands) validate (historyCache hs) steps
-     result           <- f rId (cacheRoot c) params'
+wrapMethod commands validate name (Query query) =
+  Query $
+  do (steps, params') <- extractStepsIO =<< params
+     rId              <- getRequestID
+     hs               <- getState
+     c                <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
+     result           <- runQuery rId (cacheRoot c) params' query
      return result
 
-wrapMethod commands validate name (Notification f) =
-  Query $ \_rId hs params ->
-  do (steps, params') <- extractStepsIO params
+wrapMethod commands validate name (Notification notification) =
+  Query $
+  do (steps, params') <- extractStepsIO =<< params
      let steps'        = steps ++ [(name, params')]
-     _                <- cacheLookup (runCommand commands) validate (historyCache hs) steps'
+     hs               <- getState
+     _                <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps'
      return (toJSON steps')
 
 ------------------------------------------------------------------------
@@ -90,7 +95,7 @@ wrapMethod commands validate name (Notification f) =
 stateKey :: Text
 stateKey = "state"
 
-extractStepsIO :: Value -> IO ([(Text, Value)], Value)
+extractStepsIO :: MonadIO m => Value -> m ([(Text, Value)], Value)
 extractStepsIO v =
   case extractSteps v of
     Nothing -> fail "Missing state parameter"
@@ -113,12 +118,12 @@ injectSteps ::
 injectSteps steps result =
   Object (HashMap.fromList [(stateKey, toJSON steps), ("answer", result)])
 
-runCommand ::
+runHistoryCommand ::
   [(Text, HistoryCommand s)] {- ^ command handlers -} ->
-  (Text, Value)       {- ^ step sequence    -} ->
-  s                   {- ^ starting state   -} ->
-  IO s                {- ^ sequenced state  -}
-runCommand commands (name, params) s =
+  (Text, Value)              {- ^ step sequence    -} ->
+  s                          {- ^ starting state   -} ->
+  IO s                       {- ^ sequenced state  -}
+runHistoryCommand commands (name, params) s =
   case lookup name commands of
     Nothing   -> fail ("Unknown command: " ++ show name)
     Just impl -> impl s params

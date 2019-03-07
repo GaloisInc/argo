@@ -22,11 +22,17 @@ module Argo.JSONRPC
   , mkApp
   , Method(..)
   , Command
+  , runCommand
   , Query
+  , runQuery
   , Notification
+  , runNotification
   , HasParams(..)
+  , params
+  , HasRequestID(..)
   , HasServerState(..)
   , SetsServerState(..)
+  , setState
   -- * JSON-RPC exceptions
   , JSONRPCException(..)
   , raise
@@ -71,7 +77,7 @@ import qualified Data.Text as T
 import GHC.Stack
 import Network.Wai (strictRequestBody)
 import System.IO
-import Web.Scotty hiding (raise)
+import Web.Scotty hiding (raise, params)
 
 import Debug.Trace
 
@@ -108,6 +114,11 @@ newtype Command s a
   deriving (Functor, Applicative, Monad, MonadIO)
        via (ReaderT RequestID (StateT s (ReaderT JSON.Value IO)))
 
+runCommand :: MonadIO m => RequestID -> s -> JSON.Value -> Command s a -> m (s, a)
+runCommand r s p (C command) =
+  do (a, s) <- liftIO $ command r s p
+     pure (s, a)
+
 -- | A Query can send a reply to the user, but it has a read-only view of the
 -- server's state.
 newtype Query s a
@@ -115,11 +126,19 @@ newtype Query s a
   deriving (Functor, Applicative, Monad, MonadIO)
        via (ReaderT RequestID (ReaderT s (ReaderT JSON.Value IO)))
 
+runQuery :: MonadIO m => RequestID -> s -> JSON.Value -> Query s a -> m a
+runQuery r s p (Q query) = liftIO $ query r s p
+
 -- | A Notification can modify the server state, but it cannot reply to the user.
 newtype Notification s a
   = N (s -> JSON.Value -> IO (a, s))
   deriving (Functor, Applicative, Monad, MonadIO)
        via (StateT s (ReaderT JSON.Value IO))
+
+runNotification :: MonadIO m => s -> JSON.Value -> Notification s a -> m (s, a)
+runNotification s p (N notification) =
+  do (a, s) <- liftIO $ notification s p
+     pure (s, a)
 
 -- | Characterizes monads which have access to an ambient context of JSON-RPC
 -- call parameters: 'Command', 'Query', and 'Notification'
@@ -153,6 +172,9 @@ instance SetsServerState s (Notification s) where
   modifyState f = N $ \  s _ -> pure ((), f s)
 -- NOTE: significantly, there is no instance for Query, because queries are not
 -- allowed to modify the server state
+
+setState :: SetsServerState s m => s -> m ()
+setState = modifyState . const
 
 -- | Raise a 'JSONRPCException', flagging it for the client with the current
 -- request ID

@@ -8,6 +8,7 @@ module Argo.CacheTree
 
 import           Control.Concurrent
 import           Control.Monad
+import           Control.Monad.IO.Class
 import           Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import           Data.ByteString (ByteString)
@@ -20,30 +21,30 @@ data Cache st cmd = Cache
   , cacheBranches :: !(MVar (HashMap cmd (MVar (Cache st cmd))))
   }
 
-newCache :: st -> IO (Cache st cmd)
+newCache :: MonadIO m => st -> m (Cache st cmd)
 newCache initialState =
-  Cache initialState <$> newMVar HashMap.empty
+  liftIO $ Cache initialState <$> newMVar HashMap.empty
 
 cacheLookup ::
-  Eq cmd =>
-  Hashable cmd =>
+  (MonadIO m, Eq cmd, Hashable cmd) =>
   (cmd -> st -> IO st)  {- ^ run command -} ->
   (st -> IO Bool)       {- ^ validate    -} ->
   Cache st cmd          {- ^ cache       -} ->
   [cmd]                 {- ^ commands    -} ->
-  IO (Cache st cmd)
-cacheLookup runStep validate = foldM (cacheAdvance runStep validate)
+  m (Cache st cmd)
+cacheLookup runStep validate =
+  foldM (cacheAdvance runStep validate)
 
 -- | Validation must return true when cached server state is valid.
 cacheAdvance ::
-  Eq cmd =>
-  Hashable cmd =>
+  (MonadIO m, Eq cmd, Hashable cmd) =>
   (cmd -> st -> IO st) {- ^ run command -} ->
   (st -> IO Bool)      {- ^ validate    -} ->
   Cache st cmd         {- ^ cache       -} ->
   cmd                  {- ^ command     -} ->
-  IO (Cache st cmd)
+  m (Cache st cmd)
 cacheAdvance runStep validate (Cache st var) cmd =
+  liftIO $
   do (found, nextVar) <-
        modifyMVar var $ \hashMap ->
          case HashMap.lookup cmd hashMap of

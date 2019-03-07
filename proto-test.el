@@ -67,7 +67,8 @@
                 (the-result (gethash "result" decoded))
                 (the-answer (gethash "answer" the-result))
                 (the-state (gethash "state" the-result)))
-           (setq proto-test--state the-state)
+           (when the-state
+             (setq proto-test--state the-state))
            (when the-cont
              (funcall the-cont the-answer))))))))
 

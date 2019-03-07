@@ -21,8 +21,9 @@ import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import CryptolServer
 import Argo.JSONRPC
 
-evalExpression :: CryptolServerCommand JSON.Value
+evalExpression :: CryptolServerQuery JSON.Value
 evalExpression =
+  cryptolCommandToQuery $
   do EvalExprParams str <- params
      case parseExpr str of
         Left err -> raise (cryptolParseErr str err)

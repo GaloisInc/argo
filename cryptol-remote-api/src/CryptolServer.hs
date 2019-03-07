@@ -221,3 +221,8 @@ validateServerState =
            continue
          else
            return False
+
+-- | Turn a cryptol command into a query by forgetting the outgoing state.
+cryptolCommandToQuery :: CryptolServerCommand a -> CryptolServerQuery a
+cryptolCommandToQuery (CryptolServerCommand cmd) =
+  CryptolServerQuery (\rId st val -> snd <$> cmd rId st val)

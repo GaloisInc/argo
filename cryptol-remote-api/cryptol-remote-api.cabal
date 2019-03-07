@@ -9,29 +9,31 @@ category:            Language
 extra-source-files:  CHANGELOG.md
 
 common deps
-  build-depends:       base >=4.11.1.0 && <4.13
-                     , argo
-                     , lens
-                     , aeson
-                     , base64-bytestring
-                     , bytestring
-                     , containers
-                     , cryptol == 2.6.1
-                     , directory
-                     , text
-                     , unordered-containers ^>=0.2
-                     , vector
-                     , scientific ^>=0.3
+  build-depends:
+    base >=4.11.1.0 && <4.13,
+    argo,
+    aeson                ^>= 1.4.2,
+    base64-bytestring    ^>= 1.0,
+    bytestring           ^>= 0.10.8,
+    containers           ^>= 0.6,
+    cryptol               == 2.6.1,
+    directory            ^>= 1.3.3,
+    lens                 ^>= 4.17,
+    scientific           ^>= 0.3,
+    text                 ^>= 1.2.3,
+    unordered-containers ^>= 0.2,
+    vector               ^>= 0.12,
 
 executable cryptol-remote-api
   import:              deps
   build-depends:       optparse-applicative ^>= 0.14
   main-is:             Main.hs
   other-modules:       CryptolServer
-                     , CryptolServer.Call
-                     , CryptolServer.ChangeDir
-                     , CryptolServer.EvalExpr
-                     , CryptolServer.LoadModule
+                       CryptolServer.Call
+                       CryptolServer.ChangeDir
+                       CryptolServer.EvalExpr
+                       CryptolServer.LoadModule
+                       --CryptolServer.Names -- FIXME
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -40,11 +42,11 @@ test-suite test-cryptol-remote-api
   default-language:    Haskell2010
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
-                     , src
+                       src
   other-modules:       CryptolServer
-                     , CryptolServer.Call
+                       CryptolServer.Call
   main-is:             Test.hs
-  build-depends:       proto
-                     , quickcheck-instances
-                     , tasty
-                     , tasty-quickcheck
+  build-depends:       proto,
+                       quickcheck-instances,
+                       tasty,
+                       tasty-quickcheck,

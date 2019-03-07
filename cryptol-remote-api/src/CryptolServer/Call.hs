@@ -51,21 +51,20 @@ import Argo.JSONRPC
 import CryptolServer
 
 
-
 call :: Method ServerState
 call =
-  command $ \(CallParams fun rawArgs) ->
+  query . stateless $ \(CallParams fun rawArgs) ->
     do args <- traverse getExpr rawArgs
        let appExpr = mkEApp (EVar (UnQual (mkIdent fun))) args
        (expr, ty, schema) <- runModuleCmd (checkExpr appExpr)
-      -- TODO: see Cryptol REPL for how to check whether we
-      -- can actually evaluate things, which we can't do in
-      -- a parameterized module
+       -- TODO: see Cryptol REPL for how to check whether we
+       -- can actually evaluate things, which we can't do in
+       -- a parameterized module
        evalAllowed ty
        evalAllowed schema
        me <- view moduleEnv <$> getState
        let cfg = meSolverConfig me
-       perhapsDef <- liftIO $ SMT.withSolver cfg (\s -> defaultReplExpr s ty  schema)
+       perhapsDef <- liftIO $ SMT.withSolver cfg (\s -> defaultReplExpr s ty schema)
        case perhapsDef of
          Nothing -> error "TODO"
          Just (tys, checked) ->

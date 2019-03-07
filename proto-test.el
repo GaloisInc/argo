@@ -67,7 +67,8 @@
                 (the-result (gethash "result" decoded))
                 (the-answer (gethash "answer" the-result))
                 (the-state (gethash "state" the-result)))
-           (setq proto-test--state the-state)
+           (when the-state
+             (setq proto-test--state the-state))
            (when the-cont
              (funcall the-cont the-answer))))))))
 
@@ -122,10 +123,17 @@ errors."
   (proto-test--cryptol-send "call"
                             `(:function ,fun :arguments ,(or args []))
                             (lambda (res)
-                              (message "The result is %S" res)
-                              (lambda (code err-message &optional err-data)
-                                (error "When calling %S with args %S, got error %s (%S) with info %S"
-                                       fun args code err-message err-data)))))
+                              (message "The result is %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When calling %S with args %S, got error %s (%S) with info %S"
+                                     fun args code err-message err-data))))
+
+(defun proto-test-cryptol-visible-names ()
+  "Get the list of available names from Cryptol."
+  (interactive)
+  (proto-test--cryptol-send "visible names" '()
+                            (lambda (res)
+                              (message "%s" res))))
 
 (defvar proto-test--cryptol-get-arg-context '()
   "The context to show in the argument-getting prompt.")

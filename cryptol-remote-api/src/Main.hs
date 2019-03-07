@@ -14,6 +14,7 @@ import qualified Data.Aeson.Types as JSON
 import Data.Text (Text)
 import qualified Options.Applicative as Opt
 import System.Directory (doesDirectoryExist, setCurrentDirectory)
+import System.IO (stdout)
 
 import Argo.JSONRPC
 import Argo.JSONRPC.Socket
@@ -24,6 +25,7 @@ import CryptolServer.Call
 import CryptolServer.ChangeDir
 import CryptolServer.EvalExpr
 import CryptolServer.LoadModule
+-- import CryptolServer.Names  -- FIXME
 
 import Argo.HistoryWrapper
 import Argo.CacheTree
@@ -60,7 +62,7 @@ realMain opts =
      theApp <- mkApp (HistoryWrapper cache) (historyWrapper validateServerState cryptolMethods)
      case transportOpt opts of
        StdIONetstring -> serveStdIONS theApp
-       SocketNetstring (Port p) -> serveSocket "127.0.0.1" p theApp
+       SocketNetstring (Port p) -> serveSocket (Just stdout) "127.0.0.1" p theApp
 
 
 cryptolMethods :: [(Text, Method ServerState)]
@@ -69,4 +71,5 @@ cryptolMethods =
   , ("load module",         loadModule)
   , ("evaluate expression", evalExpression)
   , ("call",                call)
+  -- , ("visible names",       visibleNames) -- FIXME
   ]

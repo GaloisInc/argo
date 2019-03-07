@@ -1,9 +1,6 @@
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE UndecidableSuperClasses #-}
-{-# LANGUAGE QuantifiedConstraints #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ExistentialQuantification #-}
@@ -15,7 +12,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
@@ -27,10 +23,13 @@ module Argo.JSONRPC
   , Method(..)
   , Command
   , command
+  , runCommand
   , Query
   , query
+  , runQuery
   , Notification
   , notification
+  , runNotification
   , IsMethod(..)
   , setState
   -- * JSON-RPC exceptions
@@ -77,7 +76,7 @@ import qualified Data.Text as T
 import GHC.Stack
 import Network.Wai (strictRequestBody)
 import System.IO
-import Web.Scotty hiding (raise, params)
+import Web.Scotty hiding (raise, params, get, put)
 
 import Debug.Trace
 
@@ -111,9 +110,13 @@ data Method s where
 
 -- | A Command can both modify the server's state and send a reply to the user.
 newtype Command s a
-  = C (RequestID -> s -> IO (a, s))
+  = C (ReaderT RequestID (StateT s IO) a)
   deriving (Functor, Applicative, Monad, MonadIO)
-       via (ReaderT RequestID (StateT s IO))
+
+runCommand :: MonadIO m => Command s a -> RequestID -> s -> m (s, a)
+runCommand c r s = liftIO $
+  do (a, s') <- coerce c r s
+     pure (s', a)
 
 command ::
   forall params result s.
@@ -125,9 +128,11 @@ command = Command . wrapJSON
 -- | A Query can send a reply to the user, but it has a read-only view of the
 -- server's state.
 newtype Query s a
-  = Q (RequestID -> s -> IO a)
+  = Q (ReaderT RequestID (ReaderT s IO) a)
   deriving (Functor, Applicative, Monad, MonadIO)
-       via (ReaderT RequestID (ReaderT s IO))
+
+runQuery :: MonadIO m => Query s a -> RequestID -> s -> m a
+runQuery q r s = liftIO (coerce q r s)
 
 query ::
   forall params result s.
@@ -138,34 +143,58 @@ query = Query . wrapJSON
 
 -- | A Notification can modify the server state, but it cannot reply to the user.
 newtype Notification s a
-  = N (s -> IO (a, s))
+  = N (StateT s IO a)
   deriving (Functor, Applicative, Monad, MonadIO)
-       via (StateT s IO)
+
+runNotification :: MonadIO m => Notification s a -> s -> m (s, a)
+runNotification n s = liftIO $
+  do (a, s') <- coerce n s
+     pure (s', a)
 
 notification ::
   forall params s.
   (JSON.FromJSON params) =>
   (params -> Notification s ()) ->
   Method s
-notification = Notification . (fmap (fmap (fmap (const ()))) wrapJSON)
+notification n =
+  -- This implementation is similar to wrapJSON, but since we don't have a
+  -- RequestID available, we can't quite copy that logic
+  Notification $ \p -> N $ do
+    case JSON.fromJSON @params p of
+      JSON.Error msg ->
+        liftIO $ throwIO (invalidParams p Nothing)
+      JSON.Success params ->
+        do runNotification (n params) =<< get
+           pure ()
 
-class (forall s. MonadIO (m s)) => IsMethod m where
-  -- The IsStateful type family lets us insert a custom type error for attempts
-  -- to modify the state from within a Query
+class IsMethod m where
+  -- | The IsStateful type family lets us insert a custom type error for
+  -- attempts to modify the state from within a Query
   type IsStateful m :: Constraint
   type IsStateful m = ()
-  getRequestID :: m s (Maybe RequestID)
+  -- | The HasRequestID type family lets us insert a custom type error for
+  -- attempts to get a request ID when there is none
+  type HasRequestID m :: Constraint
+  type HasRequestID m = ()
+  -- | Get the current request ID
+  getRequestID :: HasRequestID m => m s RequestID
+  -- | Get the current server state
   getState     :: m s s
+  -- | Alter the current server state (if this is permitted)
   modifyState  :: IsStateful m => (s -> s) -> m s ()
 
+-- | Set the current server state (if this is permitted)
+setState :: (IsMethod m, IsStateful m) => s -> m s ()
+setState = modifyState . const
+
 instance IsMethod Command where
-  getRequestID  = C \r s -> pure (Just r, s)
-  getState      = C \r s -> pure (s, s)
-  modifyState f = C \_ s -> pure ((), f s)
+  getRequestID  = C ask
+  getState      = C get
+  modifyState f = C (modify f)
 
 instance IsMethod Query where
-  getRequestID  = Q \r _ -> pure (Just r)
-  getState      = Q \_ s -> pure s
+  getRequestID  = Q ask
+  getState      = Q (lift (ask @_ @(ReaderT _ IO)))
   type IsStateful Query =
     TypeError
       ('Text "Methods in the ‘Query’ monad may not modify server state" :$$:
@@ -175,28 +204,35 @@ instance IsMethod Query where
     "(should be ruled out statically)"
 
 instance IsMethod Notification where
-  getRequestID  = N \s -> pure (Nothing, s)
-  getState      = N \s -> pure (s, s)
-  modifyState f = N \s -> pure ((), f s)
-
-setState :: (IsMethod m, IsStateful m) => s -> m s ()
-setState = modifyState . const
+  type HasRequestID Notification =
+    TypeError
+      ('Text "Methods in the ‘Notification’ monad aren't associated with a request ID" :$$:
+       'Text "Consider using the ‘Command’ or ‘Query’ monad instead")
+  getRequestID  = error $
+    "Internal error: runtime attempt to get request ID inside a notification " ++
+    "(should be ruled out statically)"
+  getState      = N get
+  modifyState f = N (modify f)
 
 wrapJSON ::
   forall params result m s.
-  (IsMethod m, JSON.FromJSON params, JSON.ToJSON result) =>
+  (IsMethod m, HasRequestID m, MonadIO (m s),
+   JSON.FromJSON params, JSON.ToJSON result) =>
   (params -> m s result) ->
   (JSON.Value -> m s JSON.Value)
 wrapJSON c p =
   case JSON.fromJSON @params p of
     JSON.Error msg ->
-      raise (invalidParams p)
+      raise (invalidParams p . Just)
     JSON.Success params ->
       JSON.toJSON @result <$> c params
 
 -- | Raise a 'JSONRPCException', flagging it for the client with the current
 -- request ID, if there is one
-raise :: IsMethod m => (Maybe RequestID -> JSONRPCException) -> m s a
+raise ::
+  (IsMethod m, HasRequestID m, MonadIO (m s)) =>
+  (RequestID -> JSONRPCException) ->
+  m s a
 raise e =
   do rid <- getRequestID
      liftIO $ throwIO (e rid)
@@ -387,35 +423,31 @@ handleRequest out app req =
   let method   = view requestMethod req
       params   = view requestParams req
       reqID    = view requestID req
-      theState = view appState app
+      theState :: MVar s = view appState app
   in
     case M.lookup method $ view appMethods app of
       Nothing -> throwIO $ methodNotFound reqID (Just method)
       Just m ->
         case m of
-          Command (($ params) -> C impl) ->
+          Command impl ->
             do rid <- requireID reqID
-               answer <- modifyMVar theState $
-                 \s -> do (a, s) <- impl rid s
-                          pure (s, a)
+               answer <- modifyMVar theState (runCommand (impl params) rid)
                let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                           , "id" .= reqID
                                           , "result" .= answer
                                           ]
                out (JSON.encode response)
-          Query (($ params) -> Q impl) ->
+          Query impl ->
             do rid <- requireID reqID
-               answer <- impl rid =<< readMVar theState
+               answer <- runQuery (impl params) rid =<< readMVar theState
                let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                           , "id" .= reqID
                                           , "result" .= answer
                                           ]
                out (JSON.encode response)
-          Notification (($ params) -> N impl) ->
+          Notification impl ->
             do requireNoID reqID
-               modifyMVar theState $
-                \s -> do ((), s') <- impl s
-                         return (s', ())
+               modifyMVar theState (runNotification (impl params))
   where
     requireID (Just rid) = return rid
     requireID Nothing  = throwIO invalidRequest
@@ -429,8 +461,8 @@ handleRequest out app req =
 synchronized :: (a -> IO b) -> IO (a -> IO b)
 synchronized f =
   do lock <- newMVar ()
-     pure \a ->
-       withMVar lock \_ -> f a
+     pure $ \a ->
+       withMVar lock $ \_ -> f a
 
 -- | One way to run a server is on stdio, listening for requests on stdin
 -- and replying on stdout. In this system, each request must be on a

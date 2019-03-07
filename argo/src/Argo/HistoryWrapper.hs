@@ -37,8 +37,8 @@ methodsToCommands = itoListOf (folded . ifolded <. folding extractCommand)
 
 -- | Extract the components of methods that affect the server's state.
 extractCommand :: Method s -> Maybe (HistoryCommand s)
-extractCommand (Command      c) = Just $ \s p -> fst <$> runCommand IDNull s p c
-extractCommand (Notification n) = Just $ \s p -> fst <$> runNotification s p n
+extractCommand (Command      c) = Just $ \s p -> fst <$> runCommand (c p) IDNull s
+extractCommand (Notification n) = Just $ \s p -> fst <$> runNotification (n p) s
 extractCommand (Query        _) = Nothing
 
 ------------------------------------------------------------------------
@@ -61,30 +61,30 @@ wrapMethod ::
   Method s                     {- ^ method implementation -} ->
   Method (HistoryWrapper s)
 
-wrapMethod commands validate name (Command command) =
-  Query $
-  do (steps, params') <- extractStepsIO =<< params
+wrapMethod commands validate name (Command c) =
+  Query $ \params ->
+  do (steps, params') <- extractStepsIO params
      rId              <- getRequestID
      hs               <- getState
      let cmd           = (name, params')
-     c                <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
-     (s', result)     <- runCommand rId (cacheRoot c) params' command
-     _                <- cacheAdvance (\_ _ -> return s') (\_ -> return True) c cmd
+     cache            <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
+     (s', result)     <- runCommand (c params') rId (cacheRoot cache)
+     _                <- cacheAdvance (\_ _ -> return s') (\_ -> return True) cache cmd
      let steps'        = steps ++ [cmd]
      return (injectSteps steps' result)
 
-wrapMethod commands validate name (Query query) =
-  Query $
-  do (steps, params') <- extractStepsIO =<< params
+wrapMethod commands validate name (Query q) =
+  Query $ \params ->
+  do (steps, params') <- extractStepsIO params
      rId              <- getRequestID
      hs               <- getState
-     c                <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
-     result           <- runQuery rId (cacheRoot c) params' query
+     cache            <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
+     result           <- runQuery (q params') rId (cacheRoot cache)
      return result
 
 wrapMethod commands validate name (Notification notification) =
-  Query $
-  do (steps, params') <- extractStepsIO =<< params
+  Query $ \params ->
+  do (steps, params') <- extractStepsIO params
      let steps'        = steps ++ [(name, params')]
      hs               <- getState
      _                <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps'
@@ -94,6 +94,9 @@ wrapMethod commands validate name (Notification notification) =
 
 stateKey :: Text
 stateKey = "state"
+
+answerKey :: Text
+answerKey = "answer"
 
 extractStepsIO :: MonadIO m => Value -> m ([(Text, Value)], Value)
 extractStepsIO v =
@@ -116,7 +119,7 @@ injectSteps ::
   Value           {- ^ command result -} ->
   Value           {- ^ combined value -}
 injectSteps steps result =
-  Object (HashMap.fromList [(stateKey, toJSON steps), ("answer", result)])
+  Object (HashMap.fromList [(stateKey, toJSON steps), (answerKey, result)])
 
 runHistoryCommand ::
   [(Text, HistoryCommand s)] {- ^ command handlers -} ->

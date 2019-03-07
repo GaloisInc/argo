@@ -76,14 +76,14 @@ wrapMethod commands validate name (Query f) =
   do (steps, params') <- extractStepsIO params
      c                <- cacheLookup (runCommand commands) validate (historyCache hs) steps
      result           <- f rId (cacheRoot c) params'
-     return result
+     return $ Object (HashMap.fromList [("answer", result)])
 
 wrapMethod commands validate name (Notification f) =
   Query $ \_rId hs params ->
   do (steps, params') <- extractStepsIO params
      let steps'        = steps ++ [(name, params')]
      _                <- cacheLookup (runCommand commands) validate (historyCache hs) steps'
-     return (toJSON steps')
+     return $ Object (HashMap.fromList [("state", toJSON steps')])
 
 ------------------------------------------------------------------------
 

@@ -25,6 +25,7 @@ import CryptolServer.Call
 import CryptolServer.ChangeDir
 import CryptolServer.EvalExpr
 import CryptolServer.LoadModule
+import CryptolServer.Names
 
 import Argo.HistoryWrapper
 import Argo.CacheTree
@@ -66,8 +67,9 @@ realMain opts =
 
 cryptolMethods :: [(Text, Method ServerState)]
 cryptolMethods =
-  [ ("change directory",        Command $ runCryptolServerCommand cd)
-  , ("load module",             Command $ runCryptolServerCommand loadModule)
-  , ("evaluate expression",     Command $ runCryptolServerCommand evalExpression)
-  , ("call",                    Command $ runCryptolServerCommand call)
+  [ ("change directory",    Command $ runCryptolServerCommand cd)
+  , ("load module",         Command $ runCryptolServerCommand loadModule)
+  , ("evaluate expression", Command $ runCryptolServerCommand evalExpression)
+  , ("call",                Command $ runCryptolServerCommand call)
+  , ("visible names",       Query   $ runCryptolServerQuery visibleNames)
   ]

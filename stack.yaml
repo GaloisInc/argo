@@ -1,4 +1,4 @@
-resolver: lts-13.5
+resolver: lts-13.10
 
 packages:
 - argo
@@ -9,7 +9,7 @@ extra-deps:
 - GraphSCC-1.0.4
 - base-compat-0.9.3
 - monadLib-3.9
-- network-3.0.0.0
+- network-2.8.0.0
 - panic-0.4.0.1
 - simple-smt-0.9.3
 - sbv-8.0

@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 module CryptolServer where
 
@@ -33,7 +34,10 @@ cryptolError mod rid =
                    , errorID = Just rid
                    }
 
-runModuleCmd :: (MonadIO m, HasRequestID m, HasServerState m, SetsServerState m) => ModuleCmd a -> m a
+runModuleCmd ::
+  (MonadIO (m ServerState), IsMethod m, IsStateful m, HasRequestID m) =>
+  ModuleCmd a ->
+  m ServerState a
 runModuleCmd cmd =
     do s   <- getState
        out <- liftIO $ cmd (theEvalOpts, view moduleEnv s)

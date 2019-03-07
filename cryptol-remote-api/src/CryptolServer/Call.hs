@@ -52,38 +52,37 @@ import CryptolServer
 
 
 
-call :: CryptolServerCommand JSON.Value
+call :: Method ServerState
 call =
-  do CallParams fun rawArgs <- params
-     args <- traverse getExpr rawArgs
-     let appExpr = mkEApp (EVar (UnQual (mkIdent fun))) args
-     (expr, ty, schema) <- runModuleCmd (checkExpr appExpr)
-     -- TODO: see Cryptol REPL for how to check whether we
-     -- can actually evaluate things, which we can't do in
-     -- a parameterized module
-     evalAllowed ty
-     evalAllowed schema
-     me <- view moduleEnv <$> getState
-     let cfg = meSolverConfig me
-     perhapsDef <- liftIO $ SMT.withSolver cfg (\s -> defaultReplExpr s ty schema)
-     case perhapsDef of
-       Nothing -> error "TODO"
-       Just (tys, checked) ->
-         do noDefaults tys
-            let su = listParamSubst tys
-            let theType = apSubst su (sType schema)
-            res <- runModuleCmd (evalExpr checked)
-            prims <- runModuleCmd getPrimMap
-            rid <- getRequestID
-            val <- observe $ readBack rid prims theType res
-            return (JSON.object ["value" .= val, "type" .= pretty theType])
+  command $ \(CallParams fun rawArgs) ->
+    do args <- traverse getExpr rawArgs
+       let appExpr = mkEApp (EVar (UnQual (mkIdent fun))) args
+       (expr, ty, schema) <- runModuleCmd (checkExpr appExpr)
+      -- TODO: see Cryptol REPL for how to check whether we
+      -- can actually evaluate things, which we can't do in
+      -- a parameterized module
+       evalAllowed ty
+       evalAllowed schema
+       me <- view moduleEnv <$> getState
+       let cfg = meSolverConfig me
+       perhapsDef <- liftIO $ SMT.withSolver cfg (\s -> defaultReplExpr s ty  schema)
+       case perhapsDef of
+         Nothing -> error "TODO"
+         Just (tys, checked) ->
+           do noDefaults tys
+              let su = listParamSubst tys
+              let theType = apSubst su (sType schema)
+              res <- runModuleCmd (evalExpr checked)
+              prims <- runModuleCmd getPrimMap
+              rid <- getRequestID
+              val <- observe $ readBack rid prims theType res
+              return (JSON.object ["value" .= val, "type" .= pretty theType])
 
   where
     noDefaults [] = return ()
     noDefaults xs@(_:_) =
       do rid <- getRequestID
          raise (unwantedDefaults xs)
-
 
     evalAllowed x =
       do me <- view moduleEnv <$> getState
@@ -135,7 +134,7 @@ readBack rid prims ty val =
     other -> liftIO $ throwIO (invalidType other rid)
 
 
-observe :: Eval a -> CryptolServerCommand a
+observe :: Eval a -> Command ServerState a
 observe (Ready x) = pure x
 observe (Thunk f) = liftIO $ f theEvalOpts
 
@@ -261,7 +260,11 @@ instance JSON.ToJSON ArgSpec where
            ]
 
 
-decode :: (HasRequestID m, MonadIO m) => Encoding -> Text -> m Integer
+decode ::
+  (HasRequestID m, MonadIO (m ServerState), IsMethod m) =>
+  Encoding ->
+  Text ->
+  m ServerState Integer
 decode Base64 txt =
   let bytes = encodeUtf8 txt
   in
@@ -275,7 +278,10 @@ decode Hex txt =
   where
     squish = foldl (\acc i -> (acc * 16) + i) 0
 
-hexDigit :: (Num a, HasRequestID m, MonadIO m) => Char -> m a
+hexDigit
+  :: (Num a, HasRequestID m, IsMethod m, MonadIO (m ServerState)) =>
+  Char ->
+  m ServerState a
 hexDigit '0' = pure 0
 hexDigit '1' = pure 1
 hexDigit '2' = pure 2
@@ -301,7 +307,7 @@ hexDigit 'F' = pure 15
 hexDigit c   = raise (invalidHex c)
 
 
-getExpr :: ArgSpec -> CryptolServerCommand (Expr PName)
+getExpr :: ArgSpec -> Command ServerState (Expr PName)
 getExpr (Bit b) =
   return $
     ETyped
@@ -322,7 +328,7 @@ getExpr (Tuple projs) =
   ETuple <$> traverse getExpr projs
 
 
-invalidBase64 :: ByteString -> String -> CryptolServerException
+invalidBase64 :: ByteString -> String -> RequestID -> JSONRPCException
 invalidBase64 invalidData msg rid =
   JSONRPCException
     { errorCode = 32
@@ -331,7 +337,7 @@ invalidBase64 invalidData msg rid =
     , errorID = Just rid
     }
 
-invalidHex :: Char -> CryptolServerException
+invalidHex :: Char -> RequestID -> JSONRPCException
 invalidHex invalidData rid =
   JSONRPCException
     { errorCode = 33
@@ -340,7 +346,7 @@ invalidHex invalidData rid =
     , errorID = Just rid
     }
 
-invalidType :: TC.Type -> CryptolServerException
+invalidType :: TC.Type -> RequestID -> JSONRPCException
 invalidType ty rid =
   JSONRPCException
     { errorCode = 34

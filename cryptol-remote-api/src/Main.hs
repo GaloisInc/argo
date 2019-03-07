@@ -65,8 +65,8 @@ realMain opts =
 
 cryptolMethods :: [(Text, Method ServerState)]
 cryptolMethods =
-  [ ("change directory",        Command $ runCryptolServerCommand cd)
-  , ("load module",             Command $ runCryptolServerCommand loadModule)
-  , ("evaluate expression",     Command $ runCryptolServerCommand evalExpression)
-  , ("call",                    Command $ runCryptolServerCommand call)
+  [ ("change directory",    cd)
+  , ("load module",         loadModule)
+  , ("evaluate expression", evalExpression)
+  , ("call",                call)
   ]

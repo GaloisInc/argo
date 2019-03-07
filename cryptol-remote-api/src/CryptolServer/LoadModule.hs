@@ -13,11 +13,11 @@ import CryptolServer
 import Argo.JSONRPC
 
 
-loadModule :: CryptolServerCommand JSON.Value
+loadModule :: Method ServerState
 loadModule =
-  do LoadModuleParams fn <- params
-     x <- runModuleCmd (loadModuleByPath fn)
-     return (JSON.toJSON ())
+  command $ \(LoadModuleParams fn) ->
+    do x <- runModuleCmd (loadModuleByPath fn)
+       return ()
 
 data LoadModuleParams =
   LoadModuleParams { loadModuleMod :: FilePath }

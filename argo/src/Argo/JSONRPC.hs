@@ -318,25 +318,29 @@ serveHandles hIn hOut app = init >>= loop
 
 -- | Serve an application on stdio, with messages encoded as netstrings.
 serveStdIONS :: App s -> IO ()
-serveStdIONS = serveHandlesNS stdin stdout
+serveStdIONS = serveHandlesNS Nothing stdin stdout
 
 -- | Serve an application on arbitrary handles, with messages
 -- encoded as netstrings.
 serveHandlesNS ::
-  Handle {- ^ input handle    -} ->
-  Handle {- ^ output handle   -} ->
-  App s  {- ^ RPC application -} ->
+  Maybe Handle {- ^ logging handle -} ->
+  Handle       {- ^ input handle    -} ->
+  Handle       {- ^ output handle   -} ->
+  App s        {- ^ RPC application -} ->
   IO ()
-serveHandlesNS hIn hOut app =
+serveHandlesNS hLog hIn hOut app =
   do hSetBinaryMode hIn True
      hSetBuffering hIn NoBuffering
      input <- newMVar hIn
-     output <- synchronized (BS.hPut hOut . encodeNetstring . netstring)
+     output <- synchronized (\msg ->
+                               do log msg
+                                  BS.hPut hOut $ encodeNetstring $ netstring msg)
      loop output input
   where
     loop :: (BS.ByteString -> IO ()) -> MVar Handle -> IO ()
     loop output input =
       do line <- withMVar input $ netstringFromHandle
+         log line
          forkIO $
                (case JSON.eitherDecode (decodeNetstring line) of
                   Left msg -> throwIO (parseError (T.pack msg))
@@ -348,6 +352,12 @@ serveHandlesNS hIn hOut app =
     reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
     reportError output exn =
       output (JSON.encode exn)
+
+    log :: Show a => a -> IO ()
+    log =
+      case hLog of
+        Nothing -> const (return ())
+        Just h -> hPutStrLn h . show
 
 serveHTTP ::
   App s  {- JSON-RPC app -} ->

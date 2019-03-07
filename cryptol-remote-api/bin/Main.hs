@@ -14,6 +14,7 @@ import qualified Data.Aeson.Types as JSON
 import Data.Text (Text)
 import qualified Options.Applicative as Opt
 import System.Directory (doesDirectoryExist, setCurrentDirectory)
+import System.IO (stdout)
 
 import Argo.JSONRPC
 import Argo.JSONRPC.Socket
@@ -60,7 +61,7 @@ realMain opts =
      theApp <- mkApp (HistoryWrapper cache) (historyWrapper validateServerState cryptolMethods)
      case transportOpt opts of
        StdIONetstring -> serveStdIONS theApp
-       SocketNetstring (Port p) -> serveSocket "127.0.0.1" p theApp
+       SocketNetstring (Port p) -> serveSocket (Just stdout) "127.0.0.1" p theApp
 
 
 cryptolMethods :: [(Text, Method ServerState)]

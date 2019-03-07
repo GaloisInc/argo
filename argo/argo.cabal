@@ -9,24 +9,28 @@ category:      Network
 extra-source-files: CHANGELOG.md
 
 library
-  build-depends:    base >= 4.11.1.0 && < 4.13
-                  , lens
-                  , aeson
-                  , binary
-                  , bytestring
-                  , containers
-                  , scotty
-                  , text
-                  , unordered-containers ^>=0.2
-                  , scientific ^>=0.3
-                  , wai
-                  , network
-                  , async ^>=2.2
-                  , hashable ^>= 1.2
+  build-depends:
+    base                        >= 4.11.1.0 && < 4.13,
+    aeson                       ^>= 1.4.2,
+    async                       ^>= 2.2,
+    binary                      ^>= 0.8.6,
+    bytestring                  ^>= 0.10.8,
+    containers                  ^>= 0.6.0,
+    hashable                    ^>= 1.2,
+    lens                        ^>= 4.17,
+    network                     ^>= 3.0.1,
+    scientific                  ^>= 0.3,
+    scotty                      ^>= 0.11.3,
+    text                        ^>= 1.2.3,
+    unordered-containers        ^>= 0.2,
+    wai                         ^>= 3.2.2,
+
+  exposed-modules:
+    Argo.CacheTree
+    Argo.HistoryWrapper
+    Argo.JSONRPC
+    Argo.JSONRPC.Socket
+    Argo.Netstring
+
   hs-source-dirs: src
-  exposed-modules:   Argo.CacheTree
-                   , Argo.HistoryWrapper
-                   , Argo.JSONRPC
-                   , Argo.JSONRPC.Socket
-                   , Argo.Netstring
   default-language: Haskell2010

@@ -23,12 +23,12 @@ import CryptolServer
 import Debug.Trace
 
 visibleNames :: Method ServerState
-visibleNames = query $ \(_ :: JSON.Value) ->
+visibleNames = nullQuery $
   do me <- view moduleEnv <$> getState
      let (dyDecls,dyNames,dyDisp) = dynamicEnv me
      let (fParams,fDecls,fNames,fDisp) = focusedEnv me
      let inScope = Map.keys (neExprs $ dyNames `shadowing` fNames)
-     return $ JSON.toJSON (concatMap (getInfo fNames (ifDecls fDecls)) inScope)
+     return $ concatMap (getInfo fNames (ifDecls fDecls)) inScope
 
 getInfo :: NamingEnv -> Map Name IfaceDecl -> PName -> [NameInfo]
 getInfo rnEnv info n' =

@@ -26,6 +26,7 @@ module Argo.JSONRPC
   , runCommand
   , Query
   , query
+  , nullQuery
   , runQuery
   , Notification
   , notification
@@ -105,8 +106,11 @@ Methods come in three forms:
 
 -- | A server is a mapping from method names to these methods.
 data Method s where
+  -- | A @Command@ may modify server state and returns a response
   Command      :: (JSON.Value -> Command      s JSON.Value) -> Method s
+  -- | A @Query@ may not modify server state but does return a response
   Query        :: (JSON.Value -> Query        s JSON.Value) -> Method s
+  -- | A @Notification@ may modify server state but does not return a response
   Notification :: (JSON.Value -> Notification s ())         -> Method s
 
 -- | A Command can both modify the server's state and send a reply to the user.
@@ -141,6 +145,13 @@ query ::
   (params -> Query s result) ->
   Method s
 query = Query . wrapJSON
+
+nullQuery ::
+  forall result s.
+  (JSON.ToJSON result) =>
+  Query s result ->
+  Method s
+nullQuery q = Query (\_ -> JSON.toJSON <$> q)
 
 -- | A Notification can modify the server state, but it cannot reply to the user.
 newtype Notification s a

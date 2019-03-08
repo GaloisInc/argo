@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 module CryptolServer.Names (visibleNames) where
 
@@ -22,7 +23,7 @@ import CryptolServer
 import Debug.Trace
 
 visibleNames :: Method ServerState
-visibleNames = query $ \() ->
+visibleNames = query $ \(_ :: JSON.Value) ->
   do me <- view moduleEnv <$> getState
      let (dyDecls,dyNames,dyDisp) = dynamicEnv me
      let (fParams,fDecls,fNames,fDisp) = focusedEnv me

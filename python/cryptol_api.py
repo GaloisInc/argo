@@ -73,7 +73,7 @@ def to_cryptol_arg(val):
                 'width': 8 * len(val),
                 'data': base64.b64encode(val).decode('ascii')}
     else:
-        raise TypeError("Unsupported value")
+        raise TypeError("Unsupported value: " + str(val))
 
 def from_cryptol_arg(val):
     if isinstance(val, bool):
@@ -102,100 +102,141 @@ def from_cryptol_arg(val):
         else:
             raise ValueError("Unknown expression tag " + tag)
     else:
-        raise TypeError("Unsupported value")
+        raise TypeError("Unsupported value " + str(val))
 
 
 class CryptolException(Exception):
     pass
 
-class CryptolResult(object):
-    def __init__(self, connection, request_id):
+class CryptolInteraction():
+    def __init__(self, connection):
         self.connection = connection
-        self.request_id = request_id
-        self.the_response = None
-        self.the_state = None
-        self.the_result = None
+        self._raw_response = None
+        self.init_state = connection.protocol_state()
+        self.params['state'] = self.init_state
+        self.request_id = connection.send_message(self.method, self.params)
 
-    def ready(self):
-        if self.the_response is None:
-            self.connection.process_replies()
-            return self.request_id in self.connection.replies
-        else:
-            return True
+    def raw_result(self):
+        if self._raw_response is None:
+            self._raw_response = self.connection.wait_for_reply_to(self.request_id)
+        return self._raw_response
 
-    def raw_result_and_state(self):
-        if self.the_response is None:
-            self.the_response = self.connection.wait_for_reply_to(self.request_id)
+    def process_result(self, result):
+        raise NotImplementedError('process_result')
 
-        if self.the_state is None:
-            if 'error' in self.the_response:
-                msg = self.the_response['error']['message']
-                if 'data' in self.the_response['error']:
-                    msg += " " + str(self.the_response['error']['data'])
-                raise CryptolException(msg)
-            elif 'result' in self.the_response:
+class CryptolCommand(CryptolInteraction):
 
-                self.the_state = self.the_response['result'].pop('state')
-                return (self.the_response['result'], self.the_state)
-        else:
-            return (self.the_result, self.the_state)
+    def _result_and_state(self):
+        res = self.raw_result()
+        if 'error' in res:
+            msg = res['error']['message']
+            if 'data' in res['error']:
+                msg += " " + str(res['error']['data'])
+            raise CryptolException(msg)
+        elif 'result' in res:
+            return (res['result']['answer'], res['result']['state'])
+
+    def state(self):
+        return self._result_and_state()[1]
 
     def result(self):
-        return self.process_result(self.raw_result_and_state()[0])
+        return self.process_result(self._result_and_state()[0])
 
-    def result_state(self):
-        return self.raw_result_and_state()[1]
+class CryptolChangeDirectory(CryptolCommand):
+    def __init__(self, connection, new_directory):
+        self.method = 'change directory'
+        self.params = {'directory': new_directory}
+        super(CryptolChangeDirectory, self).__init__(connection)
 
-    def process_result(self, result):
-        """Override this method to interpret the answer"""
-        raise NotImplementedError()
+    def process_result(self, res):
+        return res
 
-class ChangeDirectoryResult(CryptolResult):
-    def process_result(self, result):
-        return result
+class CryptolLoadModule(CryptolCommand):
+    def __init__(self, connection, filename):
+        self.method = 'load module'
+        self.params = {'file': filename}
+        super(CryptolLoadModule, self).__init__(connection)
 
-class LoadFileResult(CryptolResult):
-    def process_result(self, result):
-        return result
+    def process_result(self, res):
+        return res
 
-class EvalExprResult(CryptolResult):
-    def process_result(self, result):
-        return result['answer'][0]
+class CryptolQuery(CryptolInteraction):
+    def state(self):
+        return self.init_state
 
-    def __str__(self):
-        return str(self.result())
+    def _result(self):
+        res = self.raw_result()
+        if 'error' in res:
+            msg = res['error']['message']
+            if 'data' in res['error']:
+                msg += " " + str(res['error']['data'])
+            raise CryptolException(msg)
+        elif 'result' in res:
+            return res['result']['answer']
 
-class CallResult(CryptolResult):
-    def process_result(self, result):
-        return from_cryptol_arg(result['answer']['value'])
+    def result(self):
+        return self.process_result(self._result())
 
+class CryptolEvalExpr(CryptolQuery):
+    def __init__(self, connection, expr):
+        self.method = 'evaluate expression'
+        self.params = {'expression': expr}
+        super(CryptolEvalExpr, self).__init__(connection)
 
+    def process_result(self, res):
+        return res
 
+class CryptolCall(CryptolQuery):
+    def __init__(self, connection, fun, args):
+        self.method = 'call'
+        self.params = {'function': fun, 'arguments': args}
+        super(CryptolCall, self).__init__(connection)
 
-class CryptolConnection(object):
-    def __init__(self, port):
-        self.port = port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect(("127.0.0.1", port))
-        self.sock.setblocking(False)
-        self.buf = bytearray(b'')
-        self.replies = {}
+    def process_result(self, res):
+        return from_cryptol_arg(res['value'])
+
+class CryptolNames(CryptolQuery):
+    def __init__(self, connection):
+        self.method = 'visible names'
+        self.params = {}
+        super(CryptolQuery, self).__init__(connection)
+
+    def process_result(self, res):
+        return res
+
+# Must be boxed separately to enable sharing of connections
+class IDSource:
+    def __init__(self):
         self.next_id = 0
 
-        self.most_recent_result = None
+    def get(self):
+        self.next_id += 1
+        return self.next_id
+
+class CryptolConnection(object):
+    def __init__(self, port, parent=None):
+        self.port = port
+
+        if parent is None:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.connect(("127.0.0.1", port))
+            self.sock.setblocking(False)
+            self.buf = bytearray(b'')
+            self.replies = {}
+            self.ids = IDSource()
+            self.most_recent_result = None
+        else:
+            self.sock = parent.sock
+            self.buf = parent.buf
+            self.replies = parent.replies
+            self.ids = parent.ids
+            self.most_recent_result = parent.most_recent_result
 
     def snapshot(self):
-        snap = CryptolConnection(self.port)
-        snap.sock = self.sock
-        snap.buf = self.buf
-        snap.replies = self.replies
-        snap.next_id = self.next_id
-        snap.most_recent_result = self.most_recent_result
+        return CryptolConnection(self.port, parent=self)
 
     def get_id(self):
-        the_id = self.next_id
-        self.next_id += 1
-        return the_id
+        return self.ids.get()
 
     def buffer_replies(self):
         try:
@@ -248,29 +289,60 @@ class CryptolConnection(object):
         if self.most_recent_result is None:
             return []
         else:
-            return self.most_recent_result.result_state()
+            return self.most_recent_result.state()
 
     # Protocol messages
     def change_directory(self, new_directory):
-        request_id = self.send_message('change directory',
-                                       {'state': self.protocol_state(), 'directory': new_directory})
-        self.most_recent_result = ChangeDirectoryResult(self, request_id)
+        self.most_recent_result = CryptolChangeDirectory(self, new_directory)
         return self.most_recent_result
 
     def load_file(self, filename):
-        request_id = self.send_message('load module', {'state': self.protocol_state(), 'file': filename})
-        self.most_recent_result = LoadFileResult(self, request_id)
+        self.most_recent_result = CryptolLoadModule(self, filename)
         return self.most_recent_result
 
     def evaluate_expression(self, expression):
-        request_id = self.send_message('evaluate expression', {'state': self.protocol_state(), 'expression': expression})
-        self.most_recent_result = EvalExprResult(self, request_id)
+        self.most_recent_result = CryptolEvalExpr(self, expression)
         return self.most_recent_result
 
     def call(self, fun, *args):
         encoded_args = [to_cryptol_arg(a) for a in args]
-        request_id = self.send_message('call', {'state': self.protocol_state(),
-                                                'function': fun,
-                                                'arguments': encoded_args})
-        self.most_recent_result = CallResult(self, request_id)
+        self.most_recent_result = CryptolCall(self, fun, encoded_args)
         return self.most_recent_result
+
+    def names(self):
+        self.most_recent_result = CryptolNames(self)
+        return self.most_recent_result
+
+class CryptolFunctionHandle:
+    def __init__(self, connection, name, ty, docs=None):
+        self.connection = connection.snapshot()
+        self.name = name
+        self.ty = ty
+        self.docs = docs
+
+        self.__doc__ = "Cryptol type: " + ty
+        if self.docs is not None:
+            self.__doc__ += "\n" + self.docs
+
+    def __call__(self, *args):
+        return self.connection.call(self.name, *args).result()
+
+
+class CryptolContext:
+    def __init__(self, connection):
+        self.connection = connection.snapshot()
+        self._defined = {}
+        for x in self.connection.names().result():
+            if 'documentation' in x:
+                self._defined[x['name']] = CryptolFunctionHandle(self.connection, x['name'], x['type'], x['documentation'])
+            else:
+                self._defined[x['name']] = CryptolFunctionHandle(self.connection, x['name'], x['type'])
+
+    def __dir__(self):
+        return self._defined.keys()
+
+    def __getattr__(self, name):
+        if name in self._defined:
+            return self._defined[name]
+        else:
+            raise AttributeError()

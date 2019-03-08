@@ -25,7 +25,7 @@ import CryptolServer.Call
 import CryptolServer.ChangeDir
 import CryptolServer.EvalExpr
 import CryptolServer.LoadModule
--- import CryptolServer.Names  -- FIXME
+import CryptolServer.Names
 
 import Argo.HistoryWrapper
 import Argo.CacheTree
@@ -71,5 +71,5 @@ cryptolMethods =
   , ("load module",         loadModule)
   , ("evaluate expression", evalExpression)
   , ("call",                call)
-  -- , ("visible names",       visibleNames) -- FIXME
+  , ("visible names",       visibleNames)
   ]

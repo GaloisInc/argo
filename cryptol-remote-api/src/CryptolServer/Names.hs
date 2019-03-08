@@ -21,8 +21,8 @@ import CryptolServer
 
 import Debug.Trace
 
-visibleNames :: CryptolServerQuery JSON.Value
-visibleNames =
+visibleNames :: Method ServerState
+visibleNames = query $ \() ->
   do me <- view moduleEnv <$> getState
      let (dyDecls,dyNames,dyDisp) = dynamicEnv me
      let (fParams,fDecls,fNames,fDisp) = focusedEnv me

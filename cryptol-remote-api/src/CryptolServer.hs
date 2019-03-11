@@ -217,10 +217,9 @@ validateServerState =
   where
     check lm continue =
       do fp <- fingerprintFile (lmCanonicalPath lm)
-         if fp == Just (lmFingerprint lm) then
-           continue
-         else
-           return False
+         if fp == Just (lmFingerprint lm)
+           then continue
+           else return False
 
 -- | Turn a cryptol command into a query by forgetting the outgoing state.
 cryptolCommandToQuery :: CryptolServerCommand a -> CryptolServerQuery a

@@ -3,8 +3,10 @@
 module Main where
 
 import Data.Aeson as JSON (fromJSON, toJSON, Result(..))
+
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.HashMap.Strict as HM
+import Data.List.NonEmpty(NonEmpty(..))
 
 import Test.QuickCheck.Instances.ByteString
 import Test.QuickCheck.Instances.Scientific
@@ -12,9 +14,11 @@ import Test.QuickCheck.Instances.Text
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
-import JSONRPC
-import Netstrings
+import Argo.JSONRPC
+import Argo.Netstring
 import CryptolServer.Call
+
+import Debug.Trace
 
 main :: IO ()
 main = defaultMain tests
@@ -66,15 +70,25 @@ instance Arbitrary ArgSpec where
                 , pure Unit
                 , Num <$> arbitrary <*> arbitrary <*> arbitrary
                 , Integer <$> arbitrary
+                -- NB: The following case will not generate
+                -- syntactically valid Cryptol. But for testing
+                -- round-tripping of the JSON, and coverage of various
+                -- functions, it's better than nothing.
+                , Concrete <$> arbitrary
                 ]
         | otherwise =
-          choose (0, n) >>=
+          choose (2, n) >>=
           \len ->
             let sub = n `div` len
             in
               oneof [ Record . HM.fromList <$> vectorOf len ((,) <$> arbitrary <*> spec sub)
                     , Sequence <$> vectorOf len (spec sub)
                     , Tuple <$> vectorOf len (spec sub)
+                    -- NB: Will not make valid identifiers, so if we
+                    -- ever insert validation, then this will need to
+                    -- change.
+                    , Let <$> vectorOf len (LetBinding <$> arbitrary <*> spec sub) <*> spec sub
+                    , Application <$> spec sub <*> ((:|) <$> spec sub <*> vectorOf len (spec sub))
                     ]
 
 callMsgProps :: TestTree

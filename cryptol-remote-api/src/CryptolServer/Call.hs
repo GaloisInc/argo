@@ -1,9 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
-module CryptolServer.Call (ArgSpec(..), Encoding(..), call) where
+module CryptolServer.Call (ArgSpec(..), Encoding(..), LetBinding(..), call) where
 
 import Control.Applicative
 import Control.Exception (throwIO)
@@ -17,6 +18,8 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as Base64
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Scientific as Sc
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -34,7 +37,7 @@ import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, getPrimM
 import Cryptol.ModuleSystem.Env (initialModuleEnv, isLoadedParamMod, meSolverConfig)
 import Cryptol.ModuleSystem.Name (NameInfo(Declared), nameInfo)
 import Cryptol.Parser
-import Cryptol.Parser.AST (Expr(..), Type(..), PName(..), Ident(..), Literal(..), Named(..), NumInfo(..))
+import Cryptol.Parser.AST (Bind(..), BindDef(..), Decl(..), Expr(..), Type(..), PName(..), Ident(..), Literal(..), Named(..), NumInfo(..))
 import Cryptol.Parser.Position (Located(..), emptyRange)
 import Cryptol.Parser.Selector
 import Cryptol.Prims.Syntax
@@ -49,7 +52,7 @@ import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import Argo.JSONRPC
 
 import CryptolServer
-
+import CryptolServer.Exceptions
 
 
 call :: CryptolServerQuery JSON.Value
@@ -109,6 +112,8 @@ readBack rid prims ty val =
                       return (identText f, fa)
                  | (f, t) <- tfs
                  ]
+    TC.TCon (TC (TCTuple _)) [] ->
+      pure Unit
     TC.TCon (TC (TCTuple _)) ts ->
       Tuple <$> sequence [ do v <- evalSel val (TupleSel n Nothing)
                               a <- readBack rid prims t v
@@ -165,6 +170,24 @@ instance JSON.FromJSON Encoding where
       "base64" -> pure Base64
       _        -> empty
 
+data LetBinding =
+  LetBinding
+  { argDefName :: !Text
+  , argDefVal  :: !ArgSpec
+  }
+  deriving (Eq, Ord, Show)
+
+instance JSON.FromJSON LetBinding where
+  parseJSON =
+    withObject "let binding" $ \o ->
+      LetBinding <$> o .: "name" <*> o .: "definition"
+
+instance JSON.ToJSON LetBinding where
+  toJSON (LetBinding x def) =
+    object [ "name" .= x
+           , "definition" .= def
+           ]
+
 data ArgSpec =
     Bit !Bool
   | Unit
@@ -173,10 +196,12 @@ data ArgSpec =
   | Sequence ![ArgSpec]
   | Tuple ![ArgSpec]
   | Integer !Integer
-
+  | Concrete !Text
+  | Let ![LetBinding] !ArgSpec
+  | Application !ArgSpec !(NonEmpty ArgSpec)
   deriving (Eq, Ord, Show)
 
-data ArgSpecTag = TagNum | TagRecord | TagSequence | TagTuple | TagUnit
+data ArgSpecTag = TagNum | TagRecord | TagSequence | TagTuple | TagUnit | TagLet | TagApp
 
 instance JSON.FromJSON ArgSpecTag where
   parseJSON =
@@ -187,6 +212,8 @@ instance JSON.FromJSON ArgSpecTag where
       "record"   -> pure TagRecord
       "sequence" -> pure TagSequence
       "tuple"    -> pure TagTuple
+      "let"      -> pure TagLet
+      "call"     -> pure TagApp
       _          -> empty
 
 instance JSON.ToJSON ArgSpecTag where
@@ -195,9 +222,11 @@ instance JSON.ToJSON ArgSpecTag where
   toJSON TagSequence = "sequence"
   toJSON TagTuple    = "tuple"
   toJSON TagUnit     = "unit"
+  toJSON TagLet      = "let"
+  toJSON TagApp      = "call"
 
 instance JSON.FromJSON ArgSpec where
-  parseJSON v = bool v <|> obj v
+  parseJSON v = bool v <|> integer v <|> concrete v <|> obj v
     where
       bool =
         withBool "boolean" $ pure . Bit
@@ -210,6 +239,8 @@ instance JSON.FromJSON ArgSpec where
           case Sc.floatingOrInteger s of
             Left fl -> empty
             Right i -> pure (Integer i)
+      concrete =
+        withText "concrete syntax" $ pure . Concrete
 
       obj =
         withObject "argument" $
@@ -231,6 +262,10 @@ instance JSON.FromJSON ArgSpec where
                   do contents <- o .: "data"
                      flip (withArray "tuple") contents $
                        \s -> Tuple . V.toList <$> traverse parseJSON s
+                TagLet ->
+                  Let <$> o .: "binders" <*> o .: "body"
+                TagApp ->
+                  Application <$> o .: "function" <*> o .: "arguments"
 
 instance ToJSON Encoding where
   toJSON Hex = String "hex"
@@ -240,6 +275,7 @@ instance JSON.ToJSON ArgSpec where
   toJSON Unit = object [ "expression" .= TagUnit ]
   toJSON (Bit b) = JSON.Bool b
   toJSON (Integer i) = JSON.Number (fromInteger i)
+  toJSON (Concrete expr) = toJSON expr
   toJSON (Num enc dat w) =
     object [ "expression" .= TagNum
            , "data" .= String dat
@@ -259,6 +295,16 @@ instance JSON.ToJSON ArgSpec where
   toJSON (Tuple projs) =
     object [ "expression" .= TagTuple
            , "data" .= Array (V.fromList (map toJSON projs))
+           ]
+  toJSON (Let binds body) =
+    object [ "expression" .= TagLet
+           , "binders" .= Array (V.fromList (map toJSON binds))
+           , "body" .= toJSON body
+           ]
+  toJSON (Application fun args) =
+    object [ "expression" .= TagApp
+           , "function" .= fun
+           , "arguments" .= args
            ]
 
 
@@ -303,11 +349,21 @@ hexDigit c   = raise (invalidHex c)
 
 
 getExpr :: ArgSpec -> CryptolServerCommand (Expr PName)
+getExpr Unit =
+  return $
+    ETyped
+      (ETuple [])
+      (TTuple [])
 getExpr (Bit b) =
   return $
     ETyped
       (EVar (UnQual (mkIdent $ if b then "True" else "False")))
       TBit
+getExpr (Integer i) =
+  return $
+    ETyped
+      (ELit (ECNum i DecLit))
+      (TUser (UnQual (mkIdent "Integer")) [])
 getExpr (Num enc txt w) =
   do d <- decode enc txt
      return $ ETyped
@@ -321,7 +377,26 @@ getExpr (Sequence elts) =
   EList <$> traverse getExpr elts
 getExpr (Tuple projs) =
   ETuple <$> traverse getExpr projs
+getExpr (Concrete syntax) =
+  case parseExpr syntax of
+    Left err ->
+      raise (cryptolParseErr syntax err)
+    Right e -> pure e
+getExpr (Let binds body) =
+  EWhere <$> getExpr body <*> traverse mkBind binds
+  where
+    mkBind (LetBinding x rhs) =
+      DBind .
+      (\body -> (Bind (fakeLoc (UnQual (mkIdent x))) [] body Nothing False Nothing [] True Nothing)) .
+      fakeLoc .
+      DExpr <$>
+        getExpr rhs
 
+    fakeLoc = Located emptyRange
+getExpr (Application fun (arg :| [])) =
+  EApp <$> getExpr fun <*> getExpr arg
+getExpr (Application fun (arg1 :| (arg : args))) =
+  getExpr (Application (Application fun (arg1 :| [])) (arg :| args))
 
 invalidBase64 :: ByteString -> String -> CryptolServerException
 invalidBase64 invalidData msg rid =

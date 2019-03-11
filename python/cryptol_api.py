@@ -46,6 +46,24 @@ def fail_with(x):
     "Raise an exception. This is valid in expression positions."
     raise x
 
+class CryptolCode:
+    def __init__(self, code):
+        self._code = code
+
+    def __call__(self, *args):
+        self._code = {'expression': 'call',
+                      'function': self.code,
+                      'arguments': [to_cryptol_arg(x) for x in args]}
+
+    def __mod__(self, arg):
+        self._code = interpolate_literals(self.code, arg)
+
+    def get_code(self):
+        returhn self._code
+
+def cry(code):
+    return CryptolCode(code)
+
 # TODO Make this more Pythonic by testing for method support rather
 # than instances
 def to_cryptol_arg(val):
@@ -67,6 +85,8 @@ def to_cryptol_arg(val):
     elif isinstance(val, list):
         return {'expression': 'sequence',
                 'data': [to_cryptol_arg(v) for v in val]}
+    elif isinstance(val, CryptolCode):
+        return val.code
     elif isinstance(val, bytes) or isinstance(val, bytearray):
         return {'expression': 'bits',
                 'encoding': 'base64',

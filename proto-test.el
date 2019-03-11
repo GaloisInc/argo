@@ -208,7 +208,7 @@ Returns nil when no argument provided."
        (let ((b (completing-read (proto-test--cryptol-get-arg-prompt "Which bit?") '("true" "false"))))
          (pcase b
            ("true" t)
-           ("false" 'json-false)))))
+           ("false" json-false)))))
     ("integer"
      (proto-test--with-arg-context "an integer"
        (let ((input nil))

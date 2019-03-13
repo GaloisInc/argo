@@ -21,30 +21,29 @@ data Cache st cmd = Cache
   , cacheBranches :: !(MVar (HashMap cmd (MVar (Cache st cmd))))
   }
 
-newCache :: MonadIO m => st -> m (Cache st cmd)
+newCache :: st -> IO (Cache st cmd)
 newCache initialState =
-  liftIO $ Cache initialState <$> newMVar HashMap.empty
+  Cache initialState <$> newMVar HashMap.empty
 
 cacheLookup ::
-  (MonadIO m, Eq cmd, Hashable cmd) =>
+  (Eq cmd, Hashable cmd) =>
   (cmd -> st -> IO st)  {- ^ run command -} ->
   (st -> IO Bool)       {- ^ validate    -} ->
   Cache st cmd          {- ^ cache       -} ->
   [cmd]                 {- ^ commands    -} ->
-  m (Cache st cmd)
+  IO (Cache st cmd)
 cacheLookup runStep validate =
   foldM (cacheAdvance runStep validate)
 
 -- | Validation must return true when cached server state is valid.
 cacheAdvance ::
-  (MonadIO m, Eq cmd, Hashable cmd) =>
+  (Eq cmd, Hashable cmd) =>
   (cmd -> st -> IO st) {- ^ run command -} ->
   (st -> IO Bool)      {- ^ validate    -} ->
   Cache st cmd         {- ^ cache       -} ->
   cmd                  {- ^ command     -} ->
-  m (Cache st cmd)
+  IO (Cache st cmd)
 cacheAdvance runStep validate (Cache st var) cmd =
-  liftIO $
   do (found, nextVar) <-
        modifyMVar var $ \hashMap ->
          case HashMap.lookup cmd hashMap of

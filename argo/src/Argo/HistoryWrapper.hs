@@ -70,7 +70,7 @@ wrapMethod commands validate name Query q =
   \params ->
   do (steps, params') <- extractStepsM params
      hs               <- getState
-     cache            <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
+     cache            <- liftIO $ cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
      (_, result)      <- liftIO $ runMethod (q params') (cacheRoot cache)
      return $ Object (HashMap.fromList [("answer", result)])
 
@@ -79,9 +79,9 @@ wrapMethod commands validate name methodType c =
   do (steps, params') <- extractStepsM params
      hs               <- getState
      let cmd           = (name, params')
-     cache            <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
+     cache            <- liftIO $ cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
      (s', result)     <- liftIO $ runMethod (c params') (cacheRoot cache)
-     _                <- cacheAdvance (\_ _ -> return s') (\_ -> return True) cache cmd
+     _                <- liftIO $ cacheAdvance (\_ _ -> return s') (\_ -> return True) cache cmd
      let steps'        = steps ++ [cmd]
      return . injectSteps steps' $
        case methodType of

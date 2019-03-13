@@ -64,39 +64,62 @@ wrapMethod ::
   (Value -> Method (HistoryWrapper s) Value)
 
 wrapMethod commands validate name Query q =
-  \params ->
-  do (steps, params') <- extractStepsM params
-     hs               <- getState
-     cache            <- liftIO $ cacheLookup
-                                    (runHistoryCommand commands)
-                                    validate
-                                    (historyCache hs)
-                                    steps
-     (_, result)      <- liftIO $ runMethod (q params') (cacheRoot cache)
+  withState $ \hs steps params ->
+  do cache            <- cacheLookup
+                           (runHistoryCommand commands)
+                           validate
+                           (historyCache hs)
+                           steps
+     (_, result)      <- runMethod (q params) (cacheRoot cache)
      return $ Object (HashMap.fromList [("answer", result)])
 
 wrapMethod commands validate name methodType c =
-  \params ->
-  do (steps, params') <- extractStepsM params
-     hs               <- getState
-     let cmd           = (name, params')
-     cache            <- liftIO $ cacheLookup
-                                    (runHistoryCommand commands)
-                                    validate
-                                    (historyCache hs)
-                                    steps
-     (s', result)     <- liftIO $ runMethod (c params') (cacheRoot cache)
-     _                <- liftIO $ cacheAdvance
-                                    (\_ _ -> return s')
-                                    (\_ -> return True)
-                                    cache
-                                    cmd
+  withState $ \hs steps params ->
+  do let cmd           = (name, params)
+     cache            <- cacheLookup
+                           (runHistoryCommand commands)
+                           validate
+                           (historyCache hs)
+                           steps
+     (s', result)     <- runMethod (c params) (cacheRoot cache)
+     _                <- cacheAdvance
+                           (\_ _ -> return s')
+                           (\_ -> return True)
+                           cache
+                           cmd
      let steps'        = steps ++ [cmd]
-     return . injectSteps steps' $
-       case methodType of
-         Command -> result
-         Notification -> object []
-         Query -> error "Internal error: impossible pattern match"
+         output        = case methodType of
+                           Command      -> result
+                           Notification -> object []
+                           Query        -> error "Internal error: impossible pattern match"
+     return (injectSteps steps' output)
+
+-- | Captures the common behavior in 'wrapMethod'. Given a continuation
+-- using the history state, list of commands used to reach current state,
+-- and the raw parameters object compute the method that results a result
+-- value which is wrapped with any new steps.
+withState ::
+  (HistoryWrapper s -> [(Text, Value)] -> Value -> IO Value)
+    {- ^ continuation: state, steps, parameters object to result -} ->
+  Value {- ^ raw parameters object -} ->
+  Method (HistoryWrapper s) Value
+withState k params =
+  do hs               <- getState
+     (steps, params') <- extractStepsM params
+     liftIO (k hs steps params')
+
+-- | Extract the state field from a parameter object or raise
+-- a JSONRPC error.
+extractStepsM ::
+  Value                             {- ^ raw parameters object       -} ->
+  Method s ([(Text, Value)], Value) {- ^ steps, remaining parameters -}
+extractStepsM v =
+  case extractSteps v of
+    Just x  -> return x
+    Nothing -> raise (makeJSONRPCException
+                        32000
+                        "Missing state field"
+                        (Nothing :: Maybe ()))
 
 ------------------------------------------------------------------------
 
@@ -106,16 +129,10 @@ stateKey = "state"
 answerKey :: Text
 answerKey = "answer"
 
-extractStepsM :: Monad m => Value -> m ([(Text, Value)], Value)
-extractStepsM v =
-  case extractSteps v of
-    Nothing -> fail "Missing state parameter"
-    Just x -> return x
-
 extractSteps :: Value -> Maybe ([(Text, Value)], Value)
 extractSteps v
-  | Object o <- v
-  , Just history <- HashMap.lookup stateKey o
+  | Object o      <- v
+  , Just history  <- HashMap.lookup stateKey o
   , Success steps <- fromJSON history
   , let v' = Object (HashMap.delete stateKey o) = Just (steps, v')
 extractSteps _ = Nothing

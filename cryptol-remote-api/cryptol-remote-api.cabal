@@ -30,6 +30,8 @@ library
   exposed-modules:     CryptolServer
                        CryptolServer.Call
                        CryptolServer.ChangeDir
+                       CryptolServer.Data.Expression
+                       CryptolServer.Data.Type
                        CryptolServer.EvalExpr
                        CryptolServer.Exceptions
                        CryptolServer.LoadModule

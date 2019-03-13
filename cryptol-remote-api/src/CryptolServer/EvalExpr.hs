@@ -20,7 +20,9 @@ import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 
 import Argo.JSONRPC
 import CryptolServer
+import CryptolServer.Data.Type
 import CryptolServer.Exceptions
+
 
 
 evalExpression :: CryptolServerQuery JSON.Value
@@ -44,7 +46,7 @@ evalExpression =
                     let su = listParamSubst tys
                     let theType = apSubst su (sType schema)
                     res <- runModuleCmd (evalExpr checked)
-                    return (JSON.toJSON (show res, show theType))
+                    return (JSON.toJSON (show res, JSONType mempty theType))
 
 data EvalExprParams =
   EvalExprParams { evalExprExpression :: Text }

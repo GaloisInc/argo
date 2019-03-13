@@ -30,7 +30,7 @@ tests = testGroup "The tests" [ callMsgProps ]
 instance Arbitrary Encoding where
   arbitrary = oneof [pure Hex, pure Base64]
 
-instance Arbitrary ArgSpec where
+instance Arbitrary Expression where
   arbitrary = sized spec
     where
       spec n
@@ -64,7 +64,7 @@ callMsgProps :: TestTree
 callMsgProps =
   testGroup "QuickCheck properties for the \"call\" message"
     [ testProperty "encoding and decoding arg specs is the identity" $
-      \(spec :: ArgSpec) ->
+      \(spec :: Expression) ->
         case fromJSON (toJSON spec) of
           JSON.Success v -> spec == v
           JSON.Error err -> False

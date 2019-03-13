@@ -1,34 +1,62 @@
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GADTSyntax #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
+
 -- | An implementation of the basic primitives of JSON-RPC 2.0.
-module Argo.JSONRPC (
--- * Primary interface to JSON-RPC
-  App
-, mkApp
-, Method(..)
-, JSONRPCException(..)
--- * Serving applications over transports
-, serveStdIO
-, serveHandles
-, serveStdIONS
-, serveHandlesNS
--- *
-, RequestID(..)
-) where
+module Argo.JSONRPC
+  ( -- * Primary interface to JSON-RPC
+    App
+  , mkApp
+  -- * Defining methods
+  , MethodType(..)
+  , Method(..)
+  , runMethod
+  , method
+  -- * Manipulating state in methods
+  , getState
+  , modifyState
+  , setState
+  -- * JSON-RPC exceptions: The spec defines some errors and reserves some error
+  -- codes (from -32768 to -32000) for its own use.
+  , JSONRPCException
+  , makeJSONRPCException
+  , raise
+  , parseError
+  , methodNotFound
+  , invalidRequest
+  , invalidParams
+  , internalError
+  -- * Serving applications over transports
+  , serveStdIO
+  , serveHandles
+  , serveStdIONS
+  , serveHandlesNS
+  -- * Request identifiers
+  , RequestID(..)
+  ) where
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.MVar
-import Control.Exception
+import Control.Monad
+import Control.Monad.Reader
+import Control.Monad.State
+import Control.Exception hiding (TypeError)
 import Control.Lens hiding ((.=))
 import Control.Monad.IO.Class
 import qualified Data.Aeson as JSON
 import Data.Aeson ((.:), (.:!), (.=))
+import Data.Coerce
+import GHC.Exts (Constraint)
+import GHC.TypeLits
 import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
 import Data.Binary.Builder
 import qualified Data.ByteString.Lazy as BS
@@ -42,7 +70,7 @@ import qualified Data.Text as T
 import GHC.Stack
 import Network.Wai (strictRequestBody)
 import System.IO
-import Web.Scotty
+import Web.Scotty hiding (raise, params, get, put)
 
 import Debug.Trace
 
@@ -52,58 +80,102 @@ import Argo.Netstring
 jsonRPCVersion :: Text
 jsonRPCVersion = "2.0"
 
-{-
-A server can receive requests or notifications, and must reply to them.
+-- | A server has /state/, and a collection of (potentially) stateful /methods/,
+-- each of which is a function from the JSON value representing its parameters
+-- to a JSON value representing its response.
+newtype Method state result
+  = Method (StateT state IO result)
+  deriving (Functor, Applicative, Monad, MonadIO)
 
-A server has _state_, which is stored in an MVar to allow easy
-concurrency, a collection of methods, each of which is a function
-from the JSON value that is the parameter to a JSON value that is the
-response.
+runMethod :: Method state result -> state -> IO (state, result)
+runMethod (Method m) s = swap <$> runStateT m s
+  where
+    swap (a, b) = (b, a)
 
-Methods come in three forms:
- - commands, which can modify state and return an answer to the client;
- - queries, which return an answer but do not modify state; and
- - notifications, which can modify state but do not return an answer.
--}
+-- | A 'Method' may be one of three different sorts
+data MethodType
+  = Command  -- ^ can modify state and can reply to the client
+  | Query    -- ^ can /not/ modify state, but can reply to the client
+  | Notification  -- ^ can modify state, but can /not/ reply to the client
+  deriving (Eq, Ord, Show)
 
--- | A server is a mapping from method names to these methods.
-data Method s where
-  -- | A Command can both modify the server's state and send a reply to the user.
-  Command      :: (RequestID -> s -> JSON.Value -> IO (s, JSON.Value)) -> Method s
-  -- | A Query can send a reply to the user, but it has a read-only view of the server's state.
-  Query        :: (RequestID -> s -> JSON.Value -> IO JSON.Value)      -> Method s
-  -- | A Notification can modify the server state, but it cannot reply to the user.
-  Notification :: (             s -> JSON.Value -> IO s)               -> Method s
+-- | Given an arbitrary 'Method', wrap its input and output in JSON
+-- serialization. Note that because the JSON representation of a 'JSON.Value' is
+-- itself, you can manipulate raw JSON inputs/outputs by using 'JSON.Value' as a
+-- parameter or result type. The resultant 'Method' may throw an 'invalidParams'
+-- exception.
+method ::
+  forall params result state.
+  (JSON.FromJSON params, JSON.ToJSON result) =>
+  (params -> Method state result) ->
+  (JSON.Value -> Method state JSON.Value)
+method f p =
+  case JSON.fromJSON @params p of
+    JSON.Error msg ->
+      raise (invalidParams p)
+    JSON.Success params ->
+      JSON.toJSON <$> f params
+
+-- | Get the state of the server
+getState :: Method state state
+getState = Method get
+
+-- | Modify the state of the server with some function
+modifyState :: (state -> state) -> Method state ()
+modifyState f = Method (modify f)
+
+-- | Set the state of the server
+setState :: state -> Method state ()
+setState = Method . put
+
+-- | Raise a 'JSONRPCException' within a 'Method'
+raise :: JSONRPCException -> Method state a
+raise = liftIO . throwIO
+
+--------------------------------------------------------------------------------
 
 -- | An application is a state and a mapping from names to methods.
 data App s =
   App { _appState :: MVar s
-      , _appMethods :: Map Text (Method s)
+      , _appMethods :: Map Text (MethodType, JSON.Value -> Method s JSON.Value)
       }
 
+-- | Focus on the state var in an 'App'
 appState :: Simple Lens (App s) (MVar s)
 appState = lens _appState (\a s -> a { _appState = s })
 
-appMethods :: Simple Lens (App s) (Map Text (Method s))
+-- | Focus on the 'Method's in an 'App'
+appMethods ::
+  Simple Lens (App s) (Map Text (MethodType, JSON.Value -> Method s JSON.Value))
 appMethods = lens _appMethods (\a s -> a { _appMethods = s })
 
--- | Construct an application from an initial state and a mapping from method names to methods.
+-- | Construct an application from an initial state and a mapping from method
+-- names to methods.
 mkApp ::
   s {- ^ the initial state -} ->
-  [(Text, Method s)] {- ^ method names paired with their implementations -} ->
+  [(Text, MethodType, JSON.Value -> Method s JSON.Value)]
+  {- ^ method names paired with their implementations -} ->
   IO (App s)
 mkApp initState methods =
-  App <$> newMVar initState <*> pure (M.fromList methods)
+  App <$> newMVar initState
+      <*> pure (M.fromList [ (k, (v1, v2)) | (k, v1, v2) <- methods])
 
 -- | JSON RPC exceptions should be thrown by method implementations when
 -- they want to return an error.
 data JSONRPCException =
-  JSONRPCException { errorCode :: Integer -- ^ The error code to be returned. From -32768 to -32000 is reserved by the protocol.
-                   , message :: Text      -- ^ A single-sentence summary of the error
-                   , errorData :: Maybe JSON.Value -- ^ More error data that might be useful. @Nothing@ will cause the field to be omitted.
-                   , errorID :: Maybe RequestID -- ^ The request ID, if one is available. @Nothing@ omits it, because JSON-RPC defines a meaning for null.
-                   }
-  deriving Show
+  JSONRPCException
+    { errorCode :: Integer
+      -- ^ The error code to be returned. From -32768 to -32000
+      -- is reserved by the protocol.
+    , message :: Text
+      -- ^ A single-sentence summary of the error
+    , errorData :: Maybe JSON.Value
+      -- ^ More error data that might be useful. @Nothing@ will
+      -- cause the field to be omitted.
+    , errorID :: Maybe RequestID
+      -- ^ The request ID, if one is available. @Nothing@ omits
+      -- it, because JSON-RPC defines a meaning for null.
+    } deriving Show
 
 instance Exception JSONRPCException
 
@@ -121,12 +193,16 @@ instance JSON.ToJSON JSONRPCException where
                        (("data" .=) <$> maybeToList (errorData exn)))
       ]
 
+-- | A method was provided with incorrect parameters (from the JSON-RPC spec)
+invalidParams ::  JSON.Value -> JSONRPCException
+invalidParams params =
+  JSONRPCException { errorCode = -32602
+                   , message = "Invalid params"
+                   , errorData = Just params
+                   , errorID = Nothing
+                   }
 
-{-
-The spec defines some errors and reserves some error codes (from
--32768 to -32000) for its own use.
--}
-
+-- | The input string could not be parsed as JSON (from the JSON-RPC spec)
 parseError :: Text -> JSONRPCException
 parseError msg =
   JSONRPCException { errorCode = -32700
@@ -135,20 +211,43 @@ parseError msg =
                    , errorID   = Nothing
                    }
 
-methodNotFound :: JSON.ToJSON a => Maybe RequestID -> Maybe a -> JSONRPCException
-methodNotFound theID meth =
+-- | The method called does not exist (from the JSON-RPC spec)
+methodNotFound :: Text -> JSONRPCException
+methodNotFound meth =
   JSONRPCException { errorCode = -32601
                    , message   = "Method not found"
-                   , errorData = JSON.toJSON <$> meth
-                   , errorID   = theID
+                   , errorData = Just (JSON.toJSON meth)
+                   , errorID   = Nothing
                    }
+
+-- | The request issued is not valid (from the JSON-RPC spec)
 invalidRequest :: JSONRPCException
 invalidRequest =
   JSONRPCException { errorCode = -32600
-                   , message   = "Invalid Request"
+                   , message   = "Invalid request"
                    , errorData = Nothing
                    , errorID   = Nothing
                    }
+
+-- | Some unspecified bad thing happened in the server (from the JSON-RPC spec)
+internalError :: JSONRPCException
+internalError =
+  JSONRPCException { errorCode = -32603
+                   , message   = "Internal error"
+                   , errorData = Nothing
+                   , errorID   = Nothing
+                   }
+
+-- | Construct a 'JSONRPCException' from an error code, error text, and perhaps
+-- some data item to attach
+makeJSONRPCException :: JSON.ToJSON a => Integer -> Text -> Maybe a -> JSONRPCException
+makeJSONRPCException c m d =
+  JSONRPCException
+    { errorCode = c
+    , message = m
+    , errorData = JSON.toJSON <$> d
+    , errorID = Nothing
+    }
 
 {-
 A JSON-RPC request ID is:
@@ -159,8 +258,14 @@ A JSON-RPC request ID is:
     be Null [1] and Numbers SHOULD NOT contain fractional parts
 -}
 
--- | Request IDs come from clients, and are used to match responses
--- with commands.
+{- | Request IDs come from clients, and are used to match responses
+with commands.
+
+Per the spec, a JSON-RPC request ID is: An identifier established by the Client
+that MUST contain a String, Number, or NULL value if included. If it is not
+included it is assumed to be a notification. The value SHOULD normally not be
+Null [1] and Numbers SHOULD NOT contain fractional parts
+-}
 data RequestID = IDText !Text | IDNum !Scientific | IDNull
   deriving (Eq, Ord, Show)
 
@@ -175,17 +280,16 @@ instance JSON.ToJSON RequestID where
   toJSON (IDNum i)    = JSON.Number i
   toJSON IDNull       = JSON.Null
 
-{-
-Because the presence of null and the absence of the key are distinct,
-we have both a null constructor and wrap it in a Maybe. When the
-request ID is not present, the request is a notification and the field
-is Nothing.
--}
-
 data Request =
   Request { _requestMethod :: !Text
+          -- ^ The method name to invoke
           , _requestID :: !(Maybe RequestID)
+          -- ^ Because the presence of null and the absence of the key are
+          -- distinct, we have both a null constructor and wrap it in a Maybe.
+          -- When the request ID is not present, the request is a notification
+          -- and the field is Nothing.
           , _requestParams :: !JSON.Value
+          -- ^ The parameters to the method, if any exist
           }
   deriving (Show)
 
@@ -228,53 +332,55 @@ instance JSON.ToJSON Request where
 
 handleRequest :: forall s . (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
 handleRequest out app req =
-  let method   = view requestMethod req
-      params   = view requestParams req
-      reqID    = view requestID req
-      theState = view appState app
-  in
-    case M.lookup method $ view appMethods app of
-      Nothing -> throwIO $ methodNotFound reqID (Just method)
-      Just m ->
-        case m of
-          Command impl ->
-            do rid <- requireID reqID
-               answer <- modifyMVar theState $ \s -> impl rid s params
-               let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
-                                          , "id" .= reqID
-                                          , "result" .= answer
-                                          ]
-               out (JSON.encode response)
-          Query impl ->
-            do rid <- requireID reqID
-               answer <- readMVar theState >>= \s -> impl rid s params
-               let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
-                                          , "id" .= reqID
-                                          , "result" .= answer
-                                          ]
-               out (JSON.encode response)
-          Notification impl ->
-            do requireNoID reqID
-               modifyMVar theState $
-                \s -> do s' <- impl s params
-                         return (s', ())
-
+  case M.lookup method $ view appMethods app of
+    Nothing -> throwIO $ methodNotFound method
+    Just (Command, m) ->
+      withRequestID $
+      do answer <- modifyMVar theState $ runMethod (m params)
+         let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
+                                    , "id" .= reqID
+                                    , "result" .= answer
+                                    ]
+         out (JSON.encode response)
+    Just (Query, m) ->
+      withRequestID $
+      do (_, answer) <- runMethod (m params) =<< readMVar theState
+         let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
+                                    , "id" .= reqID
+                                    , "result" .= answer
+                                    ]
+         out (JSON.encode response)
+    Just (Notification, m) ->
+      withoutRequestID $
+      void $ modifyMVar theState $ runMethod (m params)
   where
-    requireID (Just rid) = return rid
-    requireID Nothing  = throwIO invalidRequest
+    method   = view requestMethod req
+    params   = view requestParams req
+    reqID    = view requestID req
+    theState = view appState app
 
-    requireNoID (Just _) = throwIO invalidRequest
-    requireNoID Nothing = return ()
+    withRequestID :: IO a -> IO a
+    withRequestID act =
+      do rid <- requireID
+         catch act $ \e -> throwIO (e { errorID = Just rid })
+
+    withoutRequestID :: IO a -> IO a
+    withoutRequestID act =
+      do requireNoID
+         catch act $ \e -> throwIO (e { errorID = Nothing })
+
+    requireID   = maybe (throwIO invalidRequest) return reqID
+    requireNoID = maybe (return ()) (const (throwIO invalidRequest)) reqID
+
 
 -- | Given an IO action, return an atomic-ified version of that same action,
 -- such that it closes over a lock. This is useful for synchronizing on output
 -- to handles.
 synchronized :: (a -> IO b) -> IO (a -> IO b)
-synchronized action =
+synchronized f =
   do lock <- newMVar ()
-     pure $ \output ->
-       withMVar lock $ \_ ->
-         action output
+     pure $ \a ->
+       withMVar lock $ \_ -> f a
 
 -- | One way to run a server is on stdio, listening for requests on stdin
 -- and replying on stdout. In this system, each request must be on a

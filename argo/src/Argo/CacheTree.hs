@@ -8,6 +8,7 @@ module Argo.CacheTree
 
 import           Control.Concurrent
 import           Control.Monad
+import           Control.Monad.IO.Class
 import           Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
 import           Data.ByteString (ByteString)
@@ -20,24 +21,27 @@ data Cache st cmd = Cache
   , cacheBranches :: !(MVar (HashMap cmd (MVar (Cache st cmd))))
   }
 
+-- | Create a new empty cache
 newCache :: st -> IO (Cache st cmd)
 newCache initialState =
   Cache initialState <$> newMVar HashMap.empty
 
+-- | Run a sequence of commands as in 'cacheAdvance', returning the final cache
 cacheLookup ::
-  Eq cmd =>
-  Hashable cmd =>
+  (Eq cmd, Hashable cmd) =>
   (cmd -> st -> IO st)  {- ^ run command -} ->
   (st -> IO Bool)       {- ^ validate    -} ->
   Cache st cmd          {- ^ cache       -} ->
   [cmd]                 {- ^ commands    -} ->
   IO (Cache st cmd)
-cacheLookup runStep validate = foldM (cacheAdvance runStep validate)
+cacheLookup runStep validate =
+  foldM (cacheAdvance runStep validate)
 
--- | Validation must return true when cached server state is valid.
+-- | Given a way to interpret some command type into a stateful action, and a
+-- validation function to determine if a given state is still clean with regard
+-- to the cache, take a command and interpret it, caching its result
 cacheAdvance ::
-  Eq cmd =>
-  Hashable cmd =>
+  (Eq cmd, Hashable cmd) =>
   (cmd -> st -> IO st) {- ^ run command -} ->
   (st -> IO Bool)      {- ^ validate    -} ->
   Cache st cmd         {- ^ cache       -} ->

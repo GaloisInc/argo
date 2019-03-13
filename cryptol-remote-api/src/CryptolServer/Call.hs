@@ -56,12 +56,9 @@ import CryptolServer.Exceptions
 import CryptolServer.Data.Expression
 import CryptolServer.Data.Type
 
-
-call :: CryptolServerQuery JSON.Value
-call =
-  cryptolCommandToQuery $
-  do CallParams fun rawArgs <- params
-     args <- traverse getExpr rawArgs
+call :: CallParams -> Method ServerState JSON.Value
+call (CallParams fun rawArgs) =
+  do args <- traverse getExpr rawArgs
      let appExpr = mkEApp (EVar (UnQual (mkIdent fun))) args
      (expr, ty, schema) <- runModuleCmd (checkExpr appExpr)
      -- TODO: see Cryptol REPL for how to check whether we
@@ -80,19 +77,15 @@ call =
             let theType = apSubst su (sType schema)
             res <- runModuleCmd (evalExpr checked)
             prims <- runModuleCmd getPrimMap
-            rid <- getRequestID
-            val <- observe $ readBack rid prims theType res
+            val <- observe $ readBack prims theType res
             return (JSON.object [ "value" .= val
                                 , "type string" .= pretty theType
                                 , "type" .= JSONType mempty theType
                                 ])
-
   where
     noDefaults [] = return ()
     noDefaults xs@(_:_) =
-      do rid <- getRequestID
-         raise (unwantedDefaults xs)
-
+      raise (unwantedDefaults xs)
 
     evalAllowed x =
       do me <- view moduleEnv <$> getState
@@ -107,13 +100,13 @@ call =
          unless (Set.null bad) $
            raise (evalInParamMod (Set.toList bad))
 
-readBack :: RequestID -> PrimMap -> TC.Type -> Value -> Eval Expression
-readBack rid prims ty val =
+readBack :: PrimMap -> TC.Type -> Value -> Eval Expression
+readBack prims ty val =
   case TC.tNoUser ty of
     TC.TRec tfs ->
       Record . HM.fromList <$>
         sequence [ do fv <- evalSel val (RecordSel f Nothing)
-                      fa <- readBack rid prims t fv
+                      fa <- readBack prims t fv
                       return (identText f, fa)
                  | (f, t) <- tfs
                  ]
@@ -121,7 +114,7 @@ readBack rid prims ty val =
       pure Unit
     TC.TCon (TC (TCTuple _)) ts ->
       Tuple <$> sequence [ do v <- evalSel val (TupleSel n Nothing)
-                              a <- readBack rid prims t v
+                              a <- readBack prims t v
                               return a
                          | (n, t) <- zip [0..] ts
                          ]
@@ -140,13 +133,13 @@ readBack rid prims ty val =
            return $ Num Hex (T.pack $ showHex v "") w
       | TC.TCon (TC (TCNum k)) [] <- len ->
         Sequence <$> sequence [ do v <- evalSel val (ListSel n Nothing)
-                                   readBack rid prims contents v
+                                   readBack prims contents v
                               | n <- [0 .. fromIntegral k]
                               ]
-    other -> liftIO $ throwIO (invalidType other rid)
+    other -> liftIO $ throwIO (invalidType other)
 
 
-observe :: Eval a -> CryptolServerCommand a
+observe :: Eval a -> Method ServerState a
 observe (Ready x) = pure x
 observe (Thunk f) = liftIO $ f theEvalOpts
 
@@ -163,4 +156,3 @@ instance FromJSON CallParams where
   parseJSON =
     withObject "params for \"call\"" $
     \o -> CallParams <$> o .: "function" <*> o .: "arguments"
-

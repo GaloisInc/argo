@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 module CryptolServer.Names (visibleNames) where
 
@@ -26,13 +27,13 @@ import CryptolServer.Data.Type
 
 import Debug.Trace
 
-visibleNames :: CryptolServerQuery JSON.Value
-visibleNames =
+visibleNames :: JSON.Value -> Method ServerState [NameInfo]
+visibleNames _ =
   do me <- view moduleEnv <$> getState
      let (dyDecls,dyNames,dyDisp) = dynamicEnv me
      let (fParams,fDecls,fNames,fDisp) = focusedEnv me
      let inScope = Map.keys (neExprs $ dyNames `shadowing` fNames)
-     return $ JSON.toJSON (concatMap (getInfo fNames (ifDecls fDecls)) inScope)
+     return $ concatMap (getInfo fNames (ifDecls fDecls)) inScope
 
 getInfo :: NamingEnv -> Map Name IfaceDecl -> PName -> [NameInfo]
 getInfo rnEnv info n' =

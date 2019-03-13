@@ -37,3 +37,4 @@ wiki
 wip
 .ghc.environment.*
 .dir-locals.el
+__pycache__

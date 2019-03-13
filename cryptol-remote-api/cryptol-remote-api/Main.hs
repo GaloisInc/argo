@@ -65,12 +65,11 @@ realMain opts =
        SocketNetstring (Port p) -> serveSocket (Just stdout) "127.0.0.1" p theApp
 
 
-cryptolMethods :: [(Text, Method ServerState)]
+cryptolMethods :: [(Text, MethodType, JSON.Value -> Method ServerState JSON.Value)]
 cryptolMethods =
-  [ ("change directory",    Command $ runCryptolServerCommand cd)
-  , ("load module",         Command $ runCryptolServerCommand loadModule)
-  , ("evaluate expression", Query   $ runCryptolServerQuery evalExpression)
-  , ("call",                Query   $ runCryptolServerQuery call)
-  , ("visible names",       Query   $ runCryptolServerQuery visibleNames)
-
+  [ ("change directory",    Command, method cd)
+  , ("load module",         Command, method loadModule)
+  , ("evaluate expression", Query,   method evalExpression)
+  , ("call",                Query,   method call)
+  , ("visible names",       Query,   method visibleNames)
   ]

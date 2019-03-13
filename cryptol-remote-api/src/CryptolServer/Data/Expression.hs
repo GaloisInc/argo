@@ -27,7 +27,7 @@ import Cryptol.Eval.Value
 import Cryptol.IR.FreeVars (freeVars, FreeVars, tyDeps, valDeps)
 import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, getPrimMap, loadModuleByPath, loadModuleByName, meLoadedModules)
 import Cryptol.ModuleSystem.Env (initialModuleEnv, isLoadedParamMod, meSolverConfig)
-import Cryptol.ModuleSystem.Name (NameInfo(Declared), nameInfo)
+import Cryptol.ModuleSystem.Name (NameInfo(Declared), Name, nameInfo)
 import Cryptol.Parser
 import Cryptol.Parser.AST (Bind(..), BindDef(..), Decl(..), Expr(..), Type(..), PName(..), Ident(..), Literal(..), Named(..), NumInfo(..))
 import Cryptol.Parser.Position (Located(..), emptyRange)
@@ -195,21 +195,20 @@ instance JSON.ToJSON Expression where
            ]
 
 
-decode :: (HasRequestID m, MonadIO m) => Encoding -> Text -> m Integer
+decode :: Encoding -> Text -> Method s Integer
 decode Base64 txt =
   let bytes = encodeUtf8 txt
   in
     case Base64.decode bytes of
       Left err ->
-        do rid <- getRequestID
-           raise (invalidBase64 bytes err)
+        raise (invalidBase64 bytes err)
       Right decoded -> return $ bytesToInt decoded
 decode Hex txt =
   squish <$> traverse hexDigit (T.unpack txt)
   where
     squish = foldl (\acc i -> (acc * 16) + i) 0
 
-hexDigit :: (Num a, HasRequestID m, MonadIO m) => Char -> m a
+hexDigit :: Num a => Char -> Method s a
 hexDigit '0' = pure 0
 hexDigit '1' = pure 1
 hexDigit '2' = pure 2
@@ -235,7 +234,7 @@ hexDigit 'F' = pure 15
 hexDigit c   = raise (invalidHex c)
 
 
-getExpr :: Expression -> CryptolServerCommand (Expr PName)
+getExpr :: Expression -> Method s (Expr PName)
 getExpr Unit =
   return $
     ETyped
@@ -285,48 +284,34 @@ getExpr (Application fun (arg :| [])) =
 getExpr (Application fun (arg1 :| (arg : args))) =
   getExpr (Application (Application fun (arg1 :| [])) (arg :| args))
 
-invalidBase64 :: ByteString -> String -> CryptolServerException
-invalidBase64 invalidData msg rid =
-  JSONRPCException
-    { errorCode = 32
-    , message = T.pack msg
-    , errorData = Just (JSON.toJSON (T.pack (show invalidData)))
-    , errorID = Just rid
-    }
+invalidBase64 :: ByteString -> String -> JSONRPCException
+invalidBase64 invalidData msg =
+  makeJSONRPCException
+    32 (T.pack msg) (Just (JSON.toJSON (T.pack (show invalidData))))
 
-invalidHex :: Char -> CryptolServerException
-invalidHex invalidData rid =
-  JSONRPCException
-    { errorCode = 33
-    , message = "Not a hex digit"
-    , errorData = Just (JSON.toJSON (T.pack (show invalidData)))
-    , errorID = Just rid
-    }
+invalidHex :: Char -> JSONRPCException
+invalidHex invalidData =
+  makeJSONRPCException
+    33 "Not a hex digit"
+    (Just (JSON.toJSON (T.pack (show invalidData))))
 
-invalidType :: TC.Type -> CryptolServerException
-invalidType ty rid =
-  JSONRPCException
-    { errorCode = 34
-    , message = "Can't convert Cryptol data from this type to JSON"
-    , errorData = Just (JSON.toJSON (T.pack (show ty)))
-    , errorID = Just rid
-    }
+invalidType :: TC.Type -> JSONRPCException
+invalidType ty =
+  makeJSONRPCException
+    34 "Can't convert Cryptol data from this type to JSON"
+    (Just (JSON.toJSON (T.pack (show ty))))
 
-unwantedDefaults defs rid =
-  JSONRPCException
-    { errorCode = 35
-    , message = "Execution would have required these defaults"
-    , errorData = Just (JSON.toJSON (T.pack (show defs)))
-    , errorID = Just rid
-    }
+unwantedDefaults :: [(TC.TParam, TC.Type)] -> JSONRPCException
+unwantedDefaults defs =
+  makeJSONRPCException
+    35 "Execution would have required these defaults"
+    (Just (JSON.toJSON (T.pack (show defs))))
 
-evalInParamMod mods rid =
-  JSONRPCException
-    { errorCode = 36
-    , message = "Can't evaluate Cryptol in a parameterized module."
-    , errorData = Just (toJSON (map pretty mods))
-    , errorID = Just rid
-    }
+evalInParamMod :: [Cryptol.ModuleSystem.Name.Name] -> JSONRPCException -- FIXME: this is deliberately wrong to find correct type later
+evalInParamMod mods =
+  makeJSONRPCException
+    36 "Can't evaluate Cryptol in a parameterized module."
+    (Just (toJSON (map pretty mods)))
 
 -- TODO add tests that this is big-endian
 -- | Interpret a ByteString as an Integer

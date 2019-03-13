@@ -6,6 +6,7 @@ import Control.Monad.IO.Class
 import Data.Aeson as JSON
 import qualified Data.Text as T
 import System.Directory
+import Data.Functor
 
 import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, loadModuleByPath, loadModuleByName)
 
@@ -13,11 +14,9 @@ import CryptolServer
 import Argo.JSONRPC
 
 
-loadModule :: Method ServerState
-loadModule =
-  command $ \(LoadModuleParams fn) ->
-    do x <- runModuleCmd (loadModuleByPath fn)
-       return ()
+loadModule :: LoadModuleParams -> Method ServerState ()
+loadModule (LoadModuleParams fn) =
+  void $ runModuleCmd (loadModuleByPath fn)
 
 data LoadModuleParams =
   LoadModuleParams { loadModuleMod :: FilePath }

@@ -11,7 +11,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Lens
 import Data.Text (Text)
-import Data.Aeson (Result(..), Value(..), fromJSON, toJSON)
+import Data.Aeson (Result(..), Value(..), fromJSON, toJSON, object)
 import qualified Data.HashMap.Strict as HashMap
 
 data HistoryWrapper s =
@@ -21,25 +21,29 @@ type HistoryCommand s = s -> Value -> IO s
 
 historyWrapper ::
   (s -> IO Bool)     {- ^ validate      -} ->
-  [(Text, Method s)] {- ^ all methods   -} ->
-  [(Text, Method (HistoryWrapper s))]
+  [(Text, MethodType, Value -> Method s Value)] {- ^ all methods   -} ->
+  [(Text, MethodType, Value -> Method (HistoryWrapper s) Value)]
 historyWrapper validate methods =
-  [(name, wrapMethod commands validate name m) | (name, m) <- methods]
+  [ (name, Query, wrapMethod commands validate name t m)
+  | (name, t, m) <- methods ]
   where
     commands = methodsToCommands methods
 
 -- | Extract the commands from a list of supported methods. These commands
 -- are the ones we'll need to remember because they can update the state.
 methodsToCommands ::
-  [(Text, Method s)]  {- ^ all methods   -} ->
-  [(Text, HistoryCommand s)] {- ^ commands only -}
-methodsToCommands = itoListOf (folded . ifolded <. folding extractCommand)
+  [(Text, MethodType, Value -> Method s Value)]  {- ^ all methods   -} ->
+  [(Text, HistoryCommand s)]                     {- ^ commands only -}
+methodsToCommands methods =
+  [ (name, command)
+  | (name, ty, method) <- methods
+  , Just command <- [extractCommand ty method]
+  ]
 
 -- | Extract the components of methods that affect the server's state.
-extractCommand :: Method s -> Maybe (HistoryCommand s)
-extractCommand (Command      c) = Just $ \s p -> fst <$> runCommand (c p) IDNull s
-extractCommand (Notification n) = Just $ \s p -> fst <$> runNotification (n p) s
-extractCommand (Query        _) = Nothing
+extractCommand :: MethodType -> (Value -> Method s Value) -> Maybe (HistoryCommand s)
+extractCommand Query _ = Nothing
+extractCommand _     m = Just $ \s p -> fst <$> runMethod (m p) s
 
 ------------------------------------------------------------------------
 
@@ -58,37 +62,32 @@ wrapMethod ::
   [(Text, HistoryCommand s)]   {- ^ commands              -} ->
   (s -> IO Bool)               {- ^ validate              -} ->
   Text                         {- ^ method name           -} ->
-  Method s                     {- ^ method implementation -} ->
-  Method (HistoryWrapper s)
+  MethodType                   {- ^ what kind of method is it -} ->
+  (Value -> Method s Value)    {- ^ method implementation -} ->
+  (Value -> Method (HistoryWrapper s) Value)
 
-wrapMethod commands validate name (Command c) =
-  Query $ \params ->
+wrapMethod commands validate name Query q =
+  \params ->
   do (steps, params') <- extractStepsIO params
-     rId              <- getRequestID
+     hs               <- getState
+     cache            <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
+     (_, result)      <- liftIO $ runMethod (q params') (cacheRoot cache)
+     return $ Object (HashMap.fromList [("answer", result)])
+
+wrapMethod commands validate name methodType c =
+  \params ->
+  do (steps, params') <- extractStepsIO params
      hs               <- getState
      let cmd           = (name, params')
      cache            <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
-     (s', result)     <- runCommand (c params') rId (cacheRoot cache)
+     (s', result)     <- liftIO $ runMethod (c params') (cacheRoot cache)
      _                <- cacheAdvance (\_ _ -> return s') (\_ -> return True) cache cmd
      let steps'        = steps ++ [cmd]
-     return (injectSteps steps' result)
-
-wrapMethod commands validate name (Query q) =
-  Query $ \params ->
-  do (steps, params') <- extractStepsIO params
-     rId              <- getRequestID
-     hs               <- getState
-     cache            <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
-     result           <- runQuery (q params') rId (cacheRoot cache)
-     return $ Object (HashMap.fromList [("answer", result)])
-
-wrapMethod commands validate name (Notification notification) =
-  Query $ \params ->
-  do (steps, params') <- extractStepsIO params
-     let steps'        = steps ++ [(name, params')]
-     hs               <- getState
-     _                <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps'
-     return $ Object (HashMap.fromList [("state", toJSON steps')])
+     return . injectSteps steps' $
+       case methodType of
+         Command -> result
+         Notification -> object []
+         Query -> error "Internal error: impossible pattern match"
 
 ------------------------------------------------------------------------
 
@@ -124,8 +123,8 @@ injectSteps steps result =
 runHistoryCommand ::
   [(Text, HistoryCommand s)] {- ^ command handlers -} ->
   (Text, Value)              {- ^ step sequence    -} ->
-  s                          {- ^ starting state   -} ->
-  IO s                       {- ^ sequenced state  -}
+  s                          {- ^ initial state    -} ->
+  IO s                       {- ^ final state      -}
 runHistoryCommand commands (name, params) s =
   case lookup name commands of
     Nothing   -> fail ("Unknown command: " ++ show name)

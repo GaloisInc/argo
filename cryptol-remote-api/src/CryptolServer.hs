@@ -18,26 +18,15 @@ import Cryptol.Utils.PP (pretty)
 
 import Argo.JSONRPC
 
-cantLoadMod :: JSON.Value -> RequestID -> JSONRPCException
-cantLoadMod mod rid =
-  JSONRPCException { errorCode = 3
-                   , message = "Can't load module"
-                   , errorData = Just mod
-                   , errorID = Just rid
-                   }
+cantLoadMod :: JSON.Value -> JSONRPCException
+cantLoadMod mod =
+  makeJSONRPCException 3 "Can't load module" (Just mod)
 
-cryptolError :: JSON.Value -> RequestID -> JSONRPCException
-cryptolError mod rid =
-  JSONRPCException { errorCode = 4
-                   , message = "Cryptol error"
-                   , errorData = Just mod
-                   , errorID = Just rid
-                   }
+cryptolError :: JSON.Value -> JSONRPCException
+cryptolError mod =
+  makeJSONRPCException 4 "Cryptol error" (Just mod)
 
-runModuleCmd ::
-  (MonadIO (m ServerState), IsMethod m, IsStateful m, HasRequestID m) =>
-  ModuleCmd a ->
-  m ServerState a
+runModuleCmd :: ModuleCmd a -> Method ServerState a
 runModuleCmd cmd =
     do s   <- getState
        out <- liftIO $ cmd (theEvalOpts, view moduleEnv s)

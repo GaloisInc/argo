@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -14,23 +15,17 @@ module Argo.JSONRPC
   ( -- * Primary interface to JSON-RPC
     App
   , mkApp
+  , MethodType(..)
   , Method(..)
-  , Command
-  , command
-  , runCommand
-  , Query
-  , query
-  , nullQuery
-  , runQuery
-  , Notification
-  , notification
-  , runNotification
-  , stateless
-  , IsMethod(..)
+  , runMethod
+  , method
+  , getState
+  , modifyState
   , setState
   -- * JSON-RPC exceptions: The spec defines some errors and reserves some error
   -- codes (from -32768 to -32000) for its own use.
-  , JSONRPCException(..)
+  , JSONRPCException
+  , makeJSONRPCException
   , raise
   , parseError
   , methodNotFound
@@ -88,208 +83,78 @@ jsonRPCVersion = "2.0"
 -- | A server has /state/, and a collection of (potentially) stateful /methods/,
 -- each of which is a function from the JSON value representing its parameters
 -- to a JSON value representing its response.
-data Method s where
-  -- | A @Command@ may modify server state and returns a response
-  Command      :: (JSON.Value -> Command      s JSON.Value) -> Method s
-  -- | A @Query@ may not modify server state but does return a response
-  Query        :: (JSON.Value -> Query        s JSON.Value) -> Method s
-  -- | A @Notification@ may modify server state but does not return a response
-  Notification :: (JSON.Value -> Notification s ())         -> Method s
 
--- | A Command can both modify the server's state and send a reply to the user.
-newtype Command s a
-  = C (ReaderT RequestID (StateT s IO) a)
+newtype Method state result
+  = Method (StateT state IO result)
   deriving (Functor, Applicative, Monad, MonadIO)
 
--- | Given a request ID and a starting state, execute a 'Command' and return its
--- result and the new state after it completes.
-runCommand :: MonadIO m => Command s a -> RequestID -> s -> m (s, a)
-runCommand c r s = liftIO $
-  do (a, s') <- coerce c r s
-     pure (s', a)
+runMethod :: Method state result -> state -> IO (state, result)
+runMethod (Method m) s = swap <$> runStateT m s
+  where
+    swap (a, b) = (b, a)
+
+data MethodType
+  = Command
+  | Query
+  | Notification
+  deriving (Eq, Ord, Show)
 
 -- | Construct a 'Method' based on a parameterized 'Command', automatically
 -- wrapping its input and output in JSON serialization. Note that because the
 -- JSON representation of a 'JSON.Value' is itself, you can manipulate raw JSON
 -- inputs/outputs by using 'JSON.Value' as a parameter or result type. The
 -- resultant 'Method' may throw an 'invalidParams' exception.
-command ::
-  forall params result s.
+method ::
+  forall params result state.
   (JSON.FromJSON params, JSON.ToJSON result) =>
-  (params -> Command s result) ->
-  Method s
-command = Command . wrapJSON
-
--- | A Query can send a reply to the user, but it has a read-only view of the
--- server's state.
-newtype Query s a
-  = Q (ReaderT RequestID (ReaderT s IO) a)
-  deriving (Functor, Applicative, Monad, MonadIO)
-
--- | Given a request ID and a starting state, run a 'Query' and return its
--- result.
-runQuery :: MonadIO m => Query s a -> RequestID -> s -> m a
-runQuery q r s = liftIO (coerce q r s)
-
--- | Construct a 'Method' based on a parameterized 'Query', automatically
--- wrapping its input and output in JSON serialization. Note that because the
--- JSON representation of a 'JSON.Value' is itself, you can manipulate raw JSON
--- inputs/outputs by using 'JSON.Value' as a parameter or result type. The
--- resultant 'Method' may throw an 'invalidParams' exception.
-query ::
-  forall params result s.
-  (JSON.FromJSON params, JSON.ToJSON result) =>
-  (params -> Query s result) ->
-  Method s
-query = Query . wrapJSON
-
--- | Some 'Query's don't have any parameters; this is a convenience function to
--- build a 'Method' from such a parameter-less 'Query', automatically wrapping
--- its output in JSON serialization (just like 'query' does).
-nullQuery ::
-  forall result s.
-  (JSON.ToJSON result) =>
-  Query s result ->
-  Method s
-nullQuery q = Query (\_ -> JSON.toJSON <$> q)
-
--- | A Notification can modify the server state, but it cannot reply to the user.
-newtype Notification s a
-  = N (StateT s IO a)
-  deriving (Functor, Applicative, Monad, MonadIO)
-
--- | Given a starting state, run a 'Notification' and return its result and the
--- new state after it completes.
-runNotification :: MonadIO m => Notification s a -> s -> m (s, a)
-runNotification n s = liftIO $
-  do (a, s') <- coerce n s
-     pure (s', a)
-
--- | Construct a 'Method' based on a parameterized 'Notification', automatically
--- deserializing itse input from JSON. Note that because the JSON representation
--- of a 'JSON.Value' is itself, you can take a raw JSON input by using
--- 'JSON.Value' as a parameter type. The resultant 'Method' may throw an
--- 'invalidParams' exception.
-notification ::
-  forall params s.
-  (JSON.FromJSON params) =>
-  (params -> Notification s ()) ->
-  Method s
-notification n =
-  -- This implementation is similar to wrapJSON, but since we don't have a
-  -- RequestID available, we can't quite copy that logic
-  Notification $ \p -> N $ do
-    case JSON.fromJSON @params p of
-      JSON.Error msg ->
-        liftIO $ throwIO (invalidParams p Nothing)
-      JSON.Success params ->
-        do runNotification (n params) =<< get
-           pure ()
-
--- | Transform a stateful 'Command' into a stateless 'Query' by throwing away
--- its state modifications after it completes.
-stateless :: (a -> Command s b) -> (a -> Query s b)
-stateless c p =
-  do r <- getRequestID
-     (_, a) <- runCommand (c p) r =<< getState
-     pure a
-
--- | The three method modalities ('Command', 'Query', and 'Notification') each
--- have overlapping but non-identical capabilities
-class IsMethod m where
-  -- | The IsStateful type family lets us insert a custom type error for
-  -- attempts to modify the state from within a Query
-  type IsStateful m :: Constraint
-  type IsStateful m = ()
-  -- | The HasRequestID type family lets us insert a custom type error for
-  -- attempts to get a request ID when there is none
-  type HasRequestID m :: Constraint
-  type HasRequestID m = ()
-  -- | Get the current request ID (this is a type error in the 'Notification'
-  -- monad)
-  getRequestID :: HasRequestID m => m s RequestID
-  -- | Get the current server state
-  getState     :: m s s
-  -- | Alter the current server state (this is a type error in the 'Query'
-  -- monad)
-  modifyState  :: IsStateful m => (s -> s) -> m s ()
-
--- | Set the current server state (this is a type error in the 'Query' monad)
-setState :: (IsMethod m, IsStateful m) => s -> m s ()
-setState = modifyState . const
-
-instance IsMethod Command where
-  getRequestID  = C ask
-  getState      = C get
-  modifyState f = C (modify f)
-
-instance IsMethod Query where
-  getRequestID  = Q ask
-  getState      = Q (lift (ask @_ @(ReaderT _ IO)))
-  type IsStateful Query =
-    TypeError
-      ('Text "Methods in the ‘Query’ monad may not modify server state" :$$:
-       'Text "Consider using the ‘Command’ or ‘Notification’ monad instead")
-  modifyState = error $
-    "Internal error: runtime attempt to modify server state inside a query " ++
-    "(should be ruled out statically)"
-
-instance IsMethod Notification where
-  type HasRequestID Notification =
-    TypeError
-      ('Text "Methods in the ‘Notification’ monad aren't associated with a request ID" :$$:
-       'Text "Consider using the ‘Command’ or ‘Query’ monad instead")
-  getRequestID  = error $
-    "Internal error: runtime attempt to get request ID inside a notification " ++
-    "(should be ruled out statically)"
-  getState      = N get
-  modifyState f = N (modify f)
-
--- | A helper function to wrap the input and output of some method in JSON
--- (de-)serialization; used to build the 'command' and 'query' functions
-wrapJSON ::
-  forall params result m s.
-  (IsMethod m, HasRequestID m, MonadIO (m s),
-   JSON.FromJSON params, JSON.ToJSON result) =>
-  (params -> m s result) ->
-  (JSON.Value -> m s JSON.Value)
-wrapJSON c p =
+  (params -> Method state result) ->
+  (JSON.Value -> Method state JSON.Value)
+method f p =
   case JSON.fromJSON @params p of
     JSON.Error msg ->
-      raise (invalidParams p . Just)
+      raise (invalidParams p)
     JSON.Success params ->
-      JSON.toJSON @result <$> c params
+      JSON.toJSON <$> f params
+
+getState :: Method state state
+getState = Method get
+
+modifyState :: (state -> state) -> Method state ()
+modifyState f = Method (modify f)
+
+setState :: state -> Method state ()
+setState = Method . put
 
 -- | Raise a 'JSONRPCException', flagging it for the client with the current
 -- request ID, if there is one
-raise ::
-  (IsMethod m, HasRequestID m, MonadIO (m s)) =>
-  (RequestID -> JSONRPCException) ->
-  m s a
-raise e =
-  do rid <- getRequestID
-     liftIO $ throwIO (e rid)
+raise :: JSONRPCException -> Method state a
+raise = liftIO . throwIO
+
+--------------------------------------------------------------------------------
 
 -- | An application is a state and a mapping from names to methods.
 data App s =
   App { _appState :: MVar s
-      , _appMethods :: Map Text (Method s)
+      , _appMethods :: Map Text (MethodType, JSON.Value -> Method s JSON.Value)
       }
 
 appState :: Simple Lens (App s) (MVar s)
 appState = lens _appState (\a s -> a { _appState = s })
 
-appMethods :: Simple Lens (App s) (Map Text (Method s))
+appMethods ::
+  Simple Lens (App s) (Map Text (MethodType, JSON.Value -> Method s JSON.Value))
 appMethods = lens _appMethods (\a s -> a { _appMethods = s })
 
 -- | Construct an application from an initial state and a mapping from method
 -- names to methods.
 mkApp ::
   s {- ^ the initial state -} ->
-  [(Text, Method s)] {- ^ method names paired with their implementations -} ->
+  [(Text, MethodType, JSON.Value -> Method s JSON.Value)]
+  {- ^ method names paired with their implementations -} ->
   IO (App s)
 mkApp initState methods =
-  App <$> newMVar initState <*> pure (M.fromList methods)
+  App <$> newMVar initState
+      <*> pure (M.fromList [ (k, (v1, v2)) | (k, v1, v2) <- methods])
 
 -- | JSON RPC exceptions should be thrown by method implementations when
 -- they want to return an error.
@@ -325,12 +190,12 @@ instance JSON.ToJSON JSONRPCException where
       ]
 
 -- | A method was provided with incorrect parameters (from the JSON-RPC spec)
-invalidParams ::  JSON.Value -> Maybe RequestID -> JSONRPCException
-invalidParams params theID =
+invalidParams ::  JSON.Value -> JSONRPCException
+invalidParams params =
   JSONRPCException { errorCode = -32602
                    , message = "Invalid params"
                    , errorData = Just params
-                   , errorID = theID
+                   , errorID = Nothing
                    }
 
 -- | The input string could not be parsed as JSON (from the JSON-RPC spec)
@@ -343,12 +208,12 @@ parseError msg =
                    }
 
 -- | The method called does not exist (from the JSON-RPC spec)
-methodNotFound :: JSON.ToJSON a => Maybe RequestID -> Maybe a -> JSONRPCException
-methodNotFound theID meth =
+methodNotFound :: Text -> JSONRPCException
+methodNotFound meth =
   JSONRPCException { errorCode = -32601
                    , message   = "Method not found"
-                   , errorData = JSON.toJSON <$> meth
-                   , errorID   = theID
+                   , errorData = Just (JSON.toJSON meth)
+                   , errorID   = Nothing
                    }
 
 -- | The request issued is not valid (from the JSON-RPC spec)
@@ -368,6 +233,17 @@ internalError =
                    , errorData = Nothing
                    , errorID   = Nothing
                    }
+
+makeJSONRPCException ::
+  JSON.ToJSON a =>
+  Integer -> Text -> Maybe a -> JSONRPCException
+makeJSONRPCException c m d =
+  JSONRPCException
+    { errorCode = c
+    , message = m
+    , errorData = JSON.toJSON <$> d
+    , errorID = Nothing
+    }
 
 {-
 A JSON-RPC request ID is:
@@ -452,40 +328,46 @@ instance JSON.ToJSON Request where
 
 handleRequest :: forall s . (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
 handleRequest out app req =
-  let method   = view requestMethod req
-      params   = view requestParams req
-      reqID    = view requestID req
-      theState :: MVar s = view appState app
-  in
-    case M.lookup method $ view appMethods app of
-      Nothing -> throwIO $ methodNotFound reqID (Just method)
-      Just m ->
-        case m of
-          Command impl ->
-            do rid <- requireID reqID
-               answer <- modifyMVar theState (runCommand (impl params) rid)
-               let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
-                                          , "id" .= reqID
-                                          , "result" .= answer
-                                          ]
-               out (JSON.encode response)
-          Query impl ->
-            do rid <- requireID reqID
-               answer <- runQuery (impl params) rid =<< readMVar theState
-               let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
-                                          , "id" .= reqID
-                                          , "result" .= answer
-                                          ]
-               out (JSON.encode response)
-          Notification impl ->
-            do requireNoID reqID
-               modifyMVar theState (runNotification (impl params))
+  case M.lookup method $ view appMethods app of
+    Nothing -> throwIO $ methodNotFound method
+    Just (Command, m) ->
+      withRequestID $
+      do answer <- modifyMVar theState $ runMethod (m params)
+         let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
+                                    , "id" .= reqID
+                                    , "result" .= answer
+                                    ]
+         out (JSON.encode response)
+    Just (Query, m) ->
+      withRequestID $
+      do (_, answer) <- runMethod (m params) =<< readMVar theState
+         let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
+                                    , "id" .= reqID
+                                    , "result" .= answer
+                                    ]
+         out (JSON.encode response)
+    Just (Notification, m) ->
+      withoutRequestID $
+      void $ modifyMVar theState $ runMethod (m params)
   where
-    requireID (Just rid) = return rid
-    requireID Nothing  = throwIO invalidRequest
+    method   = view requestMethod req
+    params   = view requestParams req
+    reqID    = view requestID req
+    theState = view appState app
 
-    requireNoID (Just _) = throwIO invalidRequest
-    requireNoID Nothing = return ()
+    withRequestID :: IO a -> IO a
+    withRequestID act =
+      do rid <- requireID
+         catch act $ \e -> throwIO (e { errorID = Just rid })
+
+    withoutRequestID :: IO a -> IO a
+    withoutRequestID act =
+      do requireNoID
+         catch act $ \e -> throwIO (e { errorID = Nothing })
+
+    requireID   = maybe (throwIO invalidRequest) return reqID
+    requireNoID = maybe (return ()) (const (throwIO invalidRequest)) reqID
+
 
 -- | Given an IO action, return an atomic-ified version of that same action,
 -- such that it closes over a lock. This is useful for synchronizing on output

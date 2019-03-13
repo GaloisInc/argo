@@ -10,8 +10,8 @@ import System.Directory
 import CryptolServer
 import Argo.JSONRPC
 
-cd :: Method ServerState
-cd = command $ \(ChangeDirectoryParams newDir) ->
+cd :: ChangeDirectoryParams -> Method ServerState ()
+cd (ChangeDirectoryParams newDir) =
   do exists <- liftIO $ doesDirectoryExist newDir
      if exists
        then liftIO $ setCurrentDirectory newDir
@@ -25,10 +25,6 @@ instance FromJSON ChangeDirectoryParams where
     withObject "params for \"change directory\"" $
     \o -> ChangeDirectoryParams <$> o .: "directory"
 
-dirNotFound :: FilePath -> RequestID -> JSONRPCException
-dirNotFound dir rid =
-  JSONRPCException { errorCode = 3
-                   , message = "Directory doesn't exist"
-                   , errorData = Just (toJSON dir)
-                   , errorID = Just rid
-                   }
+dirNotFound :: FilePath -> JSONRPCException
+dirNotFound dir =
+  makeJSONRPCException 3 "Directory doesn't exist" (Just (toJSON dir))

@@ -51,9 +51,8 @@ import Argo.JSONRPC
 import CryptolServer
 
 
-call :: Method ServerState
-call =
-  query . stateless $ \(CallParams fun rawArgs) ->
+call :: CallParams -> Method ServerState JSON.Value
+call (CallParams fun rawArgs) =
     do args <- traverse getExpr rawArgs
        let appExpr = mkEApp (EVar (UnQual (mkIdent fun))) args
        (expr, ty, schema) <- runModuleCmd (checkExpr appExpr)
@@ -73,15 +72,13 @@ call =
               let theType = apSubst su (sType schema)
               res <- runModuleCmd (evalExpr checked)
               prims <- runModuleCmd getPrimMap
-              rid <- getRequestID
-              val <- observe $ readBack rid prims theType res
+              val <- observe $ readBack prims theType res
               return (JSON.object ["value" .= val, "type" .= pretty theType])
 
   where
     noDefaults [] = return ()
     noDefaults xs@(_:_) =
-      do rid <- getRequestID
-         raise (unwantedDefaults xs)
+      raise (unwantedDefaults xs)
 
     evalAllowed x =
       do me <- view moduleEnv <$> getState
@@ -96,19 +93,19 @@ call =
          unless (Set.null bad) $
            raise (evalInParamMod (Set.toList bad))
 
-readBack :: RequestID -> PrimMap -> TC.Type -> Value -> Eval ArgSpec
-readBack rid prims ty val =
+readBack :: PrimMap -> TC.Type -> Value -> Eval ArgSpec
+readBack prims ty val =
   case TC.tNoUser ty of
     TC.TRec tfs ->
       Record . HM.fromList <$>
         sequence [ do fv <- evalSel val (RecordSel f Nothing)
-                      fa <- readBack rid prims t fv
+                      fa <- readBack prims t fv
                       return (identText f, fa)
                  | (f, t) <- tfs
                  ]
     TC.TCon (TC (TCTuple _)) ts ->
       Tuple <$> sequence [ do v <- evalSel val (TupleSel n Nothing)
-                              a <- readBack rid prims t v
+                              a <- readBack prims t v
                               return a
                          | (n, t) <- zip [0..] ts
                          ]
@@ -127,13 +124,13 @@ readBack rid prims ty val =
            return $ Num Hex (T.pack $ showHex v "") w
       | TC.TCon (TC (TCNum k)) [] <- len ->
         Sequence <$> sequence [ do v <- evalSel val (ListSel n Nothing)
-                                   readBack rid prims contents v
+                                   readBack prims contents v
                               | n <- [0 .. fromIntegral k]
                               ]
-    other -> liftIO $ throwIO (invalidType other rid)
+    other -> liftIO $ throwIO (invalidType other)
 
 
-observe :: Eval a -> Command ServerState a
+observe :: Eval a -> Method ServerState a
 observe (Ready x) = pure x
 observe (Thunk f) = liftIO $ f theEvalOpts
 
@@ -259,28 +256,20 @@ instance JSON.ToJSON ArgSpec where
            ]
 
 
-decode ::
-  (HasRequestID m, MonadIO (m ServerState), IsMethod m) =>
-  Encoding ->
-  Text ->
-  m ServerState Integer
+decode :: Encoding -> Text -> Method s Integer
 decode Base64 txt =
   let bytes = encodeUtf8 txt
   in
     case Base64.decode bytes of
       Left err ->
-        do rid <- getRequestID
-           raise (invalidBase64 bytes err)
+        raise (invalidBase64 bytes err)
       Right decoded -> return $ bytesToInt decoded
 decode Hex txt =
   squish <$> traverse hexDigit (T.unpack txt)
   where
     squish = foldl (\acc i -> (acc * 16) + i) 0
 
-hexDigit
-  :: (Num a, HasRequestID m, IsMethod m, MonadIO (m ServerState)) =>
-  Char ->
-  m ServerState a
+hexDigit :: Char -> Method s Integer
 hexDigit '0' = pure 0
 hexDigit '1' = pure 1
 hexDigit '2' = pure 2
@@ -306,7 +295,7 @@ hexDigit 'F' = pure 15
 hexDigit c   = raise (invalidHex c)
 
 
-getExpr :: ArgSpec -> Command ServerState (Expr PName)
+getExpr :: ArgSpec -> Method ServerState (Expr PName)
 getExpr (Bit b) =
   return $
     ETyped
@@ -327,48 +316,23 @@ getExpr (Tuple projs) =
   ETuple <$> traverse getExpr projs
 
 
-invalidBase64 :: ByteString -> String -> RequestID -> JSONRPCException
-invalidBase64 invalidData msg rid =
-  JSONRPCException
-    { errorCode = 32
-    , message = T.pack msg
-    , errorData = Just (JSON.toJSON (T.pack (show invalidData)))
-    , errorID = Just rid
-    }
+invalidBase64 :: ByteString -> String -> JSONRPCException
+invalidBase64 invalidData msg =
+  makeJSONRPCException 32 (T.pack msg) (Just (JSON.toJSON (T.pack (show invalidData))))
 
-invalidHex :: Char -> RequestID -> JSONRPCException
-invalidHex invalidData rid =
-  JSONRPCException
-    { errorCode = 33
-    , message = "Not a hex digit"
-    , errorData = Just (JSON.toJSON (T.pack (show invalidData)))
-    , errorID = Just rid
-    }
+invalidHex :: Char -> JSONRPCException
+invalidHex invalidData =
+  makeJSONRPCException 33 ("Not a hex digit") (Just (JSON.toJSON (T.pack (show invalidData))))
 
-invalidType :: TC.Type -> RequestID -> JSONRPCException
-invalidType ty rid =
-  JSONRPCException
-    { errorCode = 34
-    , message = "Can't convert Cryptol data from this type to JSON"
-    , errorData = Just (JSON.toJSON (T.pack (show ty)))
-    , errorID = Just rid
-    }
+invalidType :: TC.Type -> JSONRPCException
+invalidType ty =
+  makeJSONRPCException 34 ("Can't convert Cryptol data from this type to JSON") (Just (JSON.toJSON (T.pack (show ty))))
 
-unwantedDefaults defs rid =
-  JSONRPCException
-    { errorCode = 35
-    , message = "Execution would have required these defaults"
-    , errorData = Just (JSON.toJSON (T.pack (show defs)))
-    , errorID = Just rid
-    }
+unwantedDefaults defs =
+  makeJSONRPCException 35 ("Execution would have required these defaults") (Just (JSON.toJSON (T.pack (show defs))))
 
-evalInParamMod mods rid =
-  JSONRPCException
-    { errorCode = 36
-    , message = "Can't evaluate Cryptol in a parameterized module."
-    , errorData = Just (toJSON (map pretty mods))
-    , errorID = Just rid
-    }
+evalInParamMod mods =
+  makeJSONRPCException 36 ("Can't evaluate Cryptol in a parameterized module.") (Just (toJSON (map pretty mods)))
 
 -- TODO add tests that this is big-endian
 -- | Interpret a ByteString as an Integer

@@ -21,9 +21,8 @@ import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import CryptolServer
 import Argo.JSONRPC
 
-evalExpression :: Method ServerState
-evalExpression =
-  query . stateless $ \(EvalExprParams str) ->
+evalExpression :: EvalExprParams -> Method ServerState JSON.Value
+evalExpression (EvalExprParams str) =
     case parseExpr str of
       Left err -> raise (cryptolParseErr str err)
       Right e ->
@@ -56,11 +55,7 @@ cryptolParseErr ::
   (ToJSON expr, Show err) =>
   expr {- ^ the input that couldn't be parsed -} ->
   err {- ^ the parse error from Cryptol -} ->
-  RequestID ->
   JSONRPCException
-cryptolParseErr expr err rid =
-  JSONRPCException { errorCode = 4
-                   , message = "There was a Cryptol parse error."
-                   , errorData = Just $ JSON.object ["input" .= expr, "error" .= show err]
-                   , errorID = Just rid
-                   }
+cryptolParseErr expr err =
+  makeJSONRPCException
+    4 "There was a Cryptol parse error." (Just $ JSON.object ["input" .= expr, "error" .= show err])

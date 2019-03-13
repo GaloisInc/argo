@@ -5,3 +5,31 @@ packages:
 
 optional-packages:
   deps/cryptol/
+  deps/saw-script
+  deps/abcBridge/
+  deps/aig/
+  deps/crucible/crucible/
+  deps/crucible/crucible-saw/
+  deps/crucible/crucible-llvm/
+  deps/crucible/crucible-jvm/
+  deps/crucible/crux/
+  deps/crucible/what4/
+  deps/cryptol-verifier/
+  deps/jvm-parser/
+  deps/jvm-verifier/
+  deps/llvm-pretty/
+  deps/llvm-pretty-bc-parser/
+  deps/llvm-verifier/
+  deps/parameterized-utils/
+  deps/saw-core-aig/
+  deps/saw-core-sbv/
+  deps/saw-core/
+  deps/flexdis86/
+  deps/flexdis86/binary-symbols
+  deps/macaw/base/
+  deps/macaw/symbolic/
+  deps/macaw/x86/
+  deps/macaw/x86_symbolic/
+  deps/elf-edit/
+  deps/dwarf/
+  deps/saw-core-what4 

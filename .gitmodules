@@ -1,3 +1,63 @@
 [submodule "deps/cryptol"]
 	path = deps/cryptol
 	url = git@github.com:GaloisInc/cryptol.git
+[submodule "deps/saw-script"]
+	path = deps/saw-script
+	url = https://github.com/GaloisInc/saw-script.git
+[submodule "deps/abcBridge"]
+	path = deps/abcBridge
+	url = https://github.com/GaloisInc/abcBridge.git
+[submodule "deps/aig"]
+	path = deps/aig
+	url = https://github.com/GaloisInc/aig.git
+[submodule "deps/crucible"]
+	path = deps/crucible
+	url = https://github.com/GaloisInc/crucible.git
+[submodule "deps/cryptol-verifier"]
+	path = deps/cryptol-verifier
+	url = https://github.com/GaloisInc/cryptol-verifier.git
+[submodule "deps/jvm-parser"]
+	path = deps/jvm-parser
+	url = https://github.com/GaloisInc/jvm-parser.git
+[submodule "deps/jvm-verifier"]
+	path = deps/jvm-verifier
+	url = https://github.com/GaloisInc/jvm-verifier.git
+[submodule "deps/llvm-pretty"]
+	path = deps/llvm-pretty
+	url = https://github.com/elliottt/llvm-pretty.git
+[submodule "deps/llvm-pretty-bc-parser"]
+	path = deps/llvm-pretty-bc-parser
+	url = https://github.com/GaloisInc/llvm-pretty-bc-parser.git
+[submodule "deps/llvm-verifier"]
+	path = deps/llvm-verifier
+	url = https://github.com/GaloisInc/llvm-verifier.git
+[submodule "deps/parameterized-utils"]
+	path = deps/parameterized-utils
+	url = https://github.com/GaloisInc/parameterized-utils.git
+[submodule "deps/saw-core-aig"]
+	path = deps/saw-core-aig
+	url = https://github.com/GaloisInc/saw-core-aig.git
+[submodule "deps/saw-core-sbv"]
+	path = deps/saw-core-sbv
+	url = https://github.com/GaloisInc/saw-core-sbv.git
+[submodule "deps/saw-core"]
+	path = deps/saw-core
+	url = https://github.com/GaloisInc/saw-core.git
+[submodule "deps/flexdis86"]
+	path = deps/flexdis86
+	url = https://github.com/GaloisInc/flexdis86.git
+[submodule "deps/macaw"]
+	path = deps/macaw
+	url = https://github.com/GaloisInc/macaw.git
+[submodule "deps/elf-edit"]
+	path = deps/elf-edit
+	url = https://github.com/GaloisInc/elf-edit.git
+[submodule "deps/dwarf"]
+	path = deps/dwarf
+	url = https://github.com/GaloisInc/dwarf.git
+[submodule "deps/saw-core-what4"]
+	path = deps/saw-core-what4
+	url = https://github.com/GaloisInc/saw-core-what4.git
+[submodule "deps/cryptol-specs"]
+	path = deps/cryptol-specs
+	url = https://github.com/galoisinc/cryptol-specs

@@ -15,10 +15,12 @@ module Argo.JSONRPC
   ( -- * Primary interface to JSON-RPC
     App
   , mkApp
+  -- * Defining methods
   , MethodType(..)
   , Method(..)
   , runMethod
   , method
+  -- * Manipulating state in methods
   , getState
   , modifyState
   , setState
@@ -37,7 +39,7 @@ module Argo.JSONRPC
   , serveHandles
   , serveStdIONS
   , serveHandlesNS
-  -- *
+  -- * Request identifiers
   , RequestID(..)
   ) where
 
@@ -78,12 +80,9 @@ import Argo.Netstring
 jsonRPCVersion :: Text
 jsonRPCVersion = "2.0"
 
--- TODO: use parametricity to prevent mucking around with RequestIDs?
-
 -- | A server has /state/, and a collection of (potentially) stateful /methods/,
 -- each of which is a function from the JSON value representing its parameters
 -- to a JSON value representing its response.
-
 newtype Method state result
   = Method (StateT state IO result)
   deriving (Functor, Applicative, Monad, MonadIO)
@@ -93,17 +92,18 @@ runMethod (Method m) s = swap <$> runStateT m s
   where
     swap (a, b) = (b, a)
 
+-- | A 'Method' may be one of three different sorts
 data MethodType
-  = Command
-  | Query
-  | Notification
+  = Command  -- ^ can modify state and can reply to the client
+  | Query    -- ^ can /not/ modify state, but can reply to the client
+  | Notification  -- ^ can modify state, but can /not/ reply to the client
   deriving (Eq, Ord, Show)
 
--- | Construct a 'Method' based on a parameterized 'Command', automatically
--- wrapping its input and output in JSON serialization. Note that because the
--- JSON representation of a 'JSON.Value' is itself, you can manipulate raw JSON
--- inputs/outputs by using 'JSON.Value' as a parameter or result type. The
--- resultant 'Method' may throw an 'invalidParams' exception.
+-- | Given an arbitrary 'Method', wrap its input and output in JSON
+-- serialization. Note that because the JSON representation of a 'JSON.Value' is
+-- itself, you can manipulate raw JSON inputs/outputs by using 'JSON.Value' as a
+-- parameter or result type. The resultant 'Method' may throw an 'invalidParams'
+-- exception.
 method ::
   forall params result state.
   (JSON.FromJSON params, JSON.ToJSON result) =>
@@ -116,17 +116,19 @@ method f p =
     JSON.Success params ->
       JSON.toJSON <$> f params
 
+-- | Get the state of the server
 getState :: Method state state
 getState = Method get
 
+-- | Modify the state of the server with some function
 modifyState :: (state -> state) -> Method state ()
 modifyState f = Method (modify f)
 
+-- | Set the state of the server
 setState :: state -> Method state ()
 setState = Method . put
 
--- | Raise a 'JSONRPCException', flagging it for the client with the current
--- request ID, if there is one
+-- | Raise a 'JSONRPCException' within a 'Method'
 raise :: JSONRPCException -> Method state a
 raise = liftIO . throwIO
 
@@ -138,9 +140,11 @@ data App s =
       , _appMethods :: Map Text (MethodType, JSON.Value -> Method s JSON.Value)
       }
 
+-- | Focus on the state var in an 'App'
 appState :: Simple Lens (App s) (MVar s)
 appState = lens _appState (\a s -> a { _appState = s })
 
+-- | Focus on the 'Method's in an 'App'
 appMethods ::
   Simple Lens (App s) (Map Text (MethodType, JSON.Value -> Method s JSON.Value))
 appMethods = lens _appMethods (\a s -> a { _appMethods = s })
@@ -234,9 +238,9 @@ internalError =
                    , errorID   = Nothing
                    }
 
-makeJSONRPCException ::
-  JSON.ToJSON a =>
-  Integer -> Text -> Maybe a -> JSONRPCException
+-- | Construct a 'JSONRPCException' from an error code, error text, and perhaps
+-- some data item to attach
+makeJSONRPCException :: JSON.ToJSON a => Integer -> Text -> Maybe a -> JSONRPCException
 makeJSONRPCException c m d =
   JSONRPCException
     { errorCode = c

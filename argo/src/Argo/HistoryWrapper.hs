@@ -14,8 +14,8 @@ import Data.Text (Text)
 import Data.Aeson (Result(..), Value(..), fromJSON, toJSON, object)
 import qualified Data.HashMap.Strict as HashMap
 
-data HistoryWrapper s =
-  HistoryWrapper { historyCache :: Cache s (Text, Value) }
+data HistoryWrapper s
+  = HistoryWrapper { historyCache :: Cache s (Text, Value) }
 
 type HistoryCommand s = s -> Value -> IO s
 
@@ -68,7 +68,7 @@ wrapMethod ::
 
 wrapMethod commands validate name Query q =
   \params ->
-  do (steps, params') <- extractStepsIO params
+  do (steps, params') <- extractStepsM params
      hs               <- getState
      cache            <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
      (_, result)      <- liftIO $ runMethod (q params') (cacheRoot cache)
@@ -76,7 +76,7 @@ wrapMethod commands validate name Query q =
 
 wrapMethod commands validate name methodType c =
   \params ->
-  do (steps, params') <- extractStepsIO params
+  do (steps, params') <- extractStepsM params
      hs               <- getState
      let cmd           = (name, params')
      cache            <- cacheLookup (runHistoryCommand commands) validate (historyCache hs) steps
@@ -97,8 +97,8 @@ stateKey = "state"
 answerKey :: Text
 answerKey = "answer"
 
-extractStepsIO :: MonadIO m => Value -> m ([(Text, Value)], Value)
-extractStepsIO v =
+extractStepsM :: Monad m => Value -> m ([(Text, Value)], Value)
+extractStepsM v =
   case extractSteps v of
     Nothing -> fail "Missing state parameter"
     Just x -> return x

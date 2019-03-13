@@ -14,8 +14,8 @@ import Data.Text (Text)
 import Data.Aeson (Result(..), Value(..), fromJSON, toJSON, object)
 import qualified Data.HashMap.Strict as HashMap
 
-data HistoryWrapper s
-  = HistoryWrapper { historyCache :: Cache s (Text, Value) }
+data HistoryWrapper s = HistoryWrapper
+  { historyCache :: Cache s (Text, Value) }
 
 type HistoryCommand s = s -> Value -> IO s
 

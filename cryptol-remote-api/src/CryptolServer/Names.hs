@@ -8,17 +8,22 @@ import Data.Aeson ((.:), (.=))
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Text (Text)
+import qualified Data.Text as T
 
 import Cryptol.Parser.Name (PName(..))
+import Cryptol.Parser.Selector (ppSelector)
 import Cryptol.ModuleSystem.Env (dynamicEnv, focusedEnv)
 import Cryptol.ModuleSystem.Interface (IfaceDecl(..), IfaceDecls(..))
 import Cryptol.ModuleSystem.Name (Name)
 import Cryptol.ModuleSystem.NamingEnv (NamingEnv(..), lookupValNames, shadowing)
+import Cryptol.TypeCheck.PP (NameMap, emptyNameMap, ppWithNames)
+import Cryptol.TypeCheck.Type (Kind(..), PC(..), TC(..), TCon(..), TFun(..), TParam(..), Type(..), Schema(..), addTNames, kindOf)
 import Cryptol.Utils.PP (pp)
 
 import Argo.JSONRPC
 
 import CryptolServer
+import CryptolServer.Data.Type
 
 import Debug.Trace
 
@@ -37,7 +42,7 @@ getInfo rnEnv info n' =
        Just i ->
          let ty = ifDeclSig i
              docs = ifDeclDoc i
-         in NameInfo (show (pp n')) (show (pp ty)) docs
+         in NameInfo (show (pp n')) (show (pp ty)) ty docs
   | n <- lookupValNames n' rnEnv
   ]
 
@@ -45,10 +50,17 @@ data NameInfo =
   NameInfo
   { name :: String
   , typeSig :: String
+  , schema :: Schema
   , docs :: Maybe String
   }
 
 instance JSON.ToJSON NameInfo where
-  toJSON (NameInfo x ty doc) =
-    JSON.object $ ["name" .= x, "type" .= ty] ++
-                  maybe [] (\d -> ["documentation" .= d]) doc
+  toJSON (NameInfo x tyS ty doc) =
+    JSON.object $
+    [ "name" .= x
+    , "type string" .= tyS
+    , "type" .= JSON.toJSON (JSONSchema ty)
+    ] ++
+    maybe [] (\d -> ["documentation" .= d]) doc
+
+

@@ -191,7 +191,13 @@ errors."
 Returns nil when no argument provided."
   (interactive)
   (pcase (completing-read (proto-test--cryptol-get-arg-prompt "What kind of argument? ")
-                          '("bitvector" "unit" "single bit" "integer" "record" "sequence" "tuple"))
+                          '("literal code" "bitvector" "unit" "single bit"
+                            "integer" "record" "sequence" "tuple"
+                            "local let" "function application"))
+    ("literal code"
+     (proto-test--with-arg-context "literal code"
+       (read-string (proto-test--cryptol-get-arg-prompt "Cryptol code: "))))
+
     ("bitvector"
      (proto-test--with-arg-context "a bitvector"
        (let* ((encoding (completing-read (proto-test--cryptol-get-arg-prompt "Which encoding? ")
@@ -202,13 +208,13 @@ Returns nil when no argument provided."
                           (:encoding encoding)
                           (:width width)
                           (:data the-data)))))
-    ("unit" (list :expression "unit"))
+    ("unit" (proto-test-hash (:expression "unit")))
     ("single bit"
      (proto-test--with-arg-context "a single bit"
        (let ((b (completing-read (proto-test--cryptol-get-arg-prompt "Which bit?") '("true" "false"))))
          (pcase b
            ("true" t)
-           ("false" 'json-false)))))
+           ("false" json-false)))))
     ("integer"
      (proto-test--with-arg-context "an integer"
        (let ((input nil))
@@ -250,7 +256,42 @@ Returns nil when no argument provided."
                           (:data (cl-loop for i from 0 to size
                                           collecting (proto-test--with-arg-context (format ".%s" i)
                                                        (proto-test-cryptol-get-arg))))))))
+    ("local let"
+     (proto-test--with-arg-context "let"
+       (proto-test-hash (:expression "let")
+                        (:binders (proto-test--with-arg-context "binders"
+                                    (proto-test--get-binders)))
+                        (:body (proto-test--with-arg-context "body"
+                                 (proto-test-cryptol-get-arg))))))
+    ("function application"
+     (let ((rator (proto-test--with-arg-context "function"
+                    (proto-test-cryptol-get-arg)))
+           (rands (proto-test--with-arg-context "arguments"
+                    (proto-test-cryptol-get-args))))
+       (proto-test-hash (:expression "call")
+                        (:function rator)
+                        (:arguments rands))))
     (_ nil)))
+
+(defun proto-test--get-binders ()
+  "Get a series of binder objects for the let message."
+  (let ((binders '())
+        (go t))
+    (while go
+      (let ((one-binder (proto-test--get-binder)))
+        (message "got %s" one-binder)
+        (if one-binder
+            (push one-binder binders)
+          (setq go nil))))
+    (reverse binders)))
+
+(defun proto-test--get-binder ()
+  "Read one name-val let binder."
+  (let ((x (read-string (proto-test--cryptol-get-arg-prompt "Name (empty when done): "))))
+    (if (string-blank-p x)
+        nil
+      (let ((val (proto-test--with-arg-context (concat x "=") (proto-test-cryptol-get-arg))))
+        (proto-test-hash (:name x) (:definition val))))))
 
 (defun proto-test-quit ()
   "Quit the test process."

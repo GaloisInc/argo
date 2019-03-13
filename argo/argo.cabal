@@ -8,7 +8,7 @@ maintainer:    dtc@galois.com
 category:      Network
 extra-source-files: CHANGELOG.md
 
-library
+common deps
   build-depends:
     base                        >= 4.11.1.0 && < 4.13,
     aeson                       ^>= 1.4.2,
@@ -26,6 +26,9 @@ library
     unordered-containers        ^>= 0.2,
     wai                         ^>= 3.2.2,
 
+
+library
+  import: deps
   exposed-modules:
     Argo.CacheTree
     Argo.HistoryWrapper
@@ -35,3 +38,14 @@ library
 
   hs-source-dirs: src
   default-language: Haskell2010
+
+
+test-suite test-argo
+  import:              deps
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Test.hs
+  build-depends:       argo,
+                       quickcheck-instances,
+                       tasty,
+                       tasty-quickcheck,

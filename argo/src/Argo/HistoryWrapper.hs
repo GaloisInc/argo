@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# Language OverloadedStrings #-}
 module Argo.HistoryWrapper
   ( HistoryWrapper(..)
@@ -35,10 +36,7 @@ methodsToCommands ::
   [(Text, MethodType, Value -> Method s Value)]  {- ^ all methods   -} ->
   [(Text, s -> Value -> IO s)]                   {- ^ don't include 'Query' -}
 methodsToCommands methods =
-  [ (name, command)
-  | (name, ty, method) <- methods
-  , Just command <- [extractCommand ty method]
-  ]
+  [ (name, command) | (name, ty, extractCommand ty -> Just command) <- methods ]
 
 -- | Extract the components of methods that affect the server's state.
 extractCommand ::

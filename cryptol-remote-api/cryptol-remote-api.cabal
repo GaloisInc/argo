@@ -36,6 +36,7 @@ library
                        CryptolServer.Exceptions
                        CryptolServer.LoadModule
                        CryptolServer.Names
+                       CryptolServer.TypeCheck
   hs-source-dirs:      src
 
 executable cryptol-remote-api

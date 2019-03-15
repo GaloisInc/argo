@@ -61,9 +61,6 @@ call (CallParams fun rawArgs) =
   do args <- traverse getExpr rawArgs
      let appExpr = mkEApp (EVar (UnQual (mkIdent fun))) args
      (expr, ty, schema) <- runModuleCmd (checkExpr appExpr)
-     -- TODO: see Cryptol REPL for how to check whether we
-     -- can actually evaluate things, which we can't do in
-     -- a parameterized module
      evalAllowed ty
      evalAllowed schema
      me <- view moduleEnv <$> getState
@@ -100,51 +97,6 @@ call (CallParams fun rawArgs) =
          unless (Set.null bad) $
            raise (evalInParamMod (Set.toList bad))
 
-readBack :: PrimMap -> TC.Type -> Value -> Eval Expression
-readBack prims ty val =
-  case TC.tNoUser ty of
-    TC.TRec tfs ->
-      Record . HM.fromList <$>
-        sequence [ do fv <- evalSel val (RecordSel f Nothing)
-                      fa <- readBack prims t fv
-                      return (identText f, fa)
-                 | (f, t) <- tfs
-                 ]
-    TC.TCon (TC (TCTuple _)) [] ->
-      pure Unit
-    TC.TCon (TC (TCTuple _)) ts ->
-      Tuple <$> sequence [ do v <- evalSel val (TupleSel n Nothing)
-                              a <- readBack prims t v
-                              return a
-                         | (n, t) <- zip [0..] ts
-                         ]
-    TC.TCon (TC TCBit) [] ->
-      case val of
-        VBit b -> pure (Bit b)
-    TC.TCon (TC TCInteger) [] ->
-      case val of
-        VInteger i -> pure (Integer i)
-    TC.TCon (TC TCSeq) [TC.tNoUser -> len, TC.tNoUser -> contents]
-      | len == TC.tZero ->
-        return Unit
-      | contents == TC.TCon (TC TCBit) []
-      , VWord _ wv <- val ->
-        do BV w v <- wv >>= asWordVal
-           return $ Num Hex (T.pack $ showHex v "") w
-      | TC.TCon (TC (TCNum k)) [] <- len ->
-        Sequence <$> sequence [ do v <- evalSel val (ListSel n Nothing)
-                                   readBack prims contents v
-                              | n <- [0 .. fromIntegral k]
-                              ]
-    other -> liftIO $ throwIO (invalidType other)
-
-
-observe :: Eval a -> Method ServerState a
-observe (Ready x) = pure x
-observe (Thunk f) = liftIO $ f theEvalOpts
-
-mkEApp :: Expr PName -> [Expr PName] -> Expr PName
-mkEApp f args = foldl EApp f args
 
 data CallParams =
   CallParams

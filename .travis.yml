@@ -1,9 +1,3 @@
-# Handle git submodules yourself
-# from https://stackoverflow.com/a/24600210/568988
-git:
-  # We do submodules manually, to auto-convert ssh to https
-  submodules: false
-
 # Adapted from Stack's "complex configuration" .travis.yml file:
 # https://docs.haskellstack.org/en/stable/travis_ci/
 
@@ -19,90 +13,42 @@ cache:
   - $HOME/.ghc
   - $HOME/.cabal
   - $HOME/.stack
+  - $HOME/.ghcup
   - $TRAVIS_BUILD_DIR/.stack-work
 
-# The different configurations we want to test. We have BUILD=cabal which uses
-# cabal-install, and BUILD=stack which uses Stack. More documentation on each
-# of those below.
-#
-# We set the compiler values here to tell Travis to use a different
-# cache file per set of arguments.
-#
-# If you need to have different apt packages for each combination in the
-# matrix, you can use a line such as:
-#     addons: {apt: {packages: [libfcgi-dev,libgmp-dev]}}
-matrix:
-  include:
-  # We grab the appropriate GHC and cabal-install versions from hvr's PPA. See:
-  # https://github.com/hvr/multi-ghc-travis
-  - env: BUILD=cabal GHCVER=8.4.4 CABALVER=2.2 HAPPYVER=1.19.5 ALEXVER=3.1.7
-    compiler: ": #GHC 8.4.4"
-    addons: {apt: {packages: [cabal-install-2.2,ghc-8.4.4,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+# The actual build matrix
 
-  - env: BUILD=cabal GHCVER=8.6.3 CABALVER=2.4 HAPPYVER=1.19.5 ALEXVER=3.1.7
-    compiler: ": #GHC 8.6.3"
-    addons: {apt: {packages: [cabal-install-2.4,ghc-8.6.3,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+env:
+  - BUILD=cabal
+  - BUILD=stack
 
-  # Build with the newest GHC and cabal-install. This is an accepted failure,
-  # see below.
-  - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
-    compiler: ": #GHC HEAD"
-    addons: {apt: {packages: [cabal-install-head,ghc-head,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+env:
+  - GHC_VERSION=8.4.4 STACK_RESOLVER=12.26
+  - GHC_VERSION=8.6.3 STACK_RESOLVER=13.11
+  - GHC_VERSION=HEAD  STACK_RESOLVER=nightly
 
-  # The Stack builds. We can pass in arbitrary Stack arguments via the ARGS
-  # variable, such as using --stack-yaml to point to a different file.
-  - env: BUILD=stack ARGS=""
-    compiler: ": #stack default"
-    addons: {apt: {packages: [libgmp-dev]}}
+env:
+  - CABAL_VERSION=2.4.1.0
 
-  - env: BUILD=stack ARGS="--resolver lts-12"
-    compiler: ": #stack 8.4.4"
-    addons: {apt: {packages: [libgmp-dev]}}
+os:
+  - linux
+  - osx
 
-  - env: BUILD=stack ARGS="--resolver lts-13"
-    compiler: ": #stack 8.6.3"
-    addons: {apt: {packages: [libgmp-dev]}}
-
-  # Nightly builds are allowed to fail
-  - env: BUILD=stack ARGS="--resolver nightly"
-    compiler: ": #stack nightly"
-    addons: {apt: {packages: [libgmp-dev]}}
-
-  # Build on macOS in addition to Linux
-  - env: BUILD=stack ARGS=""
-    compiler: ": #stack default osx"
-    os: osx
-
-  - env: BUILD=stack ARGS="--resolver lts-12"
-    compiler: ": #stack 8.4.4 osx"
-    os: osx
-
-  - env: BUILD=stack ARGS="--resolver lts-13"
-    compiler: ": #stack 8.6.3 osx"
-    os: osx
-
-  - env: BUILD=stack ARGS="--resolver nightly"
-    compiler: ": #stack nightly osx"
-    os: osx
-
-  allow_failures:
-  - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
-  - env: BUILD=stack ARGS="--resolver nightly"
+# Setting up the build environment
 
 before_install:
+
 # Using compiler above sets CC to an invalid value, so unset it
 - unset CC
 
-# Convert all github ssh submodules to https
-# - for FILE in $(find . -name ".gitmodules"); do sed -i '' -e 's/git@github.com:/https:\/\/github.com\//' "$FILE"; done
-- git submodule update --init # --recursive
+# Update the submodules (not recursive)
+- git submodule update --init
 
 # We want to always allow newer versions of packages when building on GHC HEAD
 - CABALARGS=""
-- if [ "x$GHCVER" = "xhead" ]; then CABALARGS=--allow-newer; fi
+- if [ "x$GHC_VERSION" = "xhead" ]; then CABALARGS=--allow-newer; fi
 
-# Download and unpack the stack executable
-- export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$HOME/.local/bin:/opt/alex/$ALEXVER/bin:/opt/happy/$HAPPYVER/bin:$HOME/.cabal/bin:$PATH
+# Download and install the stack executable
 - mkdir -p ~/.local/bin
 - |
   if [ `uname` = "Darwin" ]
@@ -111,11 +57,21 @@ before_install:
   else
     travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
   fi
-
   # Use the more reliable S3 mirror of Hackage
   mkdir -p $HOME/.cabal
   echo 'remote-repo: hackage.haskell.org:http://hackage.fpcomplete.com/' > $HOME/.cabal/config
   echo 'remote-repo-cache: $HOME/.cabal/packages' >> $HOME/.cabal/config
+
+# Download and install the ghcup executable
+- mkdir -p ~/.ghcup/bin && curl https://raw.githubusercontent.com/haskell/ghcup/master/ghcup > ~/.ghcup/bin/ghcup && chmod +x ~/.ghcup/bin/ghcup
+
+# Add to PATH: ghcup, .local/bin (where stack lives), .cabal/bin (where cabal-installed things live)
+- export PATH=$HOME/.ghcup/bin:$HOME/.local/bin:$HOME/.cabal/bin:$PATH
+
+# Install the latest version of cabal and the correct version of GHC via ghcup
+- ghcup install-cabal $CABAL_VERSION
+- ghcup install $GHC_VERSION
+- ghcup set $GHC_VERSION
 
 install:
 - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
@@ -124,18 +80,8 @@ install:
   set -ex
   case "$BUILD" in
     stack)
-      # Add in extra-deps for older snapshots, as necessary
-      #
-      # This is disabled by default, as relying on the solver like this can
-      # make builds unreliable. Instead, if you have this situation, it's
-      # recommended that you maintain multiple stack-lts-X.yaml files.
-
-      #stack --no-terminal --install-ghc $ARGS test --bench --dry-run || ( \
-      #  stack --no-terminal $ARGS build cabal-install && \
-      #  stack --no-terminal $ARGS solver --update-config)
-
       # Build the dependencies
-      stack --no-terminal --install-ghc $ARGS test --bench --only-dependencies
+      stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies
       ;;
     cabal)
       cabal --version
@@ -146,7 +92,7 @@ install:
       # the .cabal files needed by cabal-install.
       PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
 
-      cabal install --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
+      cabal new-install --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
       ;;
   esac
   set +ex
@@ -159,28 +105,28 @@ script:
       stack --no-terminal $ARGS test --bench --no-run-benchmarks --haddock --no-haddock-deps
       ;;
     cabal)
-      cabal install --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
+      cabal new-install --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
 
       ORIGDIR=$(pwd)
       for dir in $PACKAGES
       do
         cd $dir
-        cabal check || [ "$CABALVER" == "1.16" ]
-        cabal sdist
+        cabal check
+        cabal new-sdist
         PKGVER=$(cabal info . | awk '{print $2;exit}')
         SRC_TGZ=$PKGVER.tar.gz
         cd dist
         tar zxfv "$SRC_TGZ"
         cd "$PKGVER"
-        cabal configure --enable-tests --ghc-options -O0
-        cabal build
-        if [ "$CABALVER" = "1.16" ] || [ "$CABALVER" = "1.18" ]; then
-          cabal test
-        else
-          cabal test --show-details=streaming --log=/dev/stdout
-        fi
+        cabal new-configure --enable-tests --ghc-options -O0
+        cabal new-build
+        cabal new-test --show-details=streaming --log=/dev/stdout
         cd $ORIGDIR
       done
       ;;
   esac
   set +ex
+
+# We handle submodules manually
+git:
+  submodules: false

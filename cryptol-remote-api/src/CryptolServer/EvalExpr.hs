@@ -20,7 +20,7 @@ import Cryptol.TypeCheck.Type (Schema(..))
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import Cryptol.Utils.PP (pretty)
 
-import Argo.JSONRPC
+import Argo
 import CryptolServer
 import CryptolServer.Data.Expression
 import CryptolServer.Data.Type

@@ -44,7 +44,7 @@ import Cryptol.Utils.PP (pretty)
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 
 
-import Argo.JSONRPC
+import Argo
 import CryptolServer
 import CryptolServer.Exceptions
 

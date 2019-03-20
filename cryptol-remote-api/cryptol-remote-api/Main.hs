@@ -16,8 +16,8 @@ import qualified Options.Applicative as Opt
 import System.Directory (doesDirectoryExist, setCurrentDirectory)
 import System.IO (stdout)
 
-import Argo.JSONRPC
-import Argo.JSONRPC.Socket
+import Argo
+import Argo.Socket
 
 
 import CryptolServer

@@ -14,7 +14,7 @@ import Cryptol.TypeCheck.Subst (apSubst, listParamSubst)
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import Cryptol.Utils.PP
 
-import Argo.JSONRPC
+import Argo
 
 import CryptolServer
 import CryptolServer.Data.Expression

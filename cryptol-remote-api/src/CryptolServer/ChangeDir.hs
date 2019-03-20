@@ -8,7 +8,7 @@ import qualified Data.Text as T
 import System.Directory
 
 import CryptolServer
-import Argo.JSONRPC
+import Argo
 
 cd :: ChangeDirectoryParams -> Method ServerState ()
 cd (ChangeDirectoryParams newDir) =

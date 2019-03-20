@@ -32,8 +32,8 @@ library
   exposed-modules:
     Argo.CacheTree
     Argo.HistoryWrapper
-    Argo.JSONRPC
-    Argo.JSONRPC.Socket
+    Argo
+    Argo.Socket
     Argo.Netstring
 
   hs-source-dirs: src

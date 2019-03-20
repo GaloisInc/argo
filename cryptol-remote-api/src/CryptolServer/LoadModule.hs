@@ -11,7 +11,7 @@ import Data.Functor
 import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, loadModuleByPath, loadModuleByName)
 
 import CryptolServer
-import Argo.JSONRPC
+import Argo
 
 
 loadModule :: LoadModuleParams -> Method ServerState ()

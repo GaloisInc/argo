@@ -16,7 +16,7 @@ import Cryptol.Parser.AST (ModName)
 import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP (pretty)
 
-import Argo.JSONRPC
+import Argo
 
 cantLoadMod :: JSON.Value -> JSONRPCException
 cantLoadMod mod =

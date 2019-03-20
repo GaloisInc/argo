@@ -4,7 +4,7 @@ module CryptolServer.Exceptions where
 import Data.Aeson as JSON
 
 import CryptolServer
-import Argo.JSONRPC
+import Argo
 
 
 cryptolParseErr ::

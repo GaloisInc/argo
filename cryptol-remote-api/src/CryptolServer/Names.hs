@@ -20,7 +20,7 @@ import Cryptol.TypeCheck.PP (NameMap, emptyNameMap, ppWithNames)
 import Cryptol.TypeCheck.Type (Kind(..), PC(..), TC(..), TCon(..), TFun(..), TParam(..), Type(..), Schema(..), addTNames, kindOf)
 import Cryptol.Utils.PP (pp)
 
-import Argo.JSONRPC
+import Argo
 
 import CryptolServer
 import CryptolServer.Data.Type
@@ -62,5 +62,3 @@ instance JSON.ToJSON NameInfo where
     , "type" .= JSON.toJSON (JSONSchema ty)
     ] ++
     maybe [] (\d -> ["documentation" .= d]) doc
-
-

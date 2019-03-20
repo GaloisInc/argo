@@ -5,7 +5,7 @@ module Argo.HistoryWrapper
   , historyWrapper
   ) where
 
-import Argo.JSONRPC
+import Argo
 import Argo.CacheTree
 
 import Control.Monad

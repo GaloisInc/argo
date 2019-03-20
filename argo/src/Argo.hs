@@ -11,7 +11,7 @@
 {-# LANGUAGE DataKinds #-}
 
 -- | An implementation of the basic primitives of JSON-RPC 2.0.
-module Argo.JSONRPC
+module Argo
   ( -- * Primary interface to JSON-RPC
     App
   , mkApp

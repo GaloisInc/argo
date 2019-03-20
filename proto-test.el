@@ -115,6 +115,18 @@ errors."
                               (error "When evaluating %S, got error %s (%S) with info %S"
                                      expr code err-message err-data))))
 
+(defun proto-test-cryptol-check-type (expr)
+  "Type check EXPR in Cryptol."
+  (interactive (list (proto-test-cryptol-get-arg)))
+  (proto-test--cryptol-send "check type"
+                            `(:expression ,expr)
+                            (lambda (res)
+                              (message "The result is %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When checking %S, got error %s (%S) with info %S"
+                                     expr code err-message err-data))))
+
+
 (defun proto-test-cryptol-call (fun args)
   "Call FUN with ARGS."
   (interactive (let ((fun (read-string "Cryptol function to call: ")))

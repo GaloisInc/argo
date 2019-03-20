@@ -1,6 +1,8 @@
 import os
 
-from cryptol import CryptolConnection, CryptolContext
+from cryptol import CryptolConnection, CryptolContext, cry
+import cryptol
+import cryptol.types
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 

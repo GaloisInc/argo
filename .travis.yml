@@ -22,12 +22,12 @@ env:
   global:
   - CABAL_VERSION=2.4.1.0
   matrix:
-  - BUILD=cabal GHC_VERSION=8.4.4 STACK_RESOLVER=12.26
-  - BUILD=cabal GHC_VERSION=8.6.3 STACK_RESOLVER=13.11
-  - BUILD=cabal GHC_VERSION=HEAD  STACK_RESOLVER=nightly
-  - BUILD=stack GHC_VERSION=8.4.4 STACK_RESOLVER=12.26
-  - BUILD=stack GHC_VERSION=8.6.3 STACK_RESOLVER=13.11
-  - BUILD=stack GHC_VERSION=HEAD  STACK_RESOLVER=nightly
+  - BUILD=cabal GHC_VERSION=8.4.4   STACK_RESOLVER=lts-12.26
+  - BUILD=cabal GHC_VERSION=8.6.3   STACK_RESOLVER=lts-13.11
+  - BUILD=cabal GHC_VERSION=latest  STACK_RESOLVER=nightly
+  - BUILD=stack GHC_VERSION=8.4.4   STACK_RESOLVER=lts-12.26
+  - BUILD=stack GHC_VERSION=8.6.3   STACK_RESOLVER=lts-13.11
+  - BUILD=stack GHC_VERSION=latest  STACK_RESOLVER=nightly
 
 os:
   - linux
@@ -43,7 +43,7 @@ before_install:
 # Update the submodules (not recursive)
 - git submodule update --init
 
-# We want to always allow newer versions of packages when building on GHC HEAD
+# We want to always allow newer versions of packages when building on GHC "latest" (provided by ghcup, we're not actually using HEAD like the stack version does)
 - CABALARGS=""
 - if [ "x$GHC_VERSION" = "xhead" ]; then CABALARGS=--allow-newer; fi
 

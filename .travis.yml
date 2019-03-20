@@ -19,16 +19,15 @@ cache:
 # The actual build matrix
 
 env:
-  - BUILD=cabal
-  - BUILD=stack
-
-env:
+  global:
+  - CABAL_VERSION=2.4.1.0
+  matrix:
   - GHC_VERSION=8.4.4 STACK_RESOLVER=12.26
   - GHC_VERSION=8.6.3 STACK_RESOLVER=13.11
   - GHC_VERSION=HEAD  STACK_RESOLVER=nightly
-
-env:
-  - CABAL_VERSION=2.4.1.0
+  matrix:
+  - BUILD=cabal
+  - BUILD=stack
 
 os:
   - linux

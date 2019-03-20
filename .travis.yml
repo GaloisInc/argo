@@ -1,3 +1,9 @@
+# Handle git submodules yourself
+# from https://stackoverflow.com/a/24600210/568988
+git:
+  # We do submodules manually, to auto-convert ssh to https
+  submodules: false
+
 # Adapted from Stack's "complex configuration" .travis.yml file:
 # https://docs.haskellstack.org/en/stable/travis_ci/
 
@@ -87,6 +93,10 @@ before_install:
 # Using compiler above sets CC to an invalid value, so unset it
 - unset CC
 
+# Convert all github ssh submodules to https
+- for FILE in $(find . -name ".gitmodules"); do sed -i '' -e 's/git@github.com:/https:\/\/github.com\//' "$FILE"; done
+- git submodule update --init --recursive
+
 # We want to always allow newer versions of packages when building on GHC HEAD
 - CABALARGS=""
 - if [ "x$GHCVER" = "xhead" ]; then CABALARGS=--allow-newer; fi
@@ -106,7 +116,6 @@ before_install:
   mkdir -p $HOME/.cabal
   echo 'remote-repo: hackage.haskell.org:http://hackage.fpcomplete.com/' > $HOME/.cabal/config
   echo 'remote-repo-cache: $HOME/.cabal/packages' >> $HOME/.cabal/config
-
 
 install:
 - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"

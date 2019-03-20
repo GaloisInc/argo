@@ -1,0 +1,9 @@
+apply plugin: 'java'
+apply plugin: 'application'
+
+mainClassName = 'hello.HelloWorld'
+
+jar {
+    baseName = 'cryptol-client'
+    version =  '0.1.0'
+}

@@ -38,3 +38,5 @@ wip
 .ghc.environment.*
 .dir-locals.el
 __pycache__
+.gradle/
+.meghanada/

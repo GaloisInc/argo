@@ -94,8 +94,8 @@ before_install:
 - unset CC
 
 # Convert all github ssh submodules to https
-- for FILE in $(find . -name ".gitmodules"); do sed -i '' -e 's/git@github.com:/https:\/\/github.com\//' "$FILE"; done
-- git submodule update --init --recursive
+# - for FILE in $(find . -name ".gitmodules"); do sed -i '' -e 's/git@github.com:/https:\/\/github.com\//' "$FILE"; done
+- git submodule update --init # --recursive
 
 # We want to always allow newer versions of packages when building on GHC HEAD
 - CABALARGS=""

@@ -91,7 +91,7 @@ acceptClient logH app s =
      h         <- N.socketToHandle c ReadWriteMode
      -- don't use c after this, it is owned by h
 
-     log ("CONNECT: " ++ show peer ++ "\n")
+     log ("CONNECT: " ++ show peer)
      forkFinally (serveHandlesNS logH h h app) $ \res ->
        do case res of
             Right _ -> log ("CLOSE: " ++ show peer)

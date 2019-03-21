@@ -1,13 +1,26 @@
-# Adapted from Stack's "complex configuration" .travis.yml file:
-# https://docs.haskellstack.org/en/stable/travis_ci/
+# Do not choose a language; we provide our own build tools.
+language: generic
 
 # Use new container infrastructure to enable caching
 sudo: false
 
-# Do not choose a language; we provide our own build tools.
-language: generic
+# We handle submodules manually
+git: { submodules: false }
 
-# Caching so the next build will be fast too.
+# Provide Happy and Alex through apt-get
+addons: {apt: {packages: [happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+
+# The build matrix
+matrix:
+  global:
+    - env: CABAL_VERSION=2.4.1.0
+  include:
+    - env: BUILD=cabal GHC_VERSION=8.4.4
+    - env: BUILD=cabal GHC_VERSION=8.6.3
+    - env: BUILD=stack STACK_RESOLVER=lts-12.26
+    - env: BUILD=stack STACK_RESOLVER=lts-13.11
+
+# Caching so the next build will be fast too
 cache:
   directories:
   - $HOME/.ghc
@@ -15,23 +28,6 @@ cache:
   - $HOME/.stack
   - $HOME/.ghcup
   - $TRAVIS_BUILD_DIR/.stack-work
-
-# The actual build matrix
-
-env:
-  global:
-  - CABAL_VERSION=2.4.1.0
-  matrix:
-  - BUILD=cabal GHC_VERSION=8.4.4
-  - BUILD=cabal GHC_VERSION=8.6.3
-  - BUILD=cabal GHC_VERSION=latest
-  - BUILD=stack STACK_RESOLVER=lts-12.26
-  - BUILD=stack STACK_RESOLVER=lts-13.11
-  - BUILD=stack STACK_RESOLVER=nightly
-
-os:
-  - linux
-  - osx
 
 # Setting up the build environment
 
@@ -74,19 +70,6 @@ before_install:
       ghcup install-cabal $CABAL_VERSION
       ghcup install $GHC_VERSION
       ghcup set $GHC_VERSION
-
-      travis_retry cabal update
-
-      # Install build dependencies
-      cabal new-install cabal-doctest
-      cabal new-install alex
-      cabal new-install happy
-    ;;
-    stack)
-      # Install build dependencies
-      stack install cabal-doctest
-      stack install alex
-      stack install happy
     ;;
   esac
 
@@ -107,6 +90,7 @@ install:
       # Determine the list of local packages (using stack)
       PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
 
+      # Build the dependencies
       cabal new-build --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
       ;;
   esac
@@ -124,7 +108,3 @@ script:
       ;;
   esac
   set +ex
-
-# We handle submodules manually
-git:
-  submodules: false

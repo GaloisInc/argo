@@ -2,7 +2,7 @@ import os
 
 from cryptol import CryptolConnection, CryptolContext, cry
 import cryptol
-import cryptol.types
+import cryptol.cryptoltypes
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 

@@ -85,10 +85,10 @@ install:
       ;;
     cabal)
       cabal --version
-      travis_retry cabal update
+      travis_retry cabal new-update
 
       # Determine the list of local packages (using stack)
-      PACKAGES=$(stack --no-install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
+      PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
 
       # Build the dependencies
       cabal new-build --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES

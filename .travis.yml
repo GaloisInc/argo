@@ -13,7 +13,7 @@ addons: {apt: {packages: [happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
 # The build matrix
 matrix:
   global:
-    - env: CABAL_VERSION=2.4.1.0
+    - env: CABAL_VERSION=2.4.1.0 ALEX_VERSION=3.1.7 HAPPY_VERSION=1.19.5
   include:
     - env: BUILD=cabal GHC_VERSION=8.4.4
     - env: BUILD=cabal GHC_VERSION=8.6.3
@@ -57,8 +57,8 @@ before_install:
   echo 'remote-repo: hackage.haskell.org:http://hackage.fpcomplete.com/' > $HOME/.cabal/config
   echo 'remote-repo-cache: $HOME/.cabal/packages' >> $HOME/.cabal/config
 
-# Add to PATH: .local/bin (where stack lives), .cabal/bin (where cabal-installed things live)
-- export PATH=$HOME/.cabal/bin:$HOME/.ghcup/bin:$HOME/.local/bin:$PATH
+# Add to PATH: Alex, Happy, .local/bin (where stack lives), .cabal/bin (where cabal-installed things live)
+- export PATH=/opt/alex/$ALEX_VERSION/bin:/opt/happy/$HAPPY_VERSION/bin:$HOME/.cabal/bin:$HOME/.ghcup/bin:$HOME/.local/bin:$PATH
 
 # If using the cabal build type, install cabal and ghc through ghcup
 - |
@@ -88,7 +88,7 @@ install:
       travis_retry cabal update
 
       # Determine the list of local packages (using stack)
-      PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
+      PACKAGES=$(stack --no-install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
 
       # Build the dependencies
       cabal new-build --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES

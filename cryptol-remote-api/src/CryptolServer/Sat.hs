@@ -20,7 +20,8 @@ import Cryptol.TypeCheck.Solve (defaultReplExpr)
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import Cryptol.Utils.PP (pp)
 
-import Argo.JSONRPC
+import Argo
+
 import CryptolServer
 import CryptolServer.Exceptions (evalPolyErr, proverError)
 import CryptolServer.Data.Expression

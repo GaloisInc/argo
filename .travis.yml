@@ -71,10 +71,10 @@ before_install:
       mkdir -p ~/.ghcup/bin
       curl https://raw.githubusercontent.com/haskell/ghcup/master/ghcup > ~/.ghcup/bin/ghcup
       chmod +x ~/.ghcup/bin/ghcup
+      export PATH=$HOME/.ghcup/bin:$PATH
       ghcup install-cabal $CABAL_VERSION
       ghcup install $GHC_VERSION
       ghcup set $GHC_VERSION
-      export PATH=$HOME/.ghcup/bin:$PATH
 
       # Install build dependencies
       cabal new-install cabal-doctest

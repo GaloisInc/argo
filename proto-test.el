@@ -150,6 +150,15 @@ errors."
                               (error "When checking %S, got error %s (%S) with info %S"
                                      expr code err-message err-data))))
 
+(defun proto-test-cryptol-focused-module ()
+  "Find the focused Cryptol module."
+  (interactive)
+  (proto-test--cryptol-send "focused module" (proto-test-hash)
+                            (lambda (res)
+                              (message "The result is %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "Got error %s (%S) with info %S"
+                                      code err-message err-data))))
 
 (defun proto-test-cryptol-call (fun args)
   "Call FUN with ARGS."

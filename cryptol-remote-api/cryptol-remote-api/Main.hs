@@ -24,6 +24,7 @@ import CryptolServer
 import CryptolServer.Call
 import CryptolServer.ChangeDir
 import CryptolServer.EvalExpr
+import CryptolServer.FocusedModule
 import CryptolServer.LoadModule
 import CryptolServer.Names
 import CryptolServer.Sat
@@ -71,6 +72,7 @@ cryptolMethods :: [(Text, MethodType, JSON.Value -> Method ServerState JSON.Valu
 cryptolMethods =
   [ ("change directory",    Command, method cd)
   , ("load module",         Command, method loadModule)
+  , ("focused module",      Query,   method focusedModule)
   , ("evaluate expression", Query,   method evalExpression)
   , ("call",                Query,   method call)
   , ("visible names",       Query,   method visibleNames)

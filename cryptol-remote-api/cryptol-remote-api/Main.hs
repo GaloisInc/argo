@@ -26,6 +26,7 @@ import CryptolServer.ChangeDir
 import CryptolServer.EvalExpr
 import CryptolServer.LoadModule
 import CryptolServer.Names
+import CryptolServer.Sat
 import CryptolServer.TypeCheck
 
 import Argo.HistoryWrapper
@@ -74,4 +75,5 @@ cryptolMethods =
   , ("call",                Query,   method call)
   , ("visible names",       Query,   method visibleNames)
   , ("check type",          Query,   method checkType)
+  , ("satisfy",             Query,   method sat)
   ]

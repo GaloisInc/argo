@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.Exceptions where
+module CryptolServer.Exceptions (cryptolParseErr, evalPolyErr, proverError) where
 
 import Data.Aeson as JSON
 
@@ -23,3 +23,6 @@ evalPolyErr ::
   JSONRPCException
 evalPolyErr ty =
   makeJSONRPCException 45 "Can't evaluate at polymorphic type" (Just (JSON.object ["type" .= ty]))
+
+proverError :: String -> JSONRPCException
+proverError msg = makeJSONRPCException 55 "Prover error" (Just (JSON.toJSON msg))

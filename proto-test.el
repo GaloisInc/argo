@@ -29,6 +29,17 @@
 (require 'dired)
 (require 'json)
 
+(cl-defmacro proto-test-hash (&rest args)
+  "Make a hash table of key-value lists in ARGS."
+  (let ((table (cl-gensym "table")))
+    `(let ((,table (make-hash-table)))
+       ,@(cl-loop for item in args
+                  collecting (pcase item
+                               (`(,k ,v)
+                                `(puthash ,k ,v ,table))))
+       ,table)))
+
+
 (defvar proto-test-proc nil "The process being tested.")
 (defvar proto-test--output "" "The process's output so far.")
 (defvar proto-test--state '[] "The method calls that make up the cryptol state.")
@@ -81,7 +92,8 @@ errors."
          (message (list :jsonrpc "2.0"
                         :id the-id
                         :method method
-                        :params (cons :state (cons proto-test--state params)))))
+                        :params (progn (puthash :state proto-test--state params)
+                                       params))))
     (puthash the-id cont proto-test--cryptol-continuations)
     (when fail-cont (puthash the-id fail-cont proto-test--cryptol-failure-continuations))
     (proto-test-send (json-encode-plist message))))
@@ -89,7 +101,7 @@ errors."
 (defun proto-test-cryptol-change-directory (dir)
   "Change to directory DIR in Cryptol."
   (interactive "DNew directory: ")
-  (proto-test--cryptol-send "change directory" `(:directory ,dir)
+  (proto-test--cryptol-send "change directory" (proto-test-hash (:directory dir))
                             (lambda (_)
                               (message "Changed directory"))))
 
@@ -97,7 +109,7 @@ errors."
   "Load FILE in Cryptol."
   (interactive "fFile to load: ")
   (proto-test--cryptol-send "load module"
-                            `(:file ,file)
+                            (proto-test-hash (:file file))
                             (lambda (res)
                               (message "Loaded file %S" res))
                             (lambda (code err-message &optional err-data)
@@ -108,7 +120,7 @@ errors."
   "Eval EXPR in Cryptol."
   (interactive "MExpression to eval: ")
   (proto-test--cryptol-send "evaluate expression"
-                            `(:expression ,expr)
+                            (proto-test-hash (:expression expr))
                             (lambda (res)
                               (message "The result is %S" res))
                             (lambda (code err-message &optional err-data)
@@ -119,7 +131,19 @@ errors."
   "Type check EXPR in Cryptol."
   (interactive (list (proto-test-cryptol-get-arg)))
   (proto-test--cryptol-send "check type"
-                            `(:expression ,expr)
+                            (proto-test-hash (:expression expr))
+                            (lambda (res)
+                              (message "The result is %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When checking %S, got error %s (%S) with info %S"
+                                     expr code err-message err-data))))
+
+
+(defun proto-test-cryptol-satisfy (expr)
+  ":sat EXPR in Cryptol."
+  (interactive (list (proto-test-cryptol-get-arg)))
+  (proto-test--cryptol-send "satisfy"
+                            (proto-test-hash (:expression expr) (:prover "z3") ("result count" 10))
                             (lambda (res)
                               (message "The result is %S" res))
                             (lambda (code err-message &optional err-data)
@@ -133,7 +157,7 @@ errors."
                  (list fun
                        (proto-test-cryptol-get-args fun))))
   (proto-test--cryptol-send "call"
-                            `(:function ,fun :arguments ,(or args []))
+                            (proto-test-hash (:function fun) (:arguments (or args [])))
                             (lambda (res)
                               (message "The result is %S" res))
                             (lambda (code err-message &optional err-data)
@@ -188,15 +212,6 @@ errors."
           (setq go nil))))
     (reverse args)))
 
-(cl-defmacro proto-test-hash (&rest args)
-  "Make a hash table of key-value lists in ARGS."
-  (let ((table (cl-gensym "table")))
-    `(let ((,table (make-hash-table)))
-       ,@(cl-loop for item in args
-                  collecting (pcase item
-                               (`(,k ,v)
-                                `(puthash ,k ,v ,table))))
-       ,table)))
 
 (defun proto-test-cryptol-get-arg ()
   "Prompt the user for an argument to the \"call\" method.

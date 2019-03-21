@@ -22,12 +22,12 @@ env:
   global:
   - CABAL_VERSION=2.4.1.0
   matrix:
-  - BUILD=cabal GHC_VERSION=8.4.4   STACK_RESOLVER=lts-12.26
-  - BUILD=cabal GHC_VERSION=8.6.3   STACK_RESOLVER=lts-13.11
-  - BUILD=cabal GHC_VERSION=latest  STACK_RESOLVER=nightly
-  - BUILD=stack GHC_VERSION=8.4.4   STACK_RESOLVER=lts-12.26
-  - BUILD=stack GHC_VERSION=8.6.3   STACK_RESOLVER=lts-13.11
-  - BUILD=stack GHC_VERSION=latest  STACK_RESOLVER=nightly
+  - BUILD=cabal GHC_VERSION=8.4.4
+  - BUILD=cabal GHC_VERSION=8.6.3
+  - BUILD=cabal GHC_VERSION=latest
+  - BUILD=stack STACK_RESOLVER=lts-12.26
+  - BUILD=stack STACK_RESOLVER=lts-13.11
+  - BUILD=stack STACK_RESOLVER=nightly
 
 os:
   - linux
@@ -45,7 +45,7 @@ before_install:
 
 # We want to always allow newer versions of packages when building on GHC "latest" (provided by ghcup, we're not actually using HEAD like the stack version does)
 - CABALARGS=""
-- if [ "x$GHC_VERSION" = "xhead" ]; then CABALARGS=--allow-newer; fi
+- if [ "x$GHC_VERSION" = "xlatest" ]; then CABALARGS=--allow-newer; fi
 
 # Download and install the stack executable
 - mkdir -p ~/.local/bin
@@ -61,16 +61,33 @@ before_install:
   echo 'remote-repo: hackage.haskell.org:http://hackage.fpcomplete.com/' > $HOME/.cabal/config
   echo 'remote-repo-cache: $HOME/.cabal/packages' >> $HOME/.cabal/config
 
-# Download and install the ghcup executable
-- mkdir -p ~/.ghcup/bin && curl https://raw.githubusercontent.com/haskell/ghcup/master/ghcup > ~/.ghcup/bin/ghcup && chmod +x ~/.ghcup/bin/ghcup
+# Add to PATH: .local/bin (where stack lives), .cabal/bin (where cabal-installed things live)
+- export $HOME/.local/bin:$HOME/.cabal/bin:$PATH
 
-# Add to PATH: ghcup, .local/bin (where stack lives), .cabal/bin (where cabal-installed things live)
-- export PATH=$HOME/.ghcup/bin:$HOME/.local/bin:$HOME/.cabal/bin:$PATH
+# If using the cabal build type, install cabal and ghc through ghcup
+- |
+  case "$BUILD" in
+    cabal)
+      mkdir -p ~/.ghcup/bin
+      curl https://raw.githubusercontent.com/haskell/ghcup/master/ghcup > ~/.ghcup/bin/ghcup
+      chmod +x ~/.ghcup/bin/ghcup
+      ghcup install-cabal $CABAL_VERSION
+      ghcup install $GHC_VERSION
+      ghcup set $GHC_VERSION
+      export PATH=$HOME/.ghcup/bin:$PATH
 
-# Install the latest version of cabal and the correct version of GHC via ghcup
-- ghcup install-cabal $CABAL_VERSION
-- ghcup install $GHC_VERSION
-- ghcup set $GHC_VERSION
+      # Install build dependencies
+      cabal new-install cabal-doctest
+      cabal new-install alex
+      cabal new-install happy
+    ;;
+    stack)
+      # Install build dependencies
+      stack install cabal-doctest
+      stack install alex
+      stack install happy
+    ;;
+  esac
 
 install:
 - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"

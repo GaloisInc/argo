@@ -75,7 +75,7 @@ before_install:
       ghcup install $GHC_VERSION
       ghcup set $GHC_VERSION
 
-      cabal update
+      travis_retry cabal update
 
       # Install build dependencies
       cabal new-install cabal-doctest

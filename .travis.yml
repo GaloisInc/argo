@@ -85,6 +85,11 @@ install:
     cabal)
       cabal --version
       travis_retry cabal update
+
+      # Determine the list of local packages (using stack)
+      PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
+
+      cabal new-build --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
       ;;
   esac
   set +ex
@@ -97,24 +102,7 @@ script:
       stack --no-terminal $ARGS test --bench --no-run-benchmarks --haddock --no-haddock-deps
       ;;
     cabal)
-      cabal new-install --enable-tests --enable-benchmarks --force-reinstalls --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
-
-      ORIGDIR=$(pwd)
-      for dir in $PACKAGES
-      do
-        cd $dir
-        cabal check
-        cabal new-sdist
-        PKGVER=$(cabal info . | awk '{print $2;exit}')
-        SRC_TGZ=$PKGVER.tar.gz
-        cd dist
-        tar zxfv "$SRC_TGZ"
-        cd "$PKGVER"
-        cabal new-configure --enable-tests --enable-benchmarks
-        cabal new-build
-        cabal new-test --show-details=streaming --log=/dev/stdout
-        cd $ORIGDIR
-      done
+      cabal new-build --enable-tests --enable-benchmarks $CABALARGS $PACKAGES
       ;;
   esac
   set +ex

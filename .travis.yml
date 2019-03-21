@@ -62,7 +62,7 @@ before_install:
   echo 'remote-repo-cache: $HOME/.cabal/packages' >> $HOME/.cabal/config
 
 # Add to PATH: .local/bin (where stack lives), .cabal/bin (where cabal-installed things live)
-- export $HOME/.local/bin:$HOME/.cabal/bin:$PATH
+- export PATH=$HOME/.local/bin:$HOME/.cabal/bin:$PATH
 
 # If using the cabal build type, install cabal and ghc through ghcup
 - |

@@ -89,8 +89,13 @@ install:
     stack)
       # Build the dependencies
       case "$CACHE" in
-        indeed) timeout 40m stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies || true;;
-        nope) stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies ;;
+        indeed)
+          timeout 40m stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies || true
+          ;;
+        nope)
+          stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies
+          ;;
+      esac
       ;;
     cabal)
       cabal --version

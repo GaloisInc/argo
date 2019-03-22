@@ -48,6 +48,7 @@ extra-deps:
 - panic-0.4.0.1
 - simple-smt-0.9.4
 - sbv-8.0
+- dotgen-0.4.2
 
 # stack's metadata gets out of date
 allow-newer: true

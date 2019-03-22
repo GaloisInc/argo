@@ -40,6 +40,10 @@ before_install:
 
 # Update the submodules (not recursive)
 - git submodule update --init
+- pushd
+- cd deps/abcBridge
+- git submodule update --init
+- popd
 
 # We want to always allow newer versions of packages when building on GHC "latest" (provided by ghcup, we're not actually using HEAD like the stack version does)
 - CABALARGS=""

@@ -40,7 +40,7 @@ before_install:
 
 # Update the submodules (not recursive)
 - git submodule update --init
-- pushd
+- pushd .
 - cd deps/abcBridge
 - git submodule update --init
 - popd

@@ -17,10 +17,11 @@ matrix:
   global:
     - env: CABAL_VERSION=2.4.1.0 ALEX_VERSION=3.1.7 HAPPY_VERSION=1.19.5
   include:
-    - env: BUILD=cabal GHC_VERSION=8.4.4
-    - env: BUILD=cabal GHC_VERSION=8.6.3
-    - env: BUILD=stack STACK_RESOLVER=lts-12.26
-    - env: BUILD=stack STACK_RESOLVER=lts-13.11
+    - env: BUILD=cabal GHC_VERSION=8.4.4 CACHE=nope
+    - env: BUILD=cabal GHC_VERSION=8.6.3 CACHE=nope
+    - env: BUILD=stack STACK_RESOLVER=lts-12.26 CACHE=nope
+    - env: BUILD=stack STACK_RESOLVER=lts-13.11 CACHE=nope
+    - env: BUILD=stack STACK_RESOLVER=lts-13.11 CACHE=indeed
 
 # Caching so the next build will be fast too
 cache:
@@ -87,7 +88,9 @@ install:
   case "$BUILD" in
     stack)
       # Build the dependencies
-      stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies
+      case "$CACHE" in
+        indeed) timeout 40m stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies || true;;
+        nope) stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies ;;
       ;;
     cabal)
       cabal --version

@@ -8,7 +8,7 @@ sudo: false
 git: { submodules: false }
 
 # Provide Happy and Alex through apt-get
-addons: {apt: {packages: [happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
+addons: {apt: {packages: [happy-1.19.5,alex-3.1.7,libnuma-devel], sources: [hvr-ghc]}}
 
 # The build matrix
 matrix:

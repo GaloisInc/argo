@@ -90,7 +90,8 @@ install:
       # Build the dependencies
       case "$CACHE" in
         indeed)
-          timeout 40m stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies || true
+          echo "Running with timeout for cache"
+          timeout 20m stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies || true
           ;;
         nope)
           stack --no-terminal --install-ghc --resolver $STACK_RESOLVER $ARGS test --bench --only-dependencies

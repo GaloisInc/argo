@@ -34,25 +34,39 @@ $ cabal v2-build all
 
 ## Usage
 
-Requirements:
+### Emacs
 
-* emacs
+There is a little test rig written in Emacs Lisp to automate the
+production of commands and log responses. Note that these commands can
+be sensitive to the current working directory in emacs.
 
-Running the demonstration emacs mode uses the following steps. Note that
-these commands can be sensitive to the current working directory in emacs.
-
+There are two ways to use it: over stdio, or over a socket. The
+initial setup for both is the same:
 1. Launch emacs
 2. Open `proto-test.el`
 3. Evaluate the buffer: `M-x eval-buffer` or on spacemacs: `, e b`
-4. Enter `Command:` to run proto server `cabal v2-exec proto`
+
+To use the stdio version:
+1. `M-x proto-test-start`
+2. At the prompt for `Command:`, run proto server `cabal v2-exec cryptol-remote-api`
+
+To use the socket version:
+1. At a shell, run `cabal v2-exec cryptol-remote-api -- --socket 10006` (or pick your favorite port instead of 10006)
+2. In Emacs, `M-x proto-test-start-socket`. When prompted, enter `10006` or your choice of port.
 
 Invoking methods:
 
-Currently it is necessary to load a file first before using any other methods.
+Currently it is necessary to load a file first before using any other
+methods, because that brings the Cryptol prelude into scope. These
+Elisp wrappers will prompt you for appropriate input.
 
 1. `M-x proto-test-cryptol-load-file`
 2. `M-x proto-test-cryptol-eval`
-2. `M-x proto-test-cryptol-change-directory`
+3. `M-x proto-test-cryptol-change-directory`
+4. `M-x proto-test-cryptol-call`
+5. `M-x proto-test-cryptol-focused-module`
+6. `M-x proto-test-cryptol-check-type`
+7. `M-x proto-test-cryptol-cyptol-satisfy`
 
 Terminating the demo:
 

@@ -107,7 +107,7 @@ errors."
 
 (defun proto-test-cryptol-load-file (file)
   "Load FILE in Cryptol."
-  (interactive "fFile to load: ")
+  (interactive "FFile to load: ")
   (proto-test--cryptol-send "load module"
                             (proto-test-hash (:file file))
                             (lambda (res)

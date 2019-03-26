@@ -1,0 +1,19 @@
+apply plugin: 'java'
+apply plugin: 'application'
+
+mainClassName = 'hello.HelloWorld'
+
+jar {
+    baseName = 'cryptol-client'
+    version =  '0.1.0'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile group: 'com.eclipsesource.minimal-json',
+            name: 'minimal-json',
+            version: '0.9.5'
+}

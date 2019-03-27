@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.io.*;
+
+import com.galois.cryptol.client.InvalidNetstringException;
 
 public class Netstring {
 
@@ -49,62 +52,40 @@ public class Netstring {
         return result;
     }
 
-    // The result of decoding a netstring: the netstring, and the remainder of
-    // the input which has yet to be decoded
-    public static class DecodeResult {
-        public final byte[] result;
-        public final Iterator<Byte> remainder;
-        public DecodeResult(byte[] result, Iterator<Byte> remainder) {
-            this.result = result;
-            this.remainder = remainder;
-        }
-    }
-
     // Given an iterator of bytes, decode it as a Netstring and return a
     // DecodeResult pairing the resultant Netstring with the remaining bytes
-    public static DecodeResult decode(String string) {
+    public static byte[] decode(String string) throws IOException, InvalidNetstringException {
         // Split into bytes
-        ArrayList<Byte> bytes = new ArrayList<Byte>(string.length());
+        byte[] bytes = new byte[string.length()];
         for (int i = 0; i < string.length(); i++) {
-            bytes.add((byte)string.charAt(i));
+            bytes[i] = (byte)string.charAt(i);
         }
         // Decode the bytes
         return Netstring.decode(bytes);
     }
 
-    public static DecodeResult decode(byte[] array) {
-        // Split into bytes
-        ArrayList<Byte> bytes = new ArrayList<Byte>(array.length);
-        for (int i = 0; i < array.length; i++) {
-            bytes.add(array[i]);
-        }
-
+    public static byte[] decode(byte[] bytes) throws IOException, InvalidNetstringException {
         // Decode the bytes
-        return Netstring.decode(bytes);
+        return Netstring.decode(new ByteArrayInputStream(bytes));
     }
 
-    public static DecodeResult decode(Iterable<Byte> bytes) {
-        // Convert to an iterator and decode that
-        return Netstring.decode(bytes.iterator());
-    }
-
-    public static DecodeResult decode(Iterator<Byte> bytes) {
+    public static byte[] decode(InputStream bytes) throws IOException, InvalidNetstringException {
         // Read digits representing the length of the string until a ':'
         StringBuilder lengthBytes = new StringBuilder();
-        try {
-            while (true) {
-                Character c = (char)(byte)bytes.next();
-                if (Character.isDigit(c)) {
-                    lengthBytes.append(c);
-                } else if (c == ':') {
-                    // valid separator, signals end of length bytes
-                    break; // exit loop
-                } else {
-                    throw new IllegalArgumentException("Malformed netstring, missing ':'");
-                }
+        while (true) {
+            int thisByte = bytes.read();
+            if (thisByte == -1) { // end of stream
+                throw new EOFException("Malformed netstring, unexpected EOF in length block");
             }
-        } catch (NoSuchElementException e) {
-            throw new IllegalArgumentException("Malformed netstring, ran out of input, missing ':'");
+            Character c = (char)thisByte;
+            if (Character.isDigit(c)) {
+                lengthBytes.append(c);
+            } else if (c == ':') {
+                // valid separator, signals end of length bytes
+                break; // exit loop
+            } else {
+                throw new InvalidNetstringException("Malformed netstring, missing ':'");
+            }
         }
 
         // Parse the length bytes to determine how long the rest of the
@@ -113,18 +94,24 @@ public class Netstring {
 
         // Read length-many bytes of output
         byte[] result = new byte[length];
-        try {
-            for (int j = 0; j < length; j++) {
-                result[j] = bytes.next();
+        for (int j = 0; j < length; j++) {
+            int thisByte = bytes.read();
+            if (thisByte == -1) { // end of stream
+                throw new EOFException("Malformed netstring, unexpected EOF in data block");
             }
-            if ((char)(byte)bytes.next() != ',') {
-                throw new IllegalArgumentException("Malformed netstring, missing ','");
-            }
-        } catch (NoSuchElementException e) {
-            throw new IllegalArgumentException("Malformed netstring, ran out of input, missing ','");
+            result[j] = (byte)thisByte;
         }
 
-        // Return the decoded netstring, and the remaining bytes
-        return new DecodeResult(result, bytes);
+        // Expect a final comma
+        int thisByte = bytes.read();
+        if (thisByte == -1) { // end of stream
+            throw new EOFException("Malformed netstring, unexpected EOF when expecting trailing comma");
+        }
+        if ((char)thisByte != ',') {
+            throw new InvalidNetstringException("Malformed netstring, missing ','");
+        }
+
+        // Return the decoded netstring
+        return result;
     }
 }

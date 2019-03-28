@@ -22,6 +22,10 @@ class FutureQueue<E> {
         this.debt   = new LinkedBlockingDeque<CompletableFuture<E>>();
     }
 
+    public boolean isEmpty() {
+        return credit.isEmpty() && debt.isEmpty();
+    }
+
     public void send(E e) {
         if (debt.isEmpty()) {
             credit.add(e);
@@ -31,7 +35,7 @@ class FutureQueue<E> {
     }
 
     public Future<E> request() {
-        CompletableFuture<E> e = new CompletableFuture<E>();
+        var e = new CompletableFuture<E>();
         if (credit.isEmpty()) {
             debt.add(e);
             return e;

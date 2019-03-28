@@ -45,7 +45,7 @@ class NetstringStreamIterator implements Iterator<byte[]> {
         // there is a next thing to return, so in the true branch, we know that
         // nextResult will not be null
         if (this.hasNext()) {
-            byte[] result = this.nextResult;
+            var result = this.nextResult;
             this.nextResult = null;  // reset to null so next call pulls fresh
             return result;
         } else {

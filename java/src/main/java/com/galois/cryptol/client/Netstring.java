@@ -14,8 +14,8 @@ public class Netstring {
     public static void encodeTo(byte[] bytes, OutputStream output)
         throws IOException {
         // Calculate the array of length bytes
-        String lengthString = (Integer.valueOf(bytes.length)).toString();
-        ArrayList<Byte> lengthBytes = new ArrayList<Byte>();
+        var lengthString = (Integer.valueOf(bytes.length)).toString();
+        var lengthBytes = new ArrayList<Byte>();
         for (int j = 0; j < lengthString.length(); j++) {
             lengthBytes.add((byte)lengthString.charAt(j));
         }
@@ -36,13 +36,13 @@ public class Netstring {
         throws IOException {
         synchronized(bytes) {
             // Read digits representing the length of the string until a ':'
-            StringBuilder lengthBytes = new StringBuilder();
+            var lengthBytes = new StringBuilder();
             while (true) {
-                int thisByte = bytes.read();
+                var thisByte = bytes.read();
                 if (thisByte == -1) { // end of stream
                     throw new EOFException("Malformed netstring, unexpected EOF in length block");
                 }
-                Character c = (char)thisByte;
+                var c = (char)thisByte;
                 if (Character.isDigit(c)) {
                     lengthBytes.append(c);
                 } else if (c == ':') {
@@ -55,10 +55,10 @@ public class Netstring {
 
             // Parse the length bytes to determine how long the rest of the
             // netstring will be
-            Integer length = Integer.parseInt(lengthBytes.toString());
+            var length = Integer.parseInt(lengthBytes.toString());
 
             // Read length-many bytes of output
-            byte[] result = new byte[length];
+            var result = new byte[length];
             for (int j = 0; j < length; j++) {
                 int thisByte = bytes.read();
                 if (thisByte == -1) { // end of stream
@@ -68,7 +68,7 @@ public class Netstring {
             }
 
             // Expect a final comma
-            int thisByte = bytes.read();
+            var thisByte = bytes.read();
             if (thisByte == -1) { // end of stream
                 throw new EOFException("Malformed netstring, unexpected EOF when expecting trailing comma");
             }

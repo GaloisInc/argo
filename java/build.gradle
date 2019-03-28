@@ -29,7 +29,7 @@ dependencies {
 }
 
 application {
-    mainClassName = 'com.galois.cryptol.client.compost.Main'
+    mainClassName = 'com.galois.cryptol.client.Main'
 }
 
 run {

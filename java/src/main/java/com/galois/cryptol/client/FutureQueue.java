@@ -9,39 +9,59 @@ import java.util.concurrent.*;
 
 class FutureQueue<E> {
 
-    private BlockingQueue<E> credit;
-    private BlockingQueue<CompletableFuture<E>> debt;
+    private Queue<E> credit;
+    private Queue<CompletableFuture<E>> debt;
+    private boolean closed = false;
 
     public FutureQueue() {
-        this.credit = new LinkedBlockingDeque<E>();
-        this.debt   = new LinkedBlockingDeque<CompletableFuture<E>>();
+        this.credit = new ArrayDeque<E>();
+        this.debt   = new ArrayDeque<CompletableFuture<E>>();
     }
 
     public FutureQueue(Collection<? extends E> c) {
-        this.credit = new LinkedBlockingDeque<E>(c);
-        this.debt   = new LinkedBlockingDeque<CompletableFuture<E>>();
+        this.credit = new ArrayDeque<E>(c);
+        this.debt   = new ArrayDeque<CompletableFuture<E>>();
     }
 
-    public boolean isEmpty() {
+    public synchronized boolean isEmpty() {
         return credit.isEmpty() && debt.isEmpty();
     }
 
-    public void send(E e) {
-        if (debt.isEmpty()) {
-            credit.add(e);
-        } else {
-            debt.remove().complete(e);
+    public synchronized void send(E e) {
+        if (!closed) {
+            if (debt.isEmpty()) {
+                credit.add(e);
+            } else {
+                debt.remove().complete(e);
+            }
         }
     }
 
-    public Future<E> request() {
+    public synchronized Future<E> request() {
         var e = new CompletableFuture<E>();
-        if (credit.isEmpty()) {
-            debt.add(e);
-            return e;
+        if (!closed) {
+            if (credit.isEmpty()) {
+                debt.add(e);
+                return e;
+            } else {
+                e.complete(credit.remove());
+                return e;
+            }
         } else {
-            e.complete(credit.remove());
+            e.cancel(false);
             return e;
         }
     }
+
+    public synchronized void shutdown() {
+        if (!closed) {
+            for (Future<E> f : debt) {
+                f.cancel(false);
+            }
+            debt.clear();
+            credit.clear();
+            closed = true;
+        }
+    }
+
 }

@@ -1,8 +1,11 @@
 {-# Language OverloadedStrings #-}
-module Argo.Socket (serveSocket) where
+module Argo.Socket
+  ( serveSocket
+  , serveSocketDynamic
+  ) where
 
 import Control.Concurrent       (forkFinally)
-import Control.Concurrent.Async (forConcurrently_)
+import Control.Concurrent.Async (Async, async, forConcurrently_)
 import Control.Exception        (displayException)
 import Control.Monad            (forever)
 import System.IO                (Handle, IOMode(ReadWriteMode), hClose, hPutStrLn)
@@ -41,6 +44,31 @@ serveSocket logH hostName serviceName app =
        do s <- startListening info
           forever (acceptClient logH app s)
 
+-- | Start listening on a single, dynamically assigned port.
+-- The resulting worker thread and dynamically assigned port
+-- number are returned on success.
+serveSocketDynamic ::
+  Maybe Handle  {- ^ logging handle    -} ->
+  N.HostName    {- ^ IP address        -} ->
+  App s         {- ^ RPC application   -} ->
+  IO (Async (), N.PortNumber)
+serveSocketDynamic logH hostName app =
+
+     -- resolve listener addresses, throws exception on failure
+  do let hint1 =
+           N.defaultHints
+             { N.addrFlags      = [N.AI_NUMERICHOST, N.AI_ADDRCONFIG]
+             , N.addrSocketType = N.Stream }
+     infos <- N.getAddrInfo (Just hint1) (Just hostName) Nothing
+     info  <- case infos of
+       [info] -> return info
+       _      -> fail "serveSocketDynamic: host resolved as too many addresses"
+
+     s <- startListening info
+     a <- async (forever (acceptClient logH app s))
+     p <- N.socketPort s
+     return (a, p)
+
 
 -- | Create a new listening socket for this address.
 startListening :: N.AddrInfo -> IO N.Socket
@@ -63,7 +91,7 @@ acceptClient logH app s =
      h         <- N.socketToHandle c ReadWriteMode
      -- don't use c after this, it is owned by h
 
-     log ("CONNECT: " ++ show peer ++ "\n")
+     log ("CONNECT: " ++ show peer)
      forkFinally (serveHandlesNS logH h h app) $ \res ->
        do case res of
             Right _ -> log ("CLOSE: " ++ show peer)

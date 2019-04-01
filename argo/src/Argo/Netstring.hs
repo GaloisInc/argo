@@ -64,21 +64,28 @@ encodeNetstring (Netstring bytes) =
 -- "5:hello,"
 
 
--- | Read a netstring from a handle
-netstringFromHandle :: Handle -> IO Netstring
+-- | Read a netstring from a handle. Return Nothing on end of file.
+netstringFromHandle :: Handle -> IO (Maybe Netstring)
 netstringFromHandle h =
-  do l <- len Nothing
-     bytes <- BS.hGet h l
-     c <- BS.head <$> BS.hGet h 1
-     if isComma c
-       then return (Netstring bytes)
-       else throwIO (MissingComma (Just c))
+  do eof <- hIsEOF h
+     if eof
+       then return Nothing
+       else Just <$> getNetString
   where
+    getNetString =
+      do l     <- len Nothing
+         bytes <- BS.hGet h l
+         c     <- BS.head <$> BS.hGet h 1
+         if isComma c
+           then return (Netstring bytes)
+           else throwIO (MissingComma (Just c))
+
     len Nothing =
       do x <- BS.head <$> BS.hGet h 1
          if not (isDigit x)
            then throwIO BadLength
            else len (Just (asDigit x))
+
     len (Just acc) =
       do x <- BS.head <$> BS.hGet h 1
          if | isColon x -> return acc

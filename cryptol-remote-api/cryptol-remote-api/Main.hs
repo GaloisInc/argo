@@ -19,7 +19,8 @@ import System.IO (stdout)
 
 import Argo
 import Argo.Socket
-
+import Argo.HistoryWrapper
+import Argo.CacheTree
 
 import CryptolServer
 import CryptolServer.Call
@@ -31,8 +32,7 @@ import CryptolServer.Names
 import CryptolServer.Sat
 import CryptolServer.TypeCheck
 
-import Argo.HistoryWrapper
-import Argo.CacheTree
+
 
 main :: IO ()
 main =

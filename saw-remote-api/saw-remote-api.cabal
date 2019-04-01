@@ -18,7 +18,12 @@ extra-source-files:  CHANGELOG.md
 
 common deps
   build-depends: base >=4.11.1.0 && <4.13,
+                 aeson,
+                 argo,
+                 directory,
+                 lens,
                  saw-script,
+                 text
   default-language: Haskell2010
 
 library
@@ -28,6 +33,7 @@ library
 executable saw-remote-api
   import: deps
   main-is:             Main.hs
+  build-depends:       optparse-applicative
   -- other-modules:
   -- other-extensions:
   hs-source-dirs: saw-remote-api

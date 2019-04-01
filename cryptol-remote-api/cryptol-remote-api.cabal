@@ -38,8 +38,10 @@ library
     CryptolServer.Data.Type
     CryptolServer.EvalExpr
     CryptolServer.Exceptions
+    CryptolServer.FocusedModule
     CryptolServer.LoadModule
     CryptolServer.Names
+    CryptolServer.Sat
     CryptolServer.TypeCheck
 
 executable cryptol-remote-api

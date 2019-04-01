@@ -15,7 +15,7 @@ import Test.QuickCheck.Instances.Text
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
-import Argo.JSONRPC
+import Argo
 import Argo.Netstring
 
 

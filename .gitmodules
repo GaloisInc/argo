@@ -1,6 +1,6 @@
 [submodule "deps/cryptol"]
 	path = deps/cryptol
-	url = git@github.com:GaloisInc/cryptol.git
+	url = https://github.com/GaloisInc/cryptol.git
 [submodule "deps/saw-script"]
 	path = deps/saw-script
 	url = https://github.com/GaloisInc/saw-script.git

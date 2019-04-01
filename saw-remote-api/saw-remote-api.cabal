@@ -31,3 +31,13 @@ executable saw-remote-api
   -- other-modules:
   -- other-extensions:
   hs-source-dirs: saw-remote-api
+
+test-suite test-saw-remote-api
+  import:              deps
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Test.hs
+  build-depends:       cryptol-remote-api,
+                       quickcheck-instances,
+                       tasty,
+                       tasty-quickcheck,

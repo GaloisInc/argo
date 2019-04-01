@@ -14,8 +14,6 @@ import Test.QuickCheck.Instances.Text
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
-import Argo.JSONRPC
-import Argo.Netstring
 import CryptolServer.Call
 
 import Debug.Trace

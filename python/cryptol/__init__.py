@@ -1,12 +1,13 @@
 import base64
 import socket
 import json
-
+import types
+import sys
 
 from . import netstring
-from . import types
+from . import cryptoltypes
 
-__all__ = ['types']
+__all__ = ['cryptoltypes']
 
 # Current status:
 #  It can currently connect to a server over a socket. Try the following:
@@ -175,6 +176,16 @@ class CryptolNames(CryptolQuery):
     def process_result(self, res):
         return res
 
+class CryptolFocusedModule(CryptolQuery):
+    def __init__(self, connection):
+        self.method = 'focused module'
+        self.params = {}
+        super(CryptolQuery, self).__init__(connection)
+
+    def process_result(self, res):
+        return res
+
+
 # Must be boxed separately to enable sharing of connections
 class IDSource:
     def __init__(self):
@@ -276,7 +287,7 @@ class CryptolConnection(object):
         return self.most_recent_result
 
     def call(self, fun, *args):
-        encoded_args = [types.CryptolType().from_python(a) for a in args]
+        encoded_args = [cryptoltypes.CryptolType().from_python(a) for a in args]
         self.most_recent_result = CryptolCall(self, fun, encoded_args)
         return self.most_recent_result
 
@@ -286,6 +297,10 @@ class CryptolConnection(object):
 
     def names(self):
         self.most_recent_result = CryptolNames(self)
+        return self.most_recent_result
+
+    def focused_module(self):
+        self.most_recent_result = CryptolFocusedModule(self)
         return self.most_recent_result
 
 class CryptolFunctionHandle:
@@ -303,21 +318,48 @@ class CryptolFunctionHandle:
     def __call__(self, *args):
         current_type = self.schema
         remaining_args = args
-        arg_types = types.argument_types(current_type)
+        arg_types = cryptoltypes.argument_types(current_type)
         current_expr = self.name
         found_args = []
         while len(arg_types) > 0 and len(remaining_args) > 0:
             found_args.append(arg_types[0].from_python(remaining_args[0]))
             current_expr = {'expression': 'call', 'function': self.name, 'arguments': found_args}
             ty = self.connection.check_type(current_expr).result()
-            current_type = types.to_schema(ty)
-            arg_types = types.argument_types(current_type)
+            current_type = cryptoltypes.to_schema(ty)
+            arg_types = cryptoltypes.argument_types(current_type)
             remaining_args = remaining_args[1:]
         return from_cryptol_arg(self.connection.evaluate_expression(current_expr).result()['value'])
 
 
 def cry(string):
-    return types.CryptolLiteral(string)
+    return cryptoltypes.CryptolLiteral(string)
+
+class CryptolModule(types.ModuleType):
+    def __init__(self, connection):
+        self.connection = connection.snapshot()
+        name = connection.focused_module().result()
+        if name["module"] is None:
+            raise ValueError("Provided connection is not in a module")
+        super(CryptolModule, self).__init__(name["module"])
+
+        for x in self.connection.names().result():
+            if 'documentation' in x:
+                setattr(self, x['name'],
+                        CryptolFunctionHandle(self.connection,
+                                              x['name'],
+                                              x['type string'],
+                                              cryptoltypes.to_schema(x['type']),
+                                              x['documentation']))
+            else:
+                setattr(self, x['name'],
+                        CryptolFunctionHandle(self.connection,
+                                              x['name'],
+                                              x['type string'],
+                                              cryptoltypes.to_schema(x['type'])))
+
+
+def add_cryptol_module(name, connection):
+    sys.modules[name] = CryptolModule(connection)
 
 class CryptolContext:
     def __init__(self, connection):
@@ -329,14 +371,14 @@ class CryptolContext:
                     CryptolFunctionHandle(self.connection,
                                           x['name'],
                                           x['type string'],
-                                          types.to_schema(x['type']),
+                                          cryptoltypes.to_schema(x['type']),
                                           x['documentation'])
             else:
                 self._defined[x['name']] = \
                     CryptolFunctionHandle(self.connection,
                                           x['name'],
                                           x['type string'],
-                                          types.to_schema(x['type']))
+                                          cryptoltypes.to_schema(x['type']))
 
     def __dir__(self):
         return self._defined.keys()

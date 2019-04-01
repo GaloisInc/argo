@@ -18,6 +18,8 @@ import Argo.Socket
 import Argo.HistoryWrapper
 import Argo.CacheTree
 
+import SAWServer
+
 main :: IO ()
 main =
   do opts <- Opt.execParser options
@@ -43,18 +45,16 @@ transport = socket <|> stdio
     stdio = Opt.flag StdIONetstring StdIONetstring (Opt.long "stdio" <> Opt.help "Use netstrings over stdio")
 
 
-validateServerState :: () -> IO Bool
-validateServerState () = pure True
 
 realMain :: Options -> IO ()
 realMain opts =
-  do initSt <- pure () -- initialState
+  do initSt <- initialState
      cache  <- newCache initSt
      theApp <- mkApp (HistoryWrapper cache) (historyWrapper validateServerState sawMethods)
      case transportOpt opts of
        StdIONetstring -> serveStdIONS theApp
        SocketNetstring (Port p) -> serveSocket (Just stdout) "127.0.0.1" p theApp
 
-sawMethods :: [(Text, MethodType, JSON.Value -> Method () JSON.Value)]
+sawMethods :: [(Text, MethodType, JSON.Value -> Method SAWState JSON.Value)]
 sawMethods =
   []

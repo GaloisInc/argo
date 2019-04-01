@@ -20,20 +20,26 @@ common deps
   build-depends: base >=4.11.1.0 && <4.13,
                  aeson,
                  argo,
+                 containers >= 0.6 && < 0.7,
                  directory,
                  lens,
+                 saw-core,
                  saw-script,
-                 text
+                 text,
+                 vector >= 0.12 && < 0.13
   default-language: Haskell2010
 
 library
   import: deps
   hs-source-dirs: src
+  exposed-modules: SAWServer,
+                   SAWServer.Term
 
 executable saw-remote-api
   import: deps
   main-is:             Main.hs
-  build-depends:       optparse-applicative
+  build-depends:       optparse-applicative,
+                       saw-remote-api
   -- other-modules:
   -- other-extensions:
   hs-source-dirs: saw-remote-api

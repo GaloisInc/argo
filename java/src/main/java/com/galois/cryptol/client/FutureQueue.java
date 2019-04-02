@@ -9,8 +9,9 @@ import java.util.concurrent.*;
 
 class FutureQueue<E> {
 
-    private Queue<E> credit;
-    private Queue<CompletableFuture<E>> debt;
+    // Invariant: if credit is not empty, debt is empty, and vice-versa
+    private final Queue<E> credit;
+    private final Queue<CompletableFuture<E>> debt;
     private boolean closed = false;
 
     public FutureQueue() {
@@ -23,45 +24,61 @@ class FutureQueue<E> {
         this.debt   = new ArrayDeque<CompletableFuture<E>>();
     }
 
-    public synchronized boolean isEmpty() {
-        return credit.isEmpty() && debt.isEmpty();
+    public boolean isEmpty() {
+        return this.balance() == 0;
     }
 
-    public synchronized void send(E e) {
+    public boolean isClosed() {
+        return this.closed;
+    }
+
+    public int balance() {
+        return credit.size() - debt.size();
+    }
+
+    // Put a value into the queue, either fulfilling a waiting promise, or
+    // adding to the list of items yet to be dequeued
+    public void put(E e) throws IllegalStateException {
         if (!closed) {
             if (debt.isEmpty()) {
                 credit.add(e);
             } else {
                 debt.remove().complete(e);
             }
+        } else {
+            throw new IllegalStateException();
         }
     }
 
-    public synchronized Future<E> request() {
+    // Return a future corresponding to the next element of the queue, whether
+    // or not that element has already been added to the queue. Once the
+    // corresponding put() has been executed, the future will be fulfilled with
+    // that value.
+    public Future<E> takeFuture() {
         var e = new CompletableFuture<E>();
-        if (!closed) {
-            if (credit.isEmpty()) {
+        if (credit.isEmpty()) {
+            if (!closed) {
                 debt.add(e);
-                return e;
             } else {
-                e.complete(credit.remove());
-                return e;
+                e.cancel(false);
             }
         } else {
-            e.cancel(false);
-            return e;
+            e.complete(credit.remove());
         }
+        return e;
     }
 
-    public synchronized void shutdown() {
-        if (!closed) {
-            for (Future<E> f : debt) {
-                f.cancel(false);
-            }
-            debt.clear();
-            credit.clear();
-            closed = true;
-        }
+    // Closes the queue, so that future put() operations don't do anything, and
+    // cancels all debt futures, including any produced by future calls to
+    // takeFuture()
+    // This is totally fine to run multiple times
+    public boolean close() {
+        // Cancel all existing debt, causing all waiting promises to throw
+        // exceptions immediately
+        for (var f : debt) f.cancel(false);
+        this.debt.clear();
+        boolean wasClosed = this.isClosed();
+        this.closed = true;
+        return wasClosed;
     }
-
 }

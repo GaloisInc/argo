@@ -16,9 +16,7 @@ class IDSource implements Iterator<Integer> {
     }
 
     // We make sure it's thread safe by synchronizing on increment
-    public Integer next() {
-        synchronized(this) {
-            return fresh++;
-        }
+    public synchronized Integer next() {
+        return fresh++;
     }
 }

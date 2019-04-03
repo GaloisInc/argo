@@ -4,7 +4,7 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 
-import com.galois.cryptol.client.Netstring;
+import com.galois.cryptol.client.Netstring.*;
 
 class NetstringIterator implements Iterator<byte[]> {
 

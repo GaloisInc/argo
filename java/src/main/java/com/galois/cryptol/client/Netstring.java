@@ -6,8 +6,6 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.io.*;
 
-import com.galois.cryptol.client.InvalidNetstringException;
-
 public class Netstring {
 
     // Encode a byte array in netstring format and output to a stream
@@ -30,10 +28,20 @@ public class Netstring {
         output.write((byte)',');
     }
 
+    public static class InvalidNetstringException extends RuntimeException {
+        static final long serialVersionUID = 0;
+        InvalidNetstringException() {
+            super();
+        }
+        InvalidNetstringException(String s) {
+            super(s);
+        }
+    }
+
     // Given an input stream of bytes, decode one netstring from it, and return
     // the resultant array of bytes
     public static byte[] decodeFrom(InputStream bytes)
-        throws IOException {
+        throws IOException, InvalidNetstringException {
         synchronized(bytes) {
             // Read digits representing the length of the string until a ':'
             var lengthBytes = new StringBuilder();

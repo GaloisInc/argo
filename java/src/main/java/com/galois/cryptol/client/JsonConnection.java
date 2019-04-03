@@ -14,52 +14,119 @@ class JsonConnection {
     private final String version = "2.0";
 
     private final IDSource ids;
-    private final Function<JsonValue, Boolean> requests;
+    private final Consumer<JsonValue> requests;
     private final ConcurrentMultiQueue<JsonValue, JsonValue> responses;
     private final Thread checkResponses;
+    private volatile Throwable connectionException = null;
 
-    public JsonConnection(Function<JsonValue, Boolean> output, Iterator<JsonValue> input) {
+    public static class JsonRpcResponseException extends RuntimeException {
+        public static final long serialVersionUID = 0;
+        public JsonRpcResponseException(String e) { super(e); }
+        public JsonRpcResponseException(Throwable e) { super(e); }
+        public JsonRpcResponseException(String m, Throwable e) { super(m, e); }
+    }
+
+    public static class JsonRpcRequestException extends Exception {
+        public static final long serialVersionUID = 0;
+        public JsonRpcRequestException(String e) { super(e); }
+        public JsonRpcRequestException(Throwable e) { super(e); }
+        public JsonRpcRequestException(String m, Throwable e) { super(m, e); }
+    }
+
+    public JsonConnection(Consumer<JsonValue> output, Iterator<JsonValue> input) {
         this.ids = new IDSource();
         this.requests = output;
         this.responses = new ConcurrentMultiQueue<JsonValue, JsonValue>();
+
         this.checkResponses = new Thread(() -> {
             try {
                 input.forEachRemaining(value -> {
-                        JsonValue id = value.asObject().get("id");
-                        if (id != null) {
+                        try {
+                            JsonValue id = value.asObject().get("id");
                             this.responses.send(id, value);
-                        } else {
-                            var err = "Response missing id field";
-                            throw new UnsupportedOperationException(err);
+                        } catch (NullPointerException e) {
+                            var msg = "Response object is missing id field";
+                            throw new JsonRpcResponseException(msg, e);
+                        } catch (UnsupportedOperationException e) {
+                            var msg = "Response is not an object";
+                            throw new JsonRpcResponseException(msg, e);
                         }
                     });
-            } catch (IllegalStateException e) {
-                // The multiqueue was closed, so we stopped iterating
+            } finally {
+                // After exhausting the input, close the multiqueue
+                this.responses.close();
             }
-            // After exhausting the input, close the multiqueue
-            this.responses.close();
         });
+
+        // If the thread dies from an exception, write it out so we can re-throw
+        this.checkResponses.setUncaughtExceptionHandler((thread, e) -> {
+                // If there's an exception, close the queue so remaining
+                // requests can be processed, but future ones will throw
+                this.responses.close();
+                this.connectionException = e;
+            });
+
         this.checkResponses.start();
     }
 
-    public JsonValue call(String method, JsonValue params) throws IOException {
+    public JsonValue call(String method, JsonValue params)
+        throws JsonRpcException, JsonRpcRequestException {
         JsonValue id = Json.value(ids.next());
         JsonValue message = Json.object()
             .add("jsonrpc", version)
             .add("id", id)
             .add("method", method)
             .add("params", params);
-        boolean success = requests.apply(message);
-        if (success) {
-            return responses.request(id);
-            // TODO: process this to actually return the internal result!
-        } else {
-            throw new IOException("Exception during method call");
+        try {
+            requests.accept(message);
+        } catch (Exception e) {
+            throw new JsonRpcRequestException("Exception during method call", e);
         }
+        try {
+            JsonObject response = responses.request(id).asObject();
+            JsonValue result = response.get("result");
+            if (result != null) {
+                if (response.get("error") == null) {
+                    return result;
+                } else {
+                    throw new JsonRpcResponseException("Both result and error");
+                }
+            } else {
+                JsonObject error = response.get("error").asObject();
+                try {
+                    int code = error.get("code").asInt();
+                    String errorMessage = error.get("message").asString();
+                    JsonValue data = error.get("data");
+                    throw new JsonRpcException(code, errorMessage, data);
+                } catch (NullPointerException e) {
+                    var msg = "Missing field in error response object";
+                    throw new JsonRpcResponseException(msg, e);
+                }
+            }
+        } catch (UnsupportedOperationException e) {
+            throw new JsonRpcResponseException(e);
+        } catch (NullPointerException e) {
+            var msg = "Invalid format in response object";
+            throw new JsonRpcResponseException(msg);
+        } catch (QueueClosedException e) {
+            if (connectionException == null) {
+                throw new JsonRpcResponseException("Connection closed");
+            } else {
+                throw new JsonRpcResponseException(connectionException);
+            }
+        }
+    }
+
+    public void notify(String method, JsonValue params)
+        throws JsonRpcRequestException {
+        JsonValue message = Json.object()
+            .add("jsonrpc", version)
+            .add("method", method)
+            .add("params", params);
+        requests.accept(message);
     }
 
     public void close() throws InterruptedException {
         this.responses.close();
-        this.checkResponses.join();
     }
 }

@@ -4,7 +4,7 @@ import java.util.*;
 import java.util.function.*;
 import java.util.concurrent.*;
 
-import com.galois.cryptol.client.FutureQueue;
+import com.galois.cryptol.client.*;
 
 class ConcurrentMultiQueue<C, M> {
 
@@ -18,15 +18,15 @@ class ConcurrentMultiQueue<C, M> {
         channels = new ConcurrentHashMap<C, FutureQueue<M>>();
     }
 
-    public void send(C channelName, M message) throws IllegalStateException {
+    public void send(C channelName, M message) throws QueueClosedException {
         channels.compute(channelName, (_k, q) -> {
                 if (closed) {
-                    throw new IllegalStateException();
+                    throw new QueueClosedException();
                 } else {
                     // Otherwise, open up a new channel if there wasn't one
                     q = (q != null) ? q : new FutureQueue<M>();
                     // Send the message on the channel
-                    q.put(message);
+                    q.put(message);  // might throw QueueClosedException()
                     // Determine whether to keep the channel around
                     if (q.isEmpty()) {
                         // If the queue is inert now, remove it
@@ -40,7 +40,7 @@ class ConcurrentMultiQueue<C, M> {
             });
     }
 
-    public M request(C channelName) throws CancellationException {
+    public M request(C channelName) throws QueueClosedException {
         // We'll communicate the queue's response through this side channel
         // The wrapper object hack is necessary to get around the restriction
         // that things touched inside lambdas must be "effectively final"; see:
@@ -73,6 +73,8 @@ class ConcurrentMultiQueue<C, M> {
         // Wait on the returned future (may throw a CancellationException)
         try {
             return response.future.get();
+        } catch (CancellationException e) {
+            throw new QueueClosedException();
         // These cases should be impossible because nothing interrupts any of
         // the futures within the FutureQueue
         } catch (InterruptedException e) {

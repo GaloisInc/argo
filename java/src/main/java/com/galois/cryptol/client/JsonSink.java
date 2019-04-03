@@ -7,17 +7,17 @@ import java.io.UnsupportedEncodingException;
 import com.eclipsesource.json.*;
 import com.galois.cryptol.client.*;
 
-class JsonSink implements Function<JsonValue, Boolean> {
+class JsonSink implements Consumer<JsonValue> {
 
-    private Function<byte[], Boolean> withBytes;
+    private Consumer<byte[]> withBytes;
 
-    public JsonSink(Function<byte[], Boolean> withBytes) {
+    public JsonSink(Consumer<byte[]> withBytes) {
         this.withBytes = withBytes;
     }
 
-    public Boolean apply(JsonValue value) {
+    public void accept(JsonValue value) {
         try {
-            return withBytes.apply(value.toString().getBytes("UTF-8"));
+            withBytes.accept(value.toString().getBytes("UTF-8"));
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException("UTF-8 should always be supported");
         }

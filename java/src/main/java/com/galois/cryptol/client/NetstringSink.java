@@ -5,7 +5,7 @@ import java.io.*;
 
 import com.galois.cryptol.client.*;
 
-class NetstringSink implements Function<byte[], Boolean> {
+class NetstringSink implements Consumer<byte[]> {
 
     private final OutputStream output;
 
@@ -13,12 +13,16 @@ class NetstringSink implements Function<byte[], Boolean> {
         this.output = output;
     }
 
-    public synchronized Boolean apply(byte[] bytes) {
+    public static class NetstringSinkException extends RuntimeException {
+        public static final long serialVersionUID = 0;
+        public NetstringSinkException(Throwable e) { super(e); }
+    }
+
+    public synchronized void accept(byte[] bytes) {
         try {
             Netstring.encodeTo(bytes, output);
-            return true;
         } catch (IOException e) {
-            return false;
+            throw new NetstringSinkException(e);
         }
     }
 }

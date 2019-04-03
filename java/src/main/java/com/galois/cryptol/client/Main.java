@@ -5,6 +5,8 @@ import java.io.*;
 import java.net.*;
 import java.util.concurrent.*;
 import java.util.function.*;
+import com.galois.cryptol.client.JsonConnection.JsonRpcRequestException;
+import com.galois.cryptol.client.JsonConnection.JsonRpcResponseException;
 
 import com.eclipsesource.json.*;
 import com.galois.cryptol.client.*;
@@ -25,7 +27,7 @@ class Main {
             // Wrap these streams in a JsonConnection
             Iterator<JsonValue> responses =
                 new JsonIterator(new NetstringIterator(input));
-            Function<JsonValue, Boolean> requests =
+            Consumer<JsonValue> requests =
                 new JsonSink(new NetstringSink(output));
             var connection = new JsonConnection(requests, responses);
             // Interact
@@ -35,7 +37,18 @@ class Main {
                 String method = userInput.nextLine();
                 System.out.print("Parameters (JSON): ");
                 JsonObject params = Json.parse(userInput.nextLine()).asObject();
-                System.out.println(connection.call(method, params));
+                try {
+                    System.out.println(connection.call(method, params));
+                } catch (JsonRpcException e) {
+                    System.out.println("Error " + e.code + ": " + e.message +
+                                       "\n" + e.data);
+                } catch (JsonRpcRequestException e) {
+                    System.out.println("Couldn't send to server: " + e);
+                    break;
+                } catch (JsonRpcResponseException e) {
+                    System.out.println("Server returned invalid response: " + e);
+                    break;
+                }
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -70,7 +83,7 @@ class Main {
                                 System.out.println(channel + ": SEND " + message);
                             }
                             message++;
-                        } catch (IllegalStateException e) {
+                        } catch (QueueClosedException e) {
                             break;
                         }
                     }
@@ -103,7 +116,7 @@ class Main {
                                 for (int i = 0; i < channel; i++) System.out.print("\t\t\t\t");
                                 System.out.println("\t\t" + channel + ": RECEIVE " + message);
                             }
-                        } catch (CancellationException e) {
+                        } catch (QueueClosedException e) {
                             break;
                         }
                     }

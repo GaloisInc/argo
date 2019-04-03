@@ -38,7 +38,7 @@ class FutureQueue<E> {
 
     // Put a value into the queue, either fulfilling a waiting promise, or
     // adding to the list of items yet to be dequeued
-    public void put(E e) throws IllegalStateException {
+    public void put(E e) throws QueueClosedException {
         if (!closed) {
             if (debt.isEmpty()) {
                 credit.add(e);
@@ -46,7 +46,7 @@ class FutureQueue<E> {
                 debt.remove().complete(e);
             }
         } else {
-            throw new IllegalStateException();
+            throw new QueueClosedException();
         }
     }
 

@@ -7,6 +7,7 @@ import java.util.concurrent.*;
 import java.util.function.*;
 import com.galois.cryptol.client.JsonConnection.JsonRpcRequestException;
 import com.galois.cryptol.client.JsonConnection.JsonRpcResponseException;
+import com.galois.cryptol.client.JsonConnection.JsonRpcConnectionException;
 
 import com.eclipsesource.json.*;
 import com.galois.cryptol.client.*;
@@ -21,7 +22,19 @@ class Main {
     public static void netJSON() {
         try {
             // Acquire TCP streams from server
-            Socket socket = new Socket("127.0.0.1", 8080);
+            Socket socket;
+            while (true) {
+                try {
+                    socket = new Socket("127.0.0.1", 8080);
+                    break;
+                } catch (ConnectException e) {
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException f) {
+                        throw new IOException(f);
+                    }
+                }
+            }
             InputStream input = socket.getInputStream();
             OutputStream output = socket.getOutputStream();
             // Wrap these streams in a JsonConnection
@@ -33,25 +46,34 @@ class Main {
             // Interact
             var userInput = new Scanner(System.in);
             while (true) {
-                System.out.print("Method name: ");
-                String method = userInput.nextLine();
-                System.out.print("Parameters (JSON): ");
-                JsonObject params = Json.parse(userInput.nextLine()).asObject();
                 try {
-                    System.out.println(connection.call(method, params));
-                } catch (JsonRpcException e) {
-                    System.out.println("Error " + e.code + ": " + e.message +
-                                       "\n" + e.data);
-                } catch (JsonRpcRequestException e) {
-                    System.out.println("Couldn't send to server: " + e);
-                    break;
-                } catch (JsonRpcResponseException e) {
-                    System.out.println("Server returned invalid response: " + e);
-                    break;
+                    System.out.print("Method name: ");
+                    String method = userInput.nextLine();
+                    System.out.print("Parameters (JSON object): ");
+                        JsonObject params = Json.parse(userInput.nextLine()).asObject();
+                    try {
+                        System.out.println(connection.call(method, params));
+                    } catch (JsonRpcException e) {
+                        System.out.println("Error " + e.code + ": " + e.message +
+                                        "\nError data: " + e.data);
+                    } catch (JsonRpcConnectionException e) {
+                        System.out.println("Server disconnected: " + e);
+                        break;
+                    } catch (JsonRpcRequestException e) {
+                        System.out.println("Couldn't send to server: " + e);
+                        break;
+                    } catch (JsonRpcResponseException e) {
+                        System.out.println("Server returned invalid response: " + e);
+                        break;
+                    }
+                } catch (UnsupportedOperationException e) {
+                    System.out.println("Not a JSON object!");
+                } catch (ParseException e) {
+                    System.out.println("Invalid JSON!");
                 }
             }
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            System.out.println("Error in TCP server connection: " + e);
         }
     }
 

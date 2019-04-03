@@ -33,6 +33,13 @@ class JsonConnection {
         public JsonRpcRequestException(String m, Throwable e) { super(m, e); }
     }
 
+    public static class JsonRpcConnectionException extends JsonRpcRequestException {
+        public static final long serialVersionUID = 0;
+        public JsonRpcConnectionException(String e) { super(e); }
+        public JsonRpcConnectionException(Throwable e) { super(e); }
+        public JsonRpcConnectionException(String m, Throwable e) { super(m, e); }
+    }
+
     public JsonConnection(Consumer<JsonValue> output, Iterator<JsonValue> input) {
         this.ids = new IDSource();
         this.requests = output;
@@ -70,7 +77,9 @@ class JsonConnection {
     }
 
     public JsonValue call(String method, JsonValue params)
-        throws JsonRpcException, JsonRpcRequestException {
+        throws JsonRpcException,
+               JsonRpcRequestException,
+               JsonRpcConnectionException {
         JsonValue id = Json.value(ids.next());
         JsonValue message = Json.object()
             .add("jsonrpc", version)
@@ -80,7 +89,7 @@ class JsonConnection {
         try {
             requests.accept(message);
         } catch (Exception e) {
-            throw new JsonRpcRequestException("Exception during method call", e);
+            throw new JsonRpcRequestException(e);
         }
         try {
             JsonObject response = responses.request(id).asObject();
@@ -110,7 +119,7 @@ class JsonConnection {
             throw new JsonRpcResponseException(msg);
         } catch (QueueClosedException e) {
             if (connectionException == null) {
-                throw new JsonRpcResponseException("Connection closed");
+                throw new JsonRpcConnectionException("Connection closed");
             } else {
                 throw new JsonRpcResponseException(connectionException);
             }

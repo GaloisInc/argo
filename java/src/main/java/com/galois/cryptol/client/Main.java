@@ -61,10 +61,10 @@ class Main {
                         break;
                     } catch (JsonRpcRequestException e) {
                         System.out.println("Couldn't send to server: " + e);
-                        break;
+                        throw new RuntimeException(e);
                     } catch (JsonRpcResponseException e) {
                         System.out.println("Server returned invalid response: " + e);
-                        break;
+                        throw new RuntimeException(e);
                     }
                 } catch (UnsupportedOperationException e) {
                     System.out.println("Not a JSON object!");

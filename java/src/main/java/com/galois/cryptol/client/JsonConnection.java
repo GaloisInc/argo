@@ -15,7 +15,7 @@ class JsonConnection {
 
     private final IDSource ids;
     private final Consumer<JsonValue> requests;
-    private final ConcurrentMultiQueue<JsonValue, JsonValue> responses;
+    private final ConcurrentMultiQueue<JsonValue, JsonResponse> responses;
     private final Thread checkResponses;
     private volatile Throwable connectionException = null;
 
@@ -33,27 +33,81 @@ class JsonConnection {
         public JsonRpcRequestException(String m, Throwable e) { super(m, e); }
     }
 
-    public static class JsonRpcConnectionException extends JsonRpcRequestException {
+    public static class JsonRpcConnectionException
+        extends JsonRpcRequestException {
         public static final long serialVersionUID = 0;
         public JsonRpcConnectionException(String e) { super(e); }
         public JsonRpcConnectionException(Throwable e) { super(e); }
         public JsonRpcConnectionException(String m, Throwable e) { super(m, e); }
     }
 
+    public static class JsonResponse {
+        private final JsonValue result;
+        private final JsonRpcException error;
+
+        JsonResponse(JsonValue result) {
+            this.result = result;
+            this.error = null;
+        }
+
+        JsonResponse(JsonRpcException error) {
+            this.result = null;
+            this.error = error;
+        }
+
+        public JsonValue result() throws JsonRpcException {
+            if (this.result != null) {
+                return this.result;
+            } else {
+                throw this.error;
+            }
+        }
+
+        public static JsonResponse parse(JsonObject object) {
+            try {
+                JsonValue result  = object.get("result");  // might be null
+                JsonValue error  = object.get("error");    // might be null
+                if (result != null && error != null) {
+                    var msg = "Both response and error fields are present";
+                    throw new JsonRpcResponseException(msg + ": " + object);
+                } else if (error != null) {
+                    return new JsonResponse(new JsonRpcException(error.asObject()));
+                } else if (result != null) {
+                    return new JsonResponse(result);
+                } else {
+                    var msg = "Neither response nor error fields are present";
+                    throw new JsonRpcResponseException(msg + ": " + object);
+                }
+            } catch (UnsupportedOperationException e) {
+                var msg = "Error field is not an object";
+                throw new JsonRpcResponseException(msg + ": " + object, e);
+            }
+        }
+    }
+
     public JsonConnection(Consumer<JsonValue> output, Iterator<JsonValue> input) {
         this.ids = new IDSource();
         this.requests = output;
-        this.responses = new ConcurrentMultiQueue<JsonValue, JsonValue>();
+        this.responses = new ConcurrentMultiQueue<JsonValue, JsonResponse>();
 
         this.checkResponses = new Thread(() -> {
             try {
                 input.forEachRemaining(value -> {
                         try {
-                            JsonValue id = value.asObject().get("id");
-                            this.responses.send(id, value);
-                        } catch (NullPointerException e) {
-                            var msg = "Response object is missing id field";
-                            throw new JsonRpcResponseException(msg, e);
+                            JsonObject object = value.asObject();
+                            JsonValue id = object.get("id");
+                            JsonResponse response = JsonResponse.parse(object);
+                            if (id != null) {
+                                responses.send(id, response);
+                            } else {
+                                try {
+                                    JsonValue result = response.result();
+                                    var msg = "Non-error response had no id: " + object;
+                                    throw new JsonRpcResponseException(msg);
+                                } catch (JsonRpcException error) {
+                                    // TODO: log unidentified response errors?
+                                }
+                            }
                         } catch (UnsupportedOperationException e) {
                             var msg = "Response is not an object";
                             throw new JsonRpcResponseException(msg, e);
@@ -92,31 +146,7 @@ class JsonConnection {
             throw new JsonRpcRequestException(e);
         }
         try {
-            JsonObject response = responses.request(id).asObject();
-            JsonValue result = response.get("result");
-            if (result != null) {
-                if (response.get("error") == null) {
-                    return result;
-                } else {
-                    throw new JsonRpcResponseException("Both result and error");
-                }
-            } else {
-                JsonObject error = response.get("error").asObject();
-                try {
-                    int code = error.get("code").asInt();
-                    String errorMessage = error.get("message").asString();
-                    JsonValue data = error.get("data");
-                    throw new JsonRpcException(code, errorMessage, data);
-                } catch (NullPointerException e) {
-                    var msg = "Missing field in error response object";
-                    throw new JsonRpcResponseException(msg, e);
-                }
-            }
-        } catch (UnsupportedOperationException e) {
-            throw new JsonRpcResponseException(e);
-        } catch (NullPointerException e) {
-            var msg = "Invalid format in response object";
-            throw new JsonRpcResponseException(msg);
+            return responses.request(id).result();
         } catch (QueueClosedException e) {
             if (connectionException == null) {
                 throw new JsonRpcConnectionException("Connection closed");

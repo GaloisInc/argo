@@ -445,15 +445,21 @@ serveHandlesNS hLog hIn hOut app =
   where
     loop :: (BS.ByteString -> IO ()) -> MVar Handle -> IO ()
     loop output input =
-      do line <- withMVar input $ netstringFromHandle
-         log line
+      do mbLine <- withMVar input $ netstringFromHandle
+         case mbLine of
+           Nothing   -> return ()
+           Just line ->
+             do processLine output line
+                loop output input
+
+    processLine output line =
+      do log line
          forkIO $
-               (case JSON.eitherDecode (decodeNetstring line) of
-                  Left msg -> throwIO (parseError (T.pack msg))
-                  Right req -> handleRequest output app req)
-                 `catch` reportError output
-                 -- TODO add a catch for other errors that throws a JSON-RPC wrapper
-         loop output input
+           case JSON.eitherDecode (decodeNetstring line) of
+             Left  msg -> throwIO (parseError (T.pack msg))
+             Right req -> handleRequest output app req
+           `catch` reportError output
+           -- TODO add a catch for other errors that throws a JSON-RPC wrapper
 
     reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
     reportError output exn =

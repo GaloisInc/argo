@@ -23,38 +23,46 @@ common deps
     text                 ^>= 1.2.3,
     unordered-containers ^>= 0.2,
     vector               ^>= 0.12,
+
   default-language:    Haskell2010
 
 library
   import:              deps
-  exposed-modules:     CryptolServer
-                       CryptolServer.Call
-                       CryptolServer.ChangeDir
-                       CryptolServer.Data.Expression
-                       CryptolServer.Data.Type
-                       CryptolServer.EvalExpr
-                       CryptolServer.Exceptions
-                       CryptolServer.FocusedModule
-                       CryptolServer.LoadModule
-                       CryptolServer.Names
-                       CryptolServer.Sat
-                       CryptolServer.TypeCheck
   hs-source-dirs:      src
+
+  exposed-modules:
+    CryptolServer
+    CryptolServer.Call
+    CryptolServer.ChangeDir
+    CryptolServer.Data.Expression
+    CryptolServer.Data.Type
+    CryptolServer.EvalExpr
+    CryptolServer.Exceptions
+    CryptolServer.FocusedModule
+    CryptolServer.LoadModule
+    CryptolServer.Names
+    CryptolServer.Sat
+    CryptolServer.TypeCheck
 
 executable cryptol-remote-api
   import:              deps
-  build-depends:       optparse-applicative ^>= 0.14,
-                       cryptol-remote-api,
-                       sbv == 8.0
   main-is:             Main.hs
   hs-source-dirs:      cryptol-remote-api
+
+  build-depends:
+    cryptol-remote-api,
+    optparse-applicative ^>= 0.14,
+    async                ^>= 2.2.1,
+    sbv                   == 8.0,
 
 test-suite test-cryptol-remote-api
   import:              deps
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Test.hs
-  build-depends:       cryptol-remote-api,
-                       quickcheck-instances,
-                       tasty,
-                       tasty-quickcheck,
+
+  build-depends:
+    cryptol-remote-api,
+    quickcheck-instances ^>= 0.3.19,
+    tasty                ^>= 1.2.1,
+    tasty-quickcheck     ^>= 0.10,

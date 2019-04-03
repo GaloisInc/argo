@@ -4,6 +4,7 @@
 module Main where
 
 import Control.Applicative
+import Control.Concurrent.Async (wait)
 import Control.Exception
 import Control.Lens hiding ((.=))
 import Control.Monad (ap)
@@ -18,7 +19,8 @@ import System.IO (stdout)
 
 import Argo
 import Argo.Socket
-
+import Argo.HistoryWrapper
+import Argo.CacheTree
 
 import CryptolServer
 import CryptolServer.Call
@@ -30,8 +32,7 @@ import CryptolServer.Names
 import CryptolServer.Sat
 import CryptolServer.TypeCheck
 
-import Argo.HistoryWrapper
-import Argo.CacheTree
+
 
 main :: IO ()
 main =
@@ -46,16 +47,25 @@ data Options =
 
 newtype Port = Port String
 
-data TransportOpt = StdIONetstring | SocketNetstring Port
+data TransportOpt
+  = StdIONetstring              -- ^ NetStrings over standard IO
+  | SocketNetstring Port        -- ^ NetStrings over specific port (all hosts)
+  | SocketNetstringDyn String   -- ^ NetStrings over specific host (dynamic port)
 
 options :: Opt.ParserInfo Options
 options = Opt.info (Options <$> transport) (Opt.fullDesc)
 
 transport :: Opt.Parser TransportOpt
-transport = socket <|> stdio
+transport = dyn4 <|> dyn6 <|> socket <|> stdio <|> pure StdIONetstring
   where
-    socket = SocketNetstring . Port <$> Opt.strOption (Opt.long "socket" <> Opt.metavar "PORT" )
-    stdio = Opt.flag StdIONetstring StdIONetstring (Opt.long "stdio" <> Opt.help "Use netstrings over stdio")
+    socket      = SocketNetstring . Port <$>
+                    Opt.strOption (Opt.long "socket" <> Opt.metavar "PORT" )
+
+    stdio       = Opt.flag' StdIONetstring (Opt.long "stdio" <> Opt.help "Use netstrings over stdio")
+
+    dyn4        = Opt.flag' (SocketNetstringDyn "127.0.0.1") (Opt.long "dynamic4")
+
+    dyn6        = Opt.flag' (SocketNetstringDyn "::1"      ) (Opt.long "dynamic")
 
 
 realMain :: Options -> IO ()
@@ -66,6 +76,10 @@ realMain opts =
      case transportOpt opts of
        StdIONetstring -> serveStdIONS theApp
        SocketNetstring (Port p) -> serveSocket (Just stdout) "127.0.0.1" p theApp
+       SocketNetstringDyn h ->
+         do (a, p) <- serveSocketDynamic (Just stdout) h theApp
+            putStrLn ("PORT " ++ show p)
+            wait a
 
 
 cryptolMethods :: [(Text, MethodType, JSON.Value -> Method ServerState JSON.Value)]

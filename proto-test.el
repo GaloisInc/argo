@@ -176,7 +176,7 @@ errors."
 (defun proto-test-cryptol-visible-names ()
   "Get the list of available names from Cryptol."
   (interactive)
-  (proto-test--cryptol-send "visible names" '()
+  (proto-test--cryptol-send "visible names" (proto-test-hash)
                             (lambda (res)
                               (message "%s" res))))
 

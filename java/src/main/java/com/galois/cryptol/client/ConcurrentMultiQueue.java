@@ -6,7 +6,7 @@ import java.util.concurrent.*;
 
 import com.galois.cryptol.client.FutureQueue;
 
-class ConcurrentKeyedChannel<C, M> {
+class ConcurrentMultiQueue<C, M> {
 
     // A mapping from channel name to future queue for messages
     private final Map<C, FutureQueue<M>> channels;
@@ -14,7 +14,7 @@ class ConcurrentKeyedChannel<C, M> {
     // Flag determining whether new messages will be accepted; monotonic
     private volatile boolean closed = false;
 
-    public ConcurrentKeyedChannel() {
+    public ConcurrentMultiQueue() {
         channels = new ConcurrentHashMap<C, FutureQueue<M>>();
     }
 

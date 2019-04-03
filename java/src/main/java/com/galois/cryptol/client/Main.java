@@ -4,26 +4,38 @@ import java.util.*;
 import java.io.*;
 import java.net.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
+import java.util.function.*;
 
 import com.eclipsesource.json.*;
 import com.galois.cryptol.client.*;
 
 class Main {
     public static void main(String[] args) {
-        keyedChannel(1, 1, 5);
+        netJSON();
     }
 
     // Connect as a client to localhost:8080 and receive netstring-encoded JSON
     // objects until the server closes, printing each to stdout
     public static void netJSON() {
         try {
-            InputStream input =
-                new Socket("127.0.0.1", 8080).getInputStream();
-            Iterator<JsonValue> jsonInputs =
-                new JsonByteArrayIterator(new NetstringStreamIterator(input));
-            while (jsonInputs.hasNext()) {
-                System.out.println(jsonInputs.next());
+            // Acquire TCP streams from server
+            Socket socket = new Socket("127.0.0.1", 8080);
+            InputStream input = socket.getInputStream();
+            OutputStream output = socket.getOutputStream();
+            // Wrap these streams in a JsonConnection
+            Iterator<JsonValue> responses =
+                new JsonIterator(new NetstringIterator(input));
+            Function<JsonValue, Boolean> requests =
+                new JsonSink(new NetstringSink(output));
+            var connection = new JsonConnection(requests, responses);
+            // Interact
+            var userInput = new Scanner(System.in);
+            while (true) {
+                System.out.print("Method name: ");
+                String method = userInput.nextLine();
+                System.out.print("Parameters (JSON): ");
+                JsonObject params = Json.parse(userInput.nextLine()).asObject();
+                System.out.println(connection.call(method, params));
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -34,9 +46,9 @@ class Main {
     // thread per channel, each with random delay between send() and request()
     // calls, displaying the method calls in a table. The simulation lasts for
     // the timeout parameter, in seconds
-    public static void keyedChannel(int channelCount, double meanDelay, int timeout) {
+    public static void multiQueueDemo(int channelCount, double meanDelay, int timeout) {
         // Channels
-        var channels = new ConcurrentKeyedChannel<Integer, Integer>();
+        var channels = new ConcurrentMultiQueue<Integer, Integer>();
 
         // Sending threads
         var sending = new ArrayList<Runnable>();

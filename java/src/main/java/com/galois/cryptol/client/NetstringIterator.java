@@ -6,13 +6,13 @@ import java.util.*;
 
 import com.galois.cryptol.client.Netstring;
 
-class NetstringStreamIterator implements Iterator<byte[]> {
+class NetstringIterator implements Iterator<byte[]> {
 
-    private InputStream input;          // The stream of concatenated netstrings
+    private final InputStream input;    // The stream of concatenated netstrings
     private boolean finished = false;   // Whether we have exhausted the stream
     private byte[] nextResult = null;   // The next result to release, if any
 
-    public NetstringStreamIterator(InputStream input) {
+    public NetstringIterator(InputStream input) {
         this.input = input;
     }
 

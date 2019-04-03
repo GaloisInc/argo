@@ -6,12 +6,12 @@ import java.util.*;
 
 import com.eclipsesource.json.*;
 
-class JsonByteArrayIterator implements Iterator<JsonValue> {
+class JsonIterator implements Iterator<JsonValue> {
 
     // A wrapped byte array iterator, which we'll treat as UTF-8 text
     private Iterator<byte[]> byteArrays;
 
-    public JsonByteArrayIterator(Iterator<byte[]> byteArrays) {
+    public JsonIterator(Iterator<byte[]> byteArrays) {
         this.byteArrays = byteArrays;
     }
 

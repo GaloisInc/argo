@@ -333,7 +333,7 @@ instance JSON.ToJSON Request where
 handleRequest :: forall s . (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
 handleRequest out app req =
   case M.lookup method $ view appMethods app of
-    Nothing -> throwIO $ methodNotFound method
+    Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (Command, m) ->
       withRequestID $
       do answer <- modifyMVar theState $ runMethod (m params)

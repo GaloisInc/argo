@@ -103,21 +103,8 @@ withState ::
   Method (HistoryWrapper s) Value
 withState k params =
   do hs               <- getState
-     (steps, params') <- extractStepsM params
+     let (steps, params') = extractSteps params
      liftIO (k hs steps params')
-
--- | Extract the state field from a parameter object or raise
--- a JSONRPC error.
-extractStepsM ::
-  Value                             {- ^ raw parameters object       -} ->
-  Method s ([(Text, Value)], Value) {- ^ steps, remaining parameters -}
-extractStepsM v =
-  case extractSteps v of
-    Just x  -> return x
-    Nothing -> raise (makeJSONRPCException
-                        32000
-                        "Missing state field"
-                        (Nothing :: Maybe ()))
 
 ------------------------------------------------------------------------
 
@@ -127,13 +114,13 @@ stateKey = "state"
 answerKey :: Text
 answerKey = "answer"
 
-extractSteps :: Value -> Maybe ([(Text, Value)], Value)
+extractSteps :: Value -> ([(Text, Value)], Value)
 extractSteps v
   | Object o      <- v
   , Just history  <- HashMap.lookup stateKey o
   , Success steps <- fromJSON history
-  , let v' = Object (HashMap.delete stateKey o) = Just (steps, v')
-extractSteps _ = Nothing
+  , let v' = Object (HashMap.delete stateKey o) = (steps, v')
+extractSteps v = ([], v)  -- no state field, so default to empty history
 
 -- | Combine a command result and the current sequence of steps
 -- together into a single JSON value.

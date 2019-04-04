@@ -15,17 +15,17 @@ class JsonRpcException extends Exception {
         this.data = data;
     }
 
-    public JsonRpcException(JsonObject error) throws JsonRpcResponseException {
+    public JsonRpcException(JsonObject error) throws InvalidRpcResponseException {
         try {
             this.code = error.get("code").asInt();
             this.message = error.get("message").asString();
             this.data = error.get("data");
         } catch (NullPointerException e) {
-            var msg = "Missing field in error response object";
-            throw new JsonRpcResponseException(msg, e);
+            var msg = "Missing field in error response object: " + error;
+            throw new InvalidRpcResponseException(msg, e);
         } catch (UnsupportedOperationException e) {
-            var msg = "Bad format for error response object";
-            throw new JsonRpcResponseException(msg, e);
+            var msg = "Bad format for error response object: " + error;
+            throw new InvalidRpcResponseException(msg, e);
         }
     }
 }

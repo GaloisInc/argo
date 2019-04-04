@@ -8,6 +8,7 @@ import java.util.function.*;
 
 import com.eclipsesource.json.*;
 import com.galois.cryptol.client.*;
+import com.galois.cryptol.client.Call.*;
 
 class JsonConnection {
 
@@ -15,9 +16,8 @@ class JsonConnection {
 
     private final IDSource ids;
     private final Consumer<JsonValue> requests;
-    private final ConcurrentMultiQueue<JsonValue, JsonResponse> responses;
+    private final ConcurrentMultiQueue<JsonValue, JsonResponse> responseQueue;
     private final Thread checkResponses;
-    private volatile Throwable connectionException = null;
 
     public static class JsonRpcResponseException extends RuntimeException {
         public static final long serialVersionUID = 0;
@@ -26,19 +26,16 @@ class JsonConnection {
         public JsonRpcResponseException(String m, Throwable e) { super(m, e); }
     }
 
-    public static class JsonRpcRequestException extends Exception {
+    public static class UnhandledRpcException extends RuntimeException {
         public static final long serialVersionUID = 0;
-        public JsonRpcRequestException(String e) { super(e); }
-        public JsonRpcRequestException(Throwable e) { super(e); }
-        public JsonRpcRequestException(String m, Throwable e) { super(m, e); }
+        public UnhandledRpcException(JsonRpcException e) { super(e); }
     }
 
-    public static class JsonRpcConnectionException
-        extends JsonRpcRequestException {
+    public static class ConnectionException extends Exception {
         public static final long serialVersionUID = 0;
-        public JsonRpcConnectionException(String e) { super(e); }
-        public JsonRpcConnectionException(Throwable e) { super(e); }
-        public JsonRpcConnectionException(String m, Throwable e) { super(m, e); }
+        public ConnectionException(String e) { super(e); }
+        public ConnectionException(Throwable e) { super(e); }
+        public ConnectionException(String m, Throwable e) { super(m, e); }
     }
 
     public static class JsonResponse {
@@ -85,87 +82,102 @@ class JsonConnection {
         }
     }
 
-    public JsonConnection(Consumer<JsonValue> output, Iterator<JsonValue> input) {
+    public JsonConnection(Consumer<JsonValue> requests,
+                          Iterator<JsonValue> responses,
+                          Consumer<JsonRpcException> handleUnidentified,
+                          Consumer<JsonRpcResponseException> handleBadResponse,
+                          Consumer<Exception> handleOtherException) {
         this.ids = new IDSource();
-        this.requests = output;
-        this.responses = new ConcurrentMultiQueue<JsonValue, JsonResponse>();
+        this.requests = requests;
+        this.responseQueue = new ConcurrentMultiQueue<JsonValue, JsonResponse>();
 
         this.checkResponses = new Thread(() -> {
             try {
-                input.forEachRemaining(value -> {
+                responses.forEachRemaining(value -> {
+                        JsonObject object;
                         try {
-                            JsonObject object = value.asObject();
-                            JsonValue id = object.get("id");
-                            JsonResponse response = JsonResponse.parse(object);
-                            if (id != null) {
-                                responses.send(id, response);
-                            } else {
-                                try {
-                                    JsonValue result = response.result();
-                                    var msg = "Non-error response had no id: " + object;
-                                    throw new JsonRpcResponseException(msg);
-                                } catch (JsonRpcException error) {
-                                    // TODO: log unidentified response errors?
-                                }
-                            }
+                            object = value.asObject();
                         } catch (UnsupportedOperationException e) {
                             var msg = "Response is not an object";
-                            throw new JsonRpcResponseException(msg, e);
+                            var err = new JsonRpcResponseException(msg, e);
+                            handleBadResponse.accept(err);
+                            return;
+                        }
+                        JsonValue id = object.get("id");
+                        JsonResponse response = JsonResponse.parse(object);
+                        if (id != null) {
+                            responseQueue.send(id, response);
+                        } else {
+                            try {
+                                JsonValue result = response.result();
+                                var msg = "Non-error response had no id: " + object;
+                                var err = new JsonRpcResponseException(msg);
+                                handleBadResponse.accept(err);
+                            } catch (JsonRpcException err) {
+                                handleUnidentified.accept(err);
+                            }
                         }
                     });
+            } catch (QueueClosedException e) {
+                // This means responseQueue.send(id, response) discovered that
+                // responseQueue was closed, which means someone called close()
+                // on the connection
+            } catch (Exception e) {
+                handleOtherException.accept(e);
             } finally {
-                // After exhausting the input, close the multiqueue
-                this.responses.close();
+                // After exhausting the requests, close the multiqueue
+                responseQueue.close();
             }
         });
 
-        // If the thread dies from an exception, write it out so we can re-throw
-        this.checkResponses.setUncaughtExceptionHandler((thread, e) -> {
-                // If there's an exception, close the queue so remaining
-                // requests can be processed, but future ones will throw
-                this.responses.close();
-                this.connectionException = e;
-            });
-
+        // Start the background thread
         this.checkResponses.start();
     }
 
-    public JsonValue call(String method, JsonValue params)
-        throws JsonRpcException,
-               JsonRpcRequestException,
-               JsonRpcConnectionException {
+    public <O, E extends Exception> O call(Call<O, E> call)
+        throws E, ConnectionException {
         JsonValue id = Json.value(ids.next());
         JsonValue message = Json.object()
             .add("jsonrpc", version)
             .add("id", id)
-            .add("method", method)
-            .add("params", params);
+            .add("method", call.method())
+            .add("params", call.params());
         try {
-            requests.accept(message);
+            synchronized(requests) {
+                requests.accept(message);
+            }
         } catch (Exception e) {
-            throw new JsonRpcRequestException(e);
+            throw new ConnectionException(e);
         }
         try {
-            return responses.request(id).result();
-        } catch (QueueClosedException e) {
-            if (connectionException == null) {
-                throw new JsonRpcConnectionException("Connection closed");
-            } else {
-                throw new JsonRpcResponseException(connectionException);
+            return call.decodeResult(responseQueue.request(id).result());
+        } catch (JsonRpcException e) {
+            try {
+                return call.handleException(e);
+            } catch (UnexpectedRpcException f) {
+                throw new UnhandledRpcException(e);
             }
+        } catch (QueueClosedException e) {
+            throw new ConnectionException("Connection closed");
         }
     }
 
-    public void notify(String method, JsonValue params)
-        throws JsonRpcRequestException {
+    public void notify(Notification notification)
+        throws ConnectionException {
         JsonValue message = Json.object()
             .add("jsonrpc", version)
-            .add("method", method)
-            .add("params", params);
-        requests.accept(message);
+            .add("method", notification.method())
+            .add("params", notification.params());
+        try {
+            synchronized(requests) {
+                requests.accept(message);
+            }
+        } catch (Exception e) {
+            throw new ConnectionException(e);
+        }
     }
 
-    public void close() throws InterruptedException {
-        this.responses.close();
+    public void close() {
+        this.responseQueue.close();
     }
 }

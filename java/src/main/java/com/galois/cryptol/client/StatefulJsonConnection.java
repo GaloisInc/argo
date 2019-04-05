@@ -6,29 +6,29 @@ import java.util.*;
 
 class StatefulJsonConnection extends JsonConnection {
 
-    private JsonValue state = null;
+    private JsonValue currentState;
 
-    //TODO: need to be able to copy state, support concurrent access to
-    //connection, so it can't be an extension, needs to be a wrapper
-
-    public static class State {
-        private final JsonValue state;
-        private State(JsonValue state) { this.state = new JsonValue(state); }
+    public class State {
+        private final JsonValue s;
+        private State() { this.s = currentState; }
     }
+
+    public State getState() { return new State(); }
+
+    public void setState(State state) { currentState = state.s; }
 
     public StatefulJsonConnection(
                 Consumer<JsonValue> requests,
                 Iterator<JsonValue> responses,
-                Consumer<JsonRpcException> handleUnidentified,
-                Consumer<InvalidRpcResponseException> handleBadResponse,
-                Consumer<Exception> handleOtherException) {
-        super(requests, responses,
-              handleUnidentified,
-              handleBadResponse,
-              handleOtherException);
+                Function<Exception, Boolean> handleException) {
+        super(requests, responses, handleException);
+        this.currentState = null;
     }
 
-    public State getState() { return new State(state); }
+    public StatefulJsonConnection(StatefulJsonConnection connection) {
+        super(connection);
+        this.currentState = connection.currentState;
+    }
 
     public <O, E extends Exception> O call(Call<O, E> call)
         throws E, ConnectionException {
@@ -53,8 +53,8 @@ class StatefulJsonConnection extends JsonConnection {
         public JsonValue params() {
             try {
                 JsonValue notificationParams = notification.params();
-                if (state != null) {
-                    notificationParams.asObject().set("state", state);
+                if (currentState != null) {
+                    notificationParams.asObject().set("state", currentState);
                 }
                 return notificationParams;
             } catch (UnsupportedOperationException e) {
@@ -74,8 +74,8 @@ class StatefulJsonConnection extends JsonConnection {
         public JsonValue params() {
             try {
                 JsonValue callParams = call.params();
-                if (state != null) {
-                    callParams.asObject().set("state", state);
+                if (currentState != null) {
+                    callParams.asObject().set("state", currentState);
                 }
                 return callParams;
             } catch (UnsupportedOperationException e) {
@@ -86,7 +86,7 @@ class StatefulJsonConnection extends JsonConnection {
         public O decodeResult(JsonValue o) throws UnexpectedRpcResultException {
             try {
                 JsonObject callResult = o.asObject();
-                state = callResult.get("state");  // set the outer state!
+                currentState = callResult.get("state");  // set the outer state!
                 callResult.remove("state");
                 return call.decodeResult(callResult);
             } catch (UnsupportedOperationException e) {

@@ -20,58 +20,20 @@ class Main {
     public static void netJSON() {
         try {
             // Acquire TCP streams from server
-            Socket socket;
-            while (true) {
-                try {
-                    socket = new Socket("127.0.0.1", 8080);
-                    break;
-                } catch (ConnectException e) {
-                    try {
-                        Thread.sleep(500);
-                    } catch (InterruptedException f) {
-                        throw new IOException(f);
-                    }
-                }
+            Socket socket = new Socket("127.0.0.1", 8080);
+            CryptolConnection c =
+                new CryptolConnection(socket.getOutputStream(),
+                                      socket.getInputStream());
+            Scanner in = new Scanner(System.in);
+            System.out.print("Load module: ");
+            try {
+                c.loadModule(in.nextLine());
+            } catch (FileNotFoundException e) {
+                System.err.println(e);
             }
-            InputStream input = socket.getInputStream();
-            OutputStream output = socket.getOutputStream();
-            // Wrap these streams in a JsonConnection
-            Iterator<JsonValue> responses =
-                new JsonIterator(new NetstringIterator(input));
-            Consumer<JsonValue> requests =
-                new JsonSink(new NetstringSink(output));
-            JsonConnection connection =
-                new JsonConnection(requests,
-                                   responses,
-                                   e -> { },
-                                   e -> { },
-                                   e -> { });
-            // Interact
-            var userInput = new Scanner(System.in);
-            while (true) {
-                try {
-                    System.out.print("Method name: ");
-                    String method = userInput.nextLine();
-                    System.out.print("Parameters (JSON object): ");
-                        JsonObject params = Json.parse(userInput.nextLine()).asObject();
-                    // try {
-                    //     // Call the method?
-                    //     // System.out.println(connection.call(method, params));
-                    // } catch (JsonRpcException e) {
-                    //     System.out.println("Error " + e.code + ": " + e.message +
-                    //                        "\nError data: " + e.data);
-                    // } catch (ConnectionException e) {
-                    //     System.out.println("Server disconnected: " + e);
-                    //     break;
-                    // }
-                } catch (UnsupportedOperationException e) {
-                    System.out.println("Not a JSON object!");
-                } catch (ParseException e) {
-                    System.out.println("Invalid JSON!");
-                }
-            }
+            c.close();
         } catch (IOException e) {
-            System.out.println("Error in TCP server connection: " + e);
+            System.out.println("Error in server connection: " + e);
         }
     }
 

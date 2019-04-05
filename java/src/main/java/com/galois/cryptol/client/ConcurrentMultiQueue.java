@@ -84,10 +84,11 @@ class ConcurrentMultiQueue<C, M> {
         }
     }
 
-    // Shuts down all channels: all new input from send() is discarded, and all
-    // calls to request() become non-blocking, throwing CancellationExceptions
-    // immediately if there is no data on the channel to receive. Blocks until
-    // all messages have been removed, either by request() or clear().
+    // Shuts down all channels: all new input from send() throw exceptions, and
+    // all calls to request() become non-blocking, throwing
+    // QueueClosedExceptions immediately if there is no data on the channel to
+    // receive. Blocks until all messages have been removed, either by request()
+    // or clear().
     public void close() {
         closed = true; // no new channels will be formed after this
         channels.forEach((_k, q) -> q.close());  // close all existing channels

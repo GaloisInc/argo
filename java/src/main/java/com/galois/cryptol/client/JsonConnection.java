@@ -12,12 +12,11 @@ import com.galois.cryptol.client.Call.*;
 
 class JsonConnection {
 
-    private final String version = "2.0";
+    private static final String version = "2.0";
 
     private final IDSource ids;
     private final Consumer<JsonValue> requests;
     private final ConcurrentMultiQueue<JsonValue, JsonResponse> responseQueue;
-    private final Thread checkResponses;
 
     public static class InvalidRpcResponseException extends RuntimeException {
         public static final long serialVersionUID = 0;
@@ -91,48 +90,53 @@ class JsonConnection {
         }
     }
 
+    public JsonConnection(JsonConnection connection) {
+        this.ids = connection.ids;
+        this.requests = connection.requests;
+        this.responseQueue = connection.responseQueue;
+    }
+
     public JsonConnection(Consumer<JsonValue> requests,
                           Iterator<JsonValue> responses,
-                          Consumer<JsonRpcException> handleUnidentified,
-                          Consumer<InvalidRpcResponseException> handleBadResponse,
-                          Consumer<Exception> handleOtherException) {
+                          Function<Exception, Boolean> handleException) {
         this.ids = new IDSource();
         this.requests = requests;
         this.responseQueue = new ConcurrentMultiQueue<JsonValue, JsonResponse>();
 
-        this.checkResponses = new Thread(() -> {
+        Thread checkResponses = new Thread(() -> {
             try {
-                responses.forEachRemaining(value -> {
-                        JsonObject object;
+                boolean ok = true;
+                while (responses.hasNext() && ok) {
+                    JsonObject object;
+                    try {
+                        object = responses.next().asObject();
+                    } catch (UnsupportedOperationException e) {
+                        var msg = "Response is not an object";
+                        var err = new InvalidRpcResponseException(msg, e);
+                        ok = handleException.apply(err);  // continue?
+                        return;
+                    }
+                    JsonValue id = object.get("id");
+                    JsonResponse response = JsonResponse.parse(object);
+                    if (id != null) {
+                        responseQueue.send(id, response);
+                    } else {
                         try {
-                            object = value.asObject();
-                        } catch (UnsupportedOperationException e) {
-                            var msg = "Response is not an object";
-                            var err = new InvalidRpcResponseException(msg, e);
-                            handleBadResponse.accept(err);
-                            return;
+                            JsonValue result = response.result();
+                            var msg = "Non-error response had no id: " + object;
+                            var err = new InvalidRpcResponseException(msg);
+                            ok = handleException.apply(err);   // continue?
+                        } catch (JsonRpcException err) {
+                            ok = handleException.apply(err);  // continue?
                         }
-                        JsonValue id = object.get("id");
-                        JsonResponse response = JsonResponse.parse(object);
-                        if (id != null) {
-                            responseQueue.send(id, response);
-                        } else {
-                            try {
-                                JsonValue result = response.result();
-                                var msg = "Non-error response had no id: " + object;
-                                var err = new InvalidRpcResponseException(msg);
-                                handleBadResponse.accept(err);
-                            } catch (JsonRpcException err) {
-                                handleUnidentified.accept(err);
-                            }
-                        }
-                    });
+                    }
+                }
             } catch (QueueClosedException e) {
                 // This means responseQueue.send(id, response) discovered that
                 // responseQueue was closed, which means someone called close()
                 // on the connection
             } catch (Exception e) {
-                handleOtherException.accept(e);
+                handleException.apply(e);
             } finally {
                 // After exhausting the requests, close the multiqueue
                 responseQueue.close();
@@ -140,7 +144,7 @@ class JsonConnection {
         });
 
         // Start the background thread
-        this.checkResponses.start();
+        checkResponses.start();
     }
 
     public <O, E extends Exception> O call(Call<O, E> call)

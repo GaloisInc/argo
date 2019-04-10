@@ -75,9 +75,9 @@ realMain opts =
      theApp <- mkApp (HistoryWrapper cache) (historyWrapper validateServerState cryptolMethods)
      case transportOpt opts of
        StdIONetstring -> serveStdIONS theApp
-       SocketNetstring (Port p) -> serveSocket (Just stdout) "127.0.0.1" p theApp
+       SocketNetstring (Port p) -> serveSocket "127.0.0.1" p theApp
        SocketNetstringDyn h ->
-         do (a, p) <- serveSocketDynamic (Just stdout) h theApp
+         do (a, p) <- serveSocketDynamic h theApp
             putStrLn ("PORT " ++ show p)
             wait a
 

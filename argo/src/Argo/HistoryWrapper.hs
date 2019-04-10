@@ -44,7 +44,9 @@ extractCommand ::
   (Value -> Method s Value) ->
   Maybe (s -> Value -> IO s)
 extractCommand Query _ = Nothing
-extractCommand _     m = Just $ \s p -> fst <$> runMethod (m p) s
+extractCommand _     m = Just $ \s p -> fst <$> runMethod (m p) noLog s
+  where
+    noLog _ = return ()
 
 ------------------------------------------------------------------------
 
@@ -62,24 +64,24 @@ wrapMethod ::
   (Value -> Method (HistoryWrapper s) Value)
 
 wrapMethod commands validate name Query q =
-  withState $ \hs steps params ->
+  withState $ \logger hs steps params ->
   do cache            <- cacheLookup
                            (runHistoryCommand commands)
                            validate
                            (historyCache hs)
                            steps
-     (_, result)      <- runMethod (q params) (cacheRoot cache)
+     (_, result)      <- runMethod (q params) logger (cacheRoot cache)
      return $ Object (HashMap.fromList [("answer", result)])
 
 wrapMethod commands validate name methodType c =
-  withState $ \hs steps params ->
+  withState $ \logger hs steps params ->
   do let cmd           = (name, params)
      cache            <- cacheLookup
                            (runHistoryCommand commands)
                            validate
                            (historyCache hs)
                            steps
-     (s', result)     <- runMethod (c params) (cacheRoot cache)
+     (s', result)     <- runMethod (c params) logger (cacheRoot cache)
      _                <- cacheAdvance
                            (\_ _ -> return s')
                            (\_ -> return True)
@@ -97,14 +99,15 @@ wrapMethod commands validate name methodType c =
 -- and the raw parameters object compute the method that results a result
 -- value which is wrapped with any new steps.
 withState ::
-  (HistoryWrapper s -> [(Text, Value)] -> Value -> IO Value)
-    {- ^ continuation: state, steps, parameters object to result -} ->
+  ((Text -> IO ()) -> HistoryWrapper s -> [(Text, Value)] -> Value -> IO Value)
+    {- ^ continuation: logger, state, steps, parameters object to result -} ->
   Value {- ^ raw parameters object -} ->
   Method (HistoryWrapper s) Value
 withState k params =
   do hs               <- getState
+     logger           <- getDebugLogger
      (steps, params') <- extractStepsM params
-     liftIO (k hs steps params')
+     liftIO (k logger hs steps params')
 
 -- | Extract the state field from a parameter object or raise
 -- a JSONRPC error.

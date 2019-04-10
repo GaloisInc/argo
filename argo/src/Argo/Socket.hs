@@ -7,8 +7,11 @@ module Argo.Socket
 import Control.Concurrent       (forkFinally)
 import Control.Concurrent.Async (Async, async, forConcurrently_)
 import Control.Exception        (displayException)
+import Control.Lens             (view)
 import Control.Monad            (forever)
-import System.IO                (Handle, IOMode(ReadWriteMode), hClose, hPutStrLn)
+import Data.String              (IsString(..))
+import qualified Data.Text as T
+import System.IO                (Handle, IOMode(ReadWriteMode), hClose, hPutStrLn, stderr)
 import qualified Data.Map as Map
 
 import qualified Network.Socket as N
@@ -28,12 +31,11 @@ listenQueueDepth = 10
 -- A reasonable default host name is "::", and a reasonable default
 -- service name is a port number as a string, e.g. "10000".
 serveSocket ::
-  Maybe Handle  {- ^ logging handle    -} ->
   N.HostName    {- ^ host              -} ->
   N.ServiceName {- ^ port              -} ->
   App s         {- ^ rpc application   -} ->
   IO ()         {- ^ start application -}
-serveSocket logH hostName serviceName app =
+serveSocket hostName serviceName app =
 
      -- resolve listener addresses, throws exception on failure
   do infos <- N.getAddrInfo (Just hints) (Just hostName) (Just serviceName)
@@ -42,17 +44,16 @@ serveSocket logH hostName serviceName app =
      -- one per address family.
      forConcurrently_ infos $ \info ->
        do s <- startListening info
-          forever (acceptClient logH app s)
+          forever (acceptClient app s)
 
 -- | Start listening on a single, dynamically assigned port.
 -- The resulting worker thread and dynamically assigned port
 -- number are returned on success.
 serveSocketDynamic ::
-  Maybe Handle  {- ^ logging handle    -} ->
   N.HostName    {- ^ IP address        -} ->
   App s         {- ^ RPC application   -} ->
   IO (Async (), N.PortNumber)
-serveSocketDynamic logH hostName app =
+serveSocketDynamic hostName app =
 
      -- resolve listener addresses, throws exception on failure
   do let hint1 =
@@ -65,7 +66,7 @@ serveSocketDynamic logH hostName app =
        _      -> fail "serveSocketDynamic: host resolved as too many addresses"
 
      s <- startListening info
-     a <- async (forever (acceptClient logH app s))
+     a <- async (forever (acceptClient app s))
      p <- N.socketPort s
      return (a, p)
 
@@ -84,15 +85,15 @@ startListening addr =
 
 -- | Accept a new connection on the given listening socket and
 -- start processing rpc requests.
-acceptClient :: Maybe Handle -> App s -> N.Socket -> IO ()
-acceptClient logH app s =
+acceptClient :: App s -> N.Socket -> IO ()
+acceptClient app s =
 
   do (c, peer) <- N.accept s
      h         <- N.socketToHandle c ReadWriteMode
      -- don't use c after this, it is owned by h
 
      log ("CONNECT: " ++ show peer)
-     forkFinally (serveHandlesNS logH h h app) $ \res ->
+     forkFinally (serveHandlesNS (Just stderr) h h app) $ \res ->
        do case res of
             Right _ -> log ("CLOSE: " ++ show peer)
             Left e  -> log ("ERROR: " ++ show peer ++ " " ++ displayException e)
@@ -101,10 +102,8 @@ acceptClient logH app s =
      return ()
 
   where
-    log =
-      case logH of
-        Nothing -> const (return ())
-        Just h -> hPutStrLn h
+    log msg = hPutStrLn stderr msg
+
 
 
 -- | Hints used by 'serveSocket' specifying a stream socket intended for

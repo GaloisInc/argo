@@ -1,11 +1,11 @@
-package com.galois.cryptol.client;
+package com.galois.cryptol.client.connection.netstring;
 
 import java.util.function.*;
 import java.io.*;
 
-import com.galois.cryptol.client.*;
+import com.galois.cryptol.client.connection.netstring.*;
 
-class NetstringSink implements Consumer<byte[]> {
+public class NetstringSink implements Consumer<byte[]> {
 
     private final OutputStream output;
 

@@ -1,12 +1,12 @@
-package com.galois.cryptol.client;
+package com.galois.cryptol.client.connection.queue;
 
 import java.util.*;
 import java.util.function.*;
 import java.util.concurrent.*;
 
-import com.galois.cryptol.client.*;
+import com.galois.cryptol.client.connection.queue.*;
 
-class ConcurrentMultiQueue<C, M> {
+public class ConcurrentMultiQueue<C, M> {
 
     // A mapping from channel name to future queue for messages
     private final Map<C, FutureQueue<M>> channels;

@@ -1,13 +1,15 @@
-package com.galois.cryptol.client;
+package com.galois.cryptol.client.connection.queue;
 
 import java.util.*;
 import java.util.concurrent.*;
+
+import com.galois.cryptol.client.connection.*;
 
 // Queue returning futures for popped items: if the queue is empty when you pop
 // from it, the returned future will be fulfilled by a future insertion
 // operation
 
-class FutureQueue<E> {
+public class FutureQueue<E> {
 
     // Invariant: if credit is not empty, debt is empty, and vice-versa
     private final Queue<E> credit;

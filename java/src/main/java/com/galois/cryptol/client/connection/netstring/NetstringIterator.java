@@ -1,12 +1,12 @@
-package com.galois.cryptol.client;
+package com.galois.cryptol.client.connection.netstring;
 
 import java.io.*;
 import java.net.*;
 import java.util.*;
 
-import com.galois.cryptol.client.Netstring.*;
+import com.galois.cryptol.client.connection.netstring.*;
 
-class NetstringIterator implements Iterator<byte[]> {
+public class NetstringIterator implements Iterator<byte[]> {
 
     private final InputStream input;    // The stream of concatenated netstrings
     private boolean finished = false;   // Whether we have exhausted the stream

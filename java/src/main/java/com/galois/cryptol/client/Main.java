@@ -8,7 +8,7 @@ import java.util.function.*;
 
 import com.eclipsesource.json.*;
 import com.galois.cryptol.client.*;
-import com.galois.cryptol.client.JsonConnection.*;
+import com.galois.cryptol.client.connection.queue.*;
 
 class Main {
     public static void main(String[] args) {

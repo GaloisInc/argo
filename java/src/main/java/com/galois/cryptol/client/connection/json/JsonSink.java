@@ -1,13 +1,12 @@
-package com.galois.cryptol.client;
+package com.galois.cryptol.client.connection.json;
 
 import java.util.*;
 import java.util.function.*;
 import java.io.UnsupportedEncodingException;
 
 import com.eclipsesource.json.*;
-import com.galois.cryptol.client.*;
 
-class JsonSink implements Consumer<JsonValue> {
+public class JsonSink implements Consumer<JsonValue> {
 
     private Consumer<byte[]> withBytes;
 

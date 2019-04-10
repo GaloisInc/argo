@@ -1,10 +1,13 @@
-package com.galois.cryptol.client;
+package com.galois.cryptol.client.connection;
 
 import com.eclipsesource.json.*;
 import java.util.function.*;
 import java.util.*;
 
-class StatefulJsonConnection extends JsonConnection {
+import com.galois.cryptol.client.connection.*;
+import com.galois.cryptol.client.connection.json.*;
+
+public class Connection extends JsonConnection {
 
     private JsonValue currentState;
 
@@ -17,7 +20,7 @@ class StatefulJsonConnection extends JsonConnection {
 
     public void setState(State state) { currentState = state.s; }
 
-    public StatefulJsonConnection(
+    public Connection(
                 Consumer<JsonValue> requests,
                 Iterator<JsonValue> responses,
                 Function<Exception, Boolean> handleException) {
@@ -25,7 +28,7 @@ class StatefulJsonConnection extends JsonConnection {
         this.currentState = null;
     }
 
-    public StatefulJsonConnection(StatefulJsonConnection connection) {
+    public Connection(Connection connection) {
         super(connection);
         this.currentState = connection.currentState;
     }
@@ -83,20 +86,19 @@ class StatefulJsonConnection extends JsonConnection {
             }
         }
 
-        public O decodeResult(JsonValue o) throws UnexpectedRpcResultException {
+        public O decode(JsonValue o) {
             try {
                 JsonObject callResult = o.asObject();
-                currentState = callResult.get("state");  // set the outer state!
+                currentState = callResult.get("state");  // sets the outer state!
                 callResult.remove("state");
-                return call.decodeResult(callResult);
+                return call.decode(callResult);
             } catch (UnsupportedOperationException e) {
                 throw new IllegalArgumentException("Stateful call params not an object", e);
             }
         }
 
-        public O handleException(JsonRpcException e)
-            throws E, UnexpectedRpcException {
-            return call.handleException(e);
+        public E handle(JsonRpcException e) {
+            return call.handle(e);
         }
     }
 }

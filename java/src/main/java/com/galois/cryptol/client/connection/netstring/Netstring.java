@@ -1,4 +1,4 @@
-package com.galois.cryptol.client;
+package com.galois.cryptol.client.connection.netstring;
 
 import java.util.ArrayList;
 import java.util.ArrayDeque;

@@ -1,4 +1,4 @@
-package com.galois.cryptol.client;
+package com.galois.cryptol.client.connection.json;
 
 import java.io.*;
 import java.net.*;
@@ -6,7 +6,7 @@ import java.util.*;
 
 import com.eclipsesource.json.*;
 
-class JsonIterator implements Iterator<JsonValue> {
+public class JsonIterator implements Iterator<JsonValue> {
 
     // A wrapped byte array iterator, which we'll treat as UTF-8 text
     private Iterator<byte[]> byteArrays;

@@ -1,9 +1,10 @@
-package com.galois.cryptol.client;
+package com.galois.cryptol.client.connection;
 
-import com.galois.cryptol.client.JsonConnection.*;
+import com.galois.cryptol.client.connection.*;
+import com.galois.cryptol.client.connection.InvalidRpcResponseException;
 import com.eclipsesource.json.*;
 
-class JsonRpcException extends Exception {
+public class JsonRpcException extends Exception {
     public static final long serialVersionUID = 0;
     public final int code;
     public final String message;

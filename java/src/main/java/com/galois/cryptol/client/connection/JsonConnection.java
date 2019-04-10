@@ -1,52 +1,26 @@
-package com.galois.cryptol.client;
+package com.galois.cryptol.client.connection;
 
 import java.util.*;
 import java.io.*;
 import java.net.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 import java.util.function.*;
 
 import com.eclipsesource.json.*;
-import com.galois.cryptol.client.*;
-import com.galois.cryptol.client.Call.*;
 
-class JsonConnection {
+import com.galois.cryptol.client.connection.*;
+import com.galois.cryptol.client.connection.queue.*;
+
+public class JsonConnection {
 
     private static final String version = "2.0";
 
-    private final IDSource ids;
     private final Consumer<JsonValue> requests;
     private final ConcurrentMultiQueue<JsonValue, JsonResponse> responseQueue;
+    private final AtomicInteger nextId;
 
-    public static class InvalidRpcResponseException extends RuntimeException {
-        public static final long serialVersionUID = 0;
-        public InvalidRpcResponseException(String e) { super(e); }
-        public InvalidRpcResponseException(Throwable e) { super(e); }
-        public InvalidRpcResponseException(String m, Throwable e) { super(m, e); }
-    }
-
-    public static class UnhandledRpcException extends RuntimeException {
-        public static final long serialVersionUID = 0;
-        public UnhandledRpcException(JsonRpcException e) { super(e); }
-    }
-
-    public static class InvalidRpcCallResultException extends RuntimeException {
-        public static final long serialVersionUID = 0;
-        public final JsonValue invalidResult;
-        public InvalidRpcCallResultException (JsonValue value) {
-            super(value.toString());
-            this.invalidResult = value;
-        }
-    }
-
-    public static class ConnectionException extends Exception {
-        public static final long serialVersionUID = 0;
-        public ConnectionException(String e) { super(e); }
-        public ConnectionException(Throwable e) { super(e); }
-        public ConnectionException(String m, Throwable e) { super(m, e); }
-    }
-
-    public static class JsonResponse {
+    private static class JsonResponse {
         private final JsonValue result;
         private final JsonRpcException error;
 
@@ -91,7 +65,7 @@ class JsonConnection {
     }
 
     public JsonConnection(JsonConnection connection) {
-        this.ids = connection.ids;
+        this.nextId = connection.nextId;
         this.requests = connection.requests;
         this.responseQueue = connection.responseQueue;
     }
@@ -99,7 +73,7 @@ class JsonConnection {
     public JsonConnection(Consumer<JsonValue> requests,
                           Iterator<JsonValue> responses,
                           Function<Exception, Boolean> handleException) {
-        this.ids = new IDSource();
+        this.nextId = new AtomicInteger(0);
         this.requests = requests;
         this.responseQueue = new ConcurrentMultiQueue<JsonValue, JsonResponse>();
 
@@ -149,7 +123,7 @@ class JsonConnection {
 
     public <O, E extends Exception> O call(Call<O, E> call)
         throws E, ConnectionException {
-        JsonValue id = Json.value(ids.next());
+        JsonValue id = Json.value(nextId.getAndIncrement());
         JsonValue message = Json.object()
             .add("jsonrpc", version)
             .add("id", id)
@@ -163,17 +137,19 @@ class JsonConnection {
             throw new ConnectionException(e);
         }
         try {
-            JsonValue result = responseQueue.request(id).result();
-            try {
-                return call.decodeResult(result);
-            } catch (UnexpectedRpcResultException e) {
-                throw new InvalidRpcCallResultException(result);
+            JsonValue response = responseQueue.request(id).result();
+            O result = call.decode(response);
+            if (result == null) {
+                throw new InvalidRpcCallResultException(response);
+            } else {
+                return result;
             }
         } catch (JsonRpcException e) {
-            try {
-                return call.handleException(e);
-            } catch (UnexpectedRpcException f) {
-                throw new UnhandledRpcException(e);
+            E exception = call.handle(e);
+            if (exception == null) {
+            throw new UnhandledRpcException(e);
+            } else {
+                throw exception;
             }
         } catch (QueueClosedException e) {
             throw new ConnectionException("Connection closed");

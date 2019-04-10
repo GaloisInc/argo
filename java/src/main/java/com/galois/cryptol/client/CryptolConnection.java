@@ -6,11 +6,13 @@ import java.io.*;
 
 import com.eclipsesource.json.*;
 
-import com.galois.cryptol.client.JsonConnection.*;
+import com.galois.cryptol.client.connection.*;
+import com.galois.cryptol.client.connection.json.*;
+import com.galois.cryptol.client.connection.netstring.*;
 
-class CryptolConnection {
+public class CryptolConnection {
 
-    private final StatefulJsonConnection connection;
+    private final Connection connection;
     private final OutputStream output;
     private final InputStream input;
 
@@ -30,7 +32,7 @@ class CryptolConnection {
             e -> { System.err.println(e); return false; };
         // Initialize the connection
         connection =
-            new StatefulJsonConnection(requests, responses, logAndQuit);
+            new Connection(requests, responses, logAndQuit);
     }
 
     // Close the connection
@@ -55,26 +57,33 @@ class CryptolConnection {
         }
     }
 
-    // The available methods:
+    // How to make a new call:
+
+    private abstract class CryptolCall<O> implements Call<O, IOException> {
+
+        private String method;     // <--- fill me in!
+        private JsonValue params;  // <--- fill me in!
+
+        public abstract O decode(JsonValue v);  // <--- implement me!
+
+        @Override public String method() { return method; }
+        @Override public JsonValue params() { return params; }
+        @Override
+        public IOException handle(JsonRpcException e) {
+            // FIXME
+            return null;
+        }
+    }
+
+    // The calls available:
 
     public void loadModule(String file) throws IOException {
-        call(new Call<Void, FileNotFoundException>() {
-                public String method() { return "load module"; }
-                public JsonValue params() {
-                    return Json.object().add("file", file);
-                }
-                public Void decodeResult(JsonValue v) {
-                    return null;
-                }
-                public Void handleException(JsonRpcException e)
-                    throws FileNotFoundException, UnexpectedRpcException {
-                    if (e.code == 4) {
-                        // TODO: improve this parsing, provide unified cryptol
-                        // error message handler shared across all calls?
-                        throw new FileNotFoundException(e.data.toString());
-                    } else {
-                        throw new UnexpectedRpcException();
-                    }
+        call(new CryptolCall<Unit>() {
+                String method = "load module";
+                JsonValue params =
+                    Json.object().add("file", file);
+                public Unit decode(JsonValue v) {
+                    return new Unit();
                 }
             });
     }

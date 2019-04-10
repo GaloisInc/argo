@@ -100,7 +100,7 @@ public class JsonConnection {
                             var msg = "Non-error response had no id: " + object;
                             var err = new InvalidRpcResponseException(msg);
                             ok = handleException.apply(err);   // continue?
-                        } catch (JsonRpcException err) {
+                        } catch (Exception err) {
                             ok = handleException.apply(err);  // continue?
                         }
                     }
@@ -109,8 +109,6 @@ public class JsonConnection {
                 // This means responseQueue.send(id, response) discovered that
                 // responseQueue was closed, which means someone called close()
                 // on the connection
-            } catch (Exception e) {
-                handleException.apply(e);
             } finally {
                 // After exhausting the requests, close the multiqueue
                 responseQueue.close();
@@ -119,6 +117,15 @@ public class JsonConnection {
 
         // Start the background thread
         checkResponses.start();
+    }
+
+    public <O, E extends Exception> O call(String method,
+                                           JsonValue params,
+                                           Function<JsonValue, O> decode,
+                                           Function<JsonRpcException, E> handle)
+        throws E, ConnectionException {
+        Call<O, E> call = new Call<O, E>(method, params, decode, handle);
+        return this.call(call);
     }
 
     public <O, E extends Exception> O call(Call<O, E> call)
@@ -154,6 +161,11 @@ public class JsonConnection {
         } catch (QueueClosedException e) {
             throw new ConnectionException("Connection closed");
         }
+    }
+
+    public void notify(String method, JsonValue params)
+        throws ConnectionException {
+        this.notify(new Notification(method, params));
     }
 
     public void notify(Notification notification)

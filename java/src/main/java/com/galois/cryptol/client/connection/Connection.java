@@ -33,72 +33,54 @@ public class Connection extends JsonConnection {
         this.currentState = connection.currentState;
     }
 
+    @Override
     public <O, E extends Exception> O call(Call<O, E> call)
         throws E, ConnectionException {
         return super.call(new StatefulCall<O, E>(call));
     }
 
+    @Override
     public void notify(Notification notification)
         throws ConnectionException {
         super.notify(new StatefulNotification(notification));
     }
 
-    private class StatefulNotification implements Notification {
-
-        private Notification notification;
+    private class StatefulNotification extends Notification {
 
         public StatefulNotification(Notification notification) {
-            this.notification = notification;
+            super(notification.method(), notification.params());
         }
 
-        public String method() { return notification.method(); }
-
+        @Override
         public JsonValue params() {
             try {
-                JsonValue notificationParams = notification.params();
+                JsonValue params = super.params();
                 if (currentState != null) {
-                    notificationParams.asObject().set("state", currentState);
+                    params.asObject().set("state", currentState);
                 }
-                return notificationParams;
+                return params;
             } catch (UnsupportedOperationException e) {
                 throw new IllegalArgumentException("Stateful call params not an object", e);
             }
         }
     }
 
-    private class StatefulCall<O, E extends Exception> implements Call<O, E> {
+    private class StatefulCall<O, E extends Exception> extends Call<O, E> {
 
-        private Call<O, E> call;
-
-        public StatefulCall(Call<O, E> call) { this.call = call; }
-
-        public String method() { return call.method(); }
-
-        public JsonValue params() {
-            try {
-                JsonValue callParams = call.params();
-                if (currentState != null) {
-                    callParams.asObject().set("state", currentState);
-                }
-                return callParams;
-            } catch (UnsupportedOperationException e) {
-                throw new IllegalArgumentException("Stateful call params not an object", e);
-            }
+        public StatefulCall(Call<O, E> call) {
+            super(call.method(), call.params(), call.decoder, call.handler);
         }
 
+        @Override
         public O decode(JsonValue o) {
             try {
                 JsonObject callResult = o.asObject();
                 currentState = callResult.get("state");  // sets the outer state!
                 callResult.remove("state");
-                return call.decode(callResult);
+                return super.decode(callResult);
             } catch (UnsupportedOperationException e) {
                 throw new IllegalArgumentException("Stateful call params not an object", e);
             }
-        }
-
-        public E handle(JsonRpcException e) {
-            return call.handle(e);
         }
     }
 }

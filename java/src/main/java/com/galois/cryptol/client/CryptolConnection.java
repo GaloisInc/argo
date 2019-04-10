@@ -48,43 +48,24 @@ public class CryptolConnection {
     // Since this runs on actual output/input streams, we know that connection
     // exceptions in this case are really IOExceptions, so we use this wrapper
     // to allow the caller to not need to see ConnectionExceptions
-    private <O, E extends Exception> O call(Call<O, E> call)
-        throws E, IOException {
+    private <O> O call(String method, JsonValue params,
+                       Function<JsonValue, O> decode)
+        throws IOException {
         try {
-            return connection.call(call);
+            return connection.call(method, params, decode, e -> {
+                    // handle Cryptol exceptions
+                    return null; // FIXME, return structured Cryptol exceptions
+                });
         } catch (ConnectionException e) {
             throw new IOException(e);
-        }
-    }
-
-    // How to make a new call:
-
-    private abstract class CryptolCall<O> implements Call<O, IOException> {
-
-        private String method;     // <--- fill me in!
-        private JsonValue params;  // <--- fill me in!
-
-        public abstract O decode(JsonValue v);  // <--- implement me!
-
-        @Override public String method() { return method; }
-        @Override public JsonValue params() { return params; }
-        @Override
-        public IOException handle(JsonRpcException e) {
-            // FIXME
-            return null;
         }
     }
 
     // The calls available:
 
     public void loadModule(String file) throws IOException {
-        call(new CryptolCall<Unit>() {
-                String method = "load module";
-                JsonValue params =
-                    Json.object().add("file", file);
-                public Unit decode(JsonValue v) {
-                    return new Unit();
-                }
-            });
+        call("load module",
+             Json.object().add("file", file),
+             v -> new Unit());
     }
 }

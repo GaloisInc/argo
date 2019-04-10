@@ -20,10 +20,9 @@ public class Connection extends JsonConnection {
 
     public void setState(State state) { currentState = state.s; }
 
-    public Connection(
-                Consumer<JsonValue> requests,
-                Iterator<JsonValue> responses,
-                Function<Exception, Boolean> handleException) {
+    public Connection(Consumer<JsonValue> requests,
+                      Iterator<JsonValue> responses,
+                      Function<Exception, Boolean> handleException) {
         super(requests, responses, handleException);
         this.currentState = null;
     }
@@ -36,27 +35,10 @@ public class Connection extends JsonConnection {
     }
 
     @Override
-    public <O, E extends Exception> O call(String method,
-                                           JsonValue params,
-                                           Function<JsonValue, O> decode,
-                                           Function<JsonRpcException, E> handle)
-        throws E, ConnectionException {
-        Call<O, E> call = new Call<O, E>(method, params, decode, handle);
-        return this.call(new StatefulCall<O, E>(call));
-    }
-
-    @Override
     public <O, E extends Exception> O call(Call<O, E> call)
         throws E, ConnectionException {
         return super.call(new StatefulCall<O, E>(call));
     }
-
-    @Override
-    public void notify(String method, JsonValue params)
-        throws ConnectionException {
-        this.notify(new StatefulNotification(new Notification(method, params)));
-    }
-
 
     @Override
     public void notify(Notification notification)

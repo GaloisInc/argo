@@ -37,7 +37,7 @@ runModuleCmd cmd =
            do setState (set moduleEnv newEnv s)
               return x
 
-data LoadedModule = LoadedMoodule
+data LoadedModule = LoadedModule
   { _loadedName :: Maybe ModName   -- ^ Working on this module.
   , _loadedPath :: FilePath        -- ^ Working on this file.
   }

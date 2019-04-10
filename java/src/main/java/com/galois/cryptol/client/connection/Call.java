@@ -26,4 +26,12 @@ public class Call<O, E extends Exception> extends Notification {
         this.decoder = decode;
         this.handler = handle;
     }
+
+    public Call(Notification notification,
+                Function<JsonValue, O> decode,
+                Function<JsonRpcException, E> handle) {
+        super(notification.method(), notification.params());
+        this.decoder = decode;
+        this.handler = handle;
+    }
 }

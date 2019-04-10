@@ -25,9 +25,13 @@ class Main {
                 new CryptolConnection(socket.getOutputStream(),
                                       socket.getInputStream());
             Scanner in = new Scanner(System.in);
-            System.out.print("Load module: ");
             try {
-                c.loadModule(in.nextLine());
+                System.out.print("Load module 1: ");
+                var m = in.nextLine();
+                c.loadModule(m);
+                System.out.print("Load module 2: ");
+                var n = in.nextLine();
+                c.loadModule(n);
             } catch (FileNotFoundException e) {
                 System.err.println(e);
             }

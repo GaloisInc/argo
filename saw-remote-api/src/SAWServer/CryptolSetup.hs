@@ -16,6 +16,7 @@ import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Argo
 import SAWServer
 import SAWServer.Exceptions
+import SAWServer.NoParams
 import SAWServer.OK
 
 
@@ -34,6 +35,7 @@ instance FromJSON StartCryptolSetupParams where
     withObject "params for \"SAW/cryptol setup\"" $ \o ->
     StartCryptolSetupParams <$> o .: "name"
 
+
 cryptolSetupLoadModule :: CryptolSetupLoadModuleParams -> Method SAWState OK
 cryptolSetupLoadModule (CryptolSetupLoadModuleParams modName) =
   cryptolSetupMethod $
@@ -42,8 +44,8 @@ cryptolSetupLoadModule (CryptolSetupLoadModuleParams modName) =
          let qual = Nothing -- TODO add field to params
          let importSpec = Nothing -- TODO add field to params
          cenv' <- liftIO $ CEnv.importModule sc cenv (Right modName) qual importSpec
+         debugLog "loaded"
          return (cenv', OK)
-
 
 data CryptolSetupLoadModuleParams =
   CryptolSetupLoadModuleParams P.ModName
@@ -52,6 +54,7 @@ instance FromJSON CryptolSetupLoadModuleParams where
   parseJSON =
     withObject "params for \"SAW/Cryptol setup/load module\"" $ \o ->
     CryptolSetupLoadModuleParams . textToModName <$> o .: "module name"
+
 
 cryptolSetupLoadFile :: CryptolSetupLoadFileParams -> Method SAWState OK
 cryptolSetupLoadFile (CryptolSetupLoadFileParams fileName) =
@@ -63,15 +66,24 @@ cryptolSetupLoadFile (CryptolSetupLoadFileParams fileName) =
          cenv' <- liftIO $ CEnv.importModule sc cenv (Left fileName) qual importSpec
          return (cenv', OK)
 
-
 data CryptolSetupLoadFileParams =
   CryptolSetupLoadFileParams FilePath
 
 instance FromJSON CryptolSetupLoadFileParams where
   parseJSON =
-    withObject "params for \"SAW/Cryptol setup/load module\"" $ \o ->
-    CryptolSetupLoadFileParams . T.unpack <$> o .: "file name"
+    withObject "params for \"SAW/Cryptol setup/load file\"" $ \o ->
+    CryptolSetupLoadFileParams . T.unpack <$> o .: "file"
 
+
+cryptolSetupDone :: NoParams -> Method SAWState OK
+cryptolSetupDone NoParams =
+  do tasks <- view sawTask <$> getState
+     case tasks of
+       ((CryptolSetup n cenv, _) : _) ->
+         do dropTask
+            setServerVal n cenv
+            ok
+       _ -> raise notSettingUpCryptol
 
 
 cryptolSetupMethod :: (CryptolEnv -> Method SAWState (CryptolEnv, a)) -> Method SAWState a

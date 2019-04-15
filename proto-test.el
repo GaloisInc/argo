@@ -83,7 +83,7 @@
            (when the-cont
              (funcall the-cont the-answer))))))))
 
-(defun proto-test--cryptol-send (method params cont &optional fail-cont)
+(defun proto-test--message-send (method params cont &optional fail-cont)
   "Send the message with METHOD and PARAMS as in `proto-test'.
 Additionally register a continuation CONT to handle the reply,
 and optionally a failure continuation FAIL-CONT to handle
@@ -101,14 +101,14 @@ errors."
 (defun proto-test-cryptol-change-directory (dir)
   "Change to directory DIR in Cryptol."
   (interactive "DNew directory: ")
-  (proto-test--cryptol-send "change directory" (proto-test-hash (:directory dir))
+  (proto-test--message-send "change directory" (proto-test-hash (:directory dir))
                             (lambda (_)
                               (message "Changed directory"))))
 
 (defun proto-test-cryptol-load-file (file)
   "Load FILE in Cryptol."
   (interactive "FFile to load: ")
-  (proto-test--cryptol-send "load module"
+  (proto-test--message-send "load module"
                             (proto-test-hash (:file file))
                             (lambda (res)
                               (message "Loaded file %S" res))
@@ -119,7 +119,7 @@ errors."
 (defun proto-test-cryptol-eval (expr)
   "Eval EXPR in Cryptol."
   (interactive "MExpression to eval: ")
-  (proto-test--cryptol-send "evaluate expression"
+  (proto-test--message-send "evaluate expression"
                             (proto-test-hash (:expression expr))
                             (lambda (res)
                               (message "The result is %S" res))
@@ -130,7 +130,7 @@ errors."
 (defun proto-test-cryptol-check-type (expr)
   "Type check EXPR in Cryptol."
   (interactive (list (proto-test-cryptol-get-arg)))
-  (proto-test--cryptol-send "check type"
+  (proto-test--message-send "check type"
                             (proto-test-hash (:expression expr))
                             (lambda (res)
                               (message "The result is %S" res))
@@ -142,7 +142,7 @@ errors."
 (defun proto-test-cryptol-satisfy (expr)
   ":sat EXPR in Cryptol."
   (interactive (list (proto-test-cryptol-get-arg)))
-  (proto-test--cryptol-send "satisfy"
+  (proto-test--message-send "satisfy"
                             (proto-test-hash (:expression expr) (:prover "z3") ("result count" 10))
                             (lambda (res)
                               (message "The result is %S" res))
@@ -153,19 +153,19 @@ errors."
 (defun proto-test-cryptol-focused-module ()
   "Find the focused Cryptol module."
   (interactive)
-  (proto-test--cryptol-send "focused module" (proto-test-hash)
+  (proto-test--message-send "focused module" (proto-test-hash)
                             (lambda (res)
                               (message "The result is %S" res))
                             (lambda (code err-message &optional err-data)
                               (error "Got error %s (%S) with info %S"
-                                      code err-message err-data))))
+                                     code err-message err-data))))
 
 (defun proto-test-cryptol-call (fun args)
   "Call FUN with ARGS."
   (interactive (let ((fun (read-string "Cryptol function to call: ")))
                  (list fun
                        (proto-test-cryptol-get-args fun))))
-  (proto-test--cryptol-send "call"
+  (proto-test--message-send "call"
                             (proto-test-hash (:function fun) (:arguments (or args [])))
                             (lambda (res)
                               (message "The result is %S" res))
@@ -176,9 +176,80 @@ errors."
 (defun proto-test-cryptol-visible-names ()
   "Get the list of available names from Cryptol."
   (interactive)
-  (proto-test--cryptol-send "visible names" (proto-test-hash)
+  (proto-test--message-send "visible names" (proto-test-hash)
                             (lambda (res)
                               (message "%s" res))))
+
+(defun proto-test-saw-cryptol-start-setup (name)
+  "Start setting up Cryptol in SAW, calling the result NAME."
+  (interactive "MName for Cryptol setup: ")
+  (proto-test--message-send "SAW/Cryptol/start setup" (proto-test-hash (:name name))
+                            (lambda (res)
+                              (message "The result is %S" res))))
+
+(defun proto-test-saw-cryptol-load-file (file)
+  "Load FILE in SAW Cryptol."
+  (interactive "FFile to load: ")
+  (proto-test--message-send "SAW/Cryptol/load file"
+                            (proto-test-hash (:file file))
+                            (lambda (res)
+                              (message "Loaded file %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When loading file, got error %s (%S) with info %S" code err-message err-data))))
+
+(defun proto-test-saw-cryptol-load-module (module)
+  "Load MODULE in SAW Cryptol."
+  (interactive "MModule: ")
+  (proto-test--message-send "SAW/Cryptol/load module"
+                            (proto-test-hash (:module module))
+                            (lambda (res)
+                              (message "Loaded module %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When loading module got error %s (%S) with info %S" code err-message err-data))))
+
+(defun proto-test-saw-cryptol-finish-setup ()
+  "Finish setting up SAW Cryptol."
+  (interactive)
+  (proto-test--message-send "SAW/Cryptol/finish setup"
+                            (proto-test-hash)
+                            (lambda (res)
+                              (message "Finished setup %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When finishing setup got error %s (%S) with info %S" code err-message err-data))))
+
+(defun proto-test-saw-save-term (name cryptol-setup expr)
+  "Save Cryptol expression EXPR in configuration CRYPTOL-SETUP to NAME."
+  (interactive (list (read-string "Name: ")
+                     (read-string "Name of Cryptol config: ")
+                     (proto-test-cryptol-get-arg)))
+  (proto-test--message-send "SAW/Cryptol/save term"
+                            (proto-test-hash ("name" name) ("cryptol setup" cryptol-setup) ("expression" expr))
+                            (lambda (res)
+                              (message "The result is %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When saving term, got error %s (%S) with info %S"
+                                     code err-message err-data))))
+
+
+(defvar proto-test--saw-unique-string-counter 0)
+(defun proto-test--saw-unique-name (&optional basis)
+  "Compute a unique string name, optionally using starting string BASIS."
+  (let ((x (or basis "x")))
+    (incf proto-test--saw-unique-string-counter)
+    (format "%s%s" x proto-test--saw-unique-string-counter)))
+
+(defun proto-test--saw-multi-command-test (file)
+  "Run some test steps using FILE."
+  (interactive "FPath to Foo.cry: ")
+  (let ((setup-name (proto-test--saw-unique-name "setup"))
+        (term-name (proto-test--saw-unique-name "term")))
+    (proto-test-saw-cryptol-start-setup setup-name)
+    (sit-for 1)
+    (proto-test-saw-cryptol-load-file file)
+    (sit-for 1)
+    (proto-test-saw-cryptol-finish-setup)
+    (sit-for 1)
+    (proto-test-saw-save-term term-name setup-name (proto-test-cryptol-get-arg))))
 
 (defvar proto-test--cryptol-get-arg-context '()
   "The context to show in the argument-getting prompt.")
@@ -352,7 +423,8 @@ Returns nil when no argument provided."
   (proto-test-quit)
   (setq proto-test-proc (apply #'start-process "the-test" "the-test" (split-string prog)))
   (set-process-filter proto-test-proc 'proto-test-process-filter)
-  (setq proto-test--state '[]))
+  (setq proto-test--state '[])
+  (proto-test-record-history-item (format "Launched %s" prog) "restart"))
 
 
 (defun proto-test-start-socket (port)
@@ -363,7 +435,8 @@ Returns nil when no argument provided."
     (setq proto-test-proc
           (open-network-stream "proto-connection" "foo" "127.0.0.1" port-string))
     (set-process-filter proto-test-proc 'proto-test-process-filter)
-    (setq proto-test--state '[])))
+    (setq proto-test--state '[])
+    (proto-test-record-history-item (format "Socket on %s" port) "restart")    ))
 
 
 (defun proto-test-process-filter (_proc output)

@@ -24,7 +24,9 @@ common deps
                  cryptol == 2.6.1,
                  cryptol-verifier,
                  directory,
+                 jvm-verifier,
                  lens,
+                 llvm-verifier,
                  saw-core,
                  saw-script,
                  text,
@@ -38,6 +40,7 @@ library
   exposed-modules: SAWServer,
                    SAWServer.CryptolSetup,
                    SAWServer.Exceptions,
+                   SAWServer.NoParams,
                    SAWServer.OK,
                    SAWServer.SaveTerm,
                    SAWServer.Term

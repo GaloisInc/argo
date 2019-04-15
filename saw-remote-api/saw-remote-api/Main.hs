@@ -22,7 +22,7 @@ import Argo.CacheTree
 
 import SAWServer
 import SAWServer.CryptolSetup
-
+import SAWServer.SaveTerm
 
 main :: IO ()
 main =
@@ -75,7 +75,9 @@ realMain opts =
 
 sawMethods :: [(Text, MethodType, JSON.Value -> Method SAWState JSON.Value)]
 sawMethods =
-  [ ("SAW/Cryptol/start setup", Command, method startCryptolSetup)
-  , ("SAW/Cryptol/load module", Command, method cryptolSetupLoadModule)
-  , ("SAW/Cryptol/load file", Command, method cryptolSetupLoadFile)
+  [ ("SAW/Cryptol/start setup",  Command, method startCryptolSetup)
+  , ("SAW/Cryptol/load module",  Command, method cryptolSetupLoadModule)
+  , ("SAW/Cryptol/load file",    Command, method cryptolSetupLoadFile)
+  , ("SAW/Cryptol/finish setup", Command, method cryptolSetupDone)
+  , ("SAW/Cryptol/save term",    Command, method saveTerm)
   ]

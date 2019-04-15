@@ -2,6 +2,7 @@
 module SAWServer.Exceptions where
 
 import Data.Aeson
+import Data.Text (Text)
 import qualified Data.Text as T
 
 import Argo
@@ -30,3 +31,8 @@ notSettingUpCryptol :: JSONRPCException
 notSettingUpCryptol = makeJSONRPCException 1003 "Not currently setting up Cryptol" noData
   where noData :: Maybe ()
         noData = Nothing
+
+-- TODO: Get rid of these and make them specific
+genericError :: Text -> JSONRPCException
+genericError msg =
+  makeJSONRPCException 100000 msg (Nothing :: Maybe ())

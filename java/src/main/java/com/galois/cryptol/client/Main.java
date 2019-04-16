@@ -26,16 +26,17 @@ class Main {
                                       socket.getInputStream());
             Scanner in = new Scanner(System.in);
             try {
-                System.out.print("Load module 1: ");
-                var m = in.nextLine();
-                c.loadModule(m);
-                System.out.print("Load module 2: ");
-                var n = in.nextLine();
-                c.loadModule(n);
-            } catch (FileNotFoundException e) {
+                System.out.print("Load module: ");
+                c.loadModule(in.nextLine());
+                while (true) {
+                    System.out.print("Evaluate: ");
+                    System.out.println(c.evalExpr(in.nextLine()));
+                }
+            } catch (Exception e) {
                 System.err.println(e);
+            } finally {
+                c.close();
             }
-            c.close();
         } catch (IOException e) {
             System.out.println("Error in server connection: " + e);
         }

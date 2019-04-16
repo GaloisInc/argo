@@ -22,17 +22,12 @@ public class CryptolConnection {
         this.output = output;
         this.input = input;
         // Set up source and sink for connection
-        Iterator<JsonValue> responses =
-            new JsonIterator(new NetstringIterator(input));
-        Consumer<JsonValue> requests =
-            new JsonSink(new NetstringSink(output));
-        // Set up exception handling to interrupt this thread
-        Thread thisThread = Thread.currentThread();
+        Pipe<JsonValue> pipe =
+            new JsonPipe(new NetstringPipe(input, output));
         Function<Exception, Boolean> logAndQuit =
             e -> { System.err.println(e); return false; };
         // Initialize the connection
-        connection =
-            new Connection(requests, responses, logAndQuit);
+        connection = new Connection(pipe, logAndQuit);
     }
 
     // Close the connection
@@ -52,10 +47,12 @@ public class CryptolConnection {
                        Function<JsonValue, O> decode)
         throws IOException {
         try {
-            return connection.call(method, params, decode, e -> {
-                    // handle Cryptol exceptions
-                    return null; // FIXME, return structured Cryptol exceptions
+            Call<O, IOException> call =
+                new Call<O, IOException>(method, params, decode, e -> {
+                        // handle Cryptol exceptions
+                        return null; // FIXME, return structured Cryptol exceptions
                 });
+            return connection.call(call);
         } catch (ConnectionException e) {
             throw new IOException(e);
         }
@@ -67,5 +64,11 @@ public class CryptolConnection {
         call("load module",
              Json.object().add("file", file),
              v -> new Unit());
+    }
+
+    public String evalExpr(String expr) throws IOException {
+        return call("evaluate expression",
+                    Json.object().add("expression", expr),
+                    v -> v.toString());
     }
 }

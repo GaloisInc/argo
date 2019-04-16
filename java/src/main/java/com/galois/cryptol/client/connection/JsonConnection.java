@@ -64,26 +64,19 @@ public class JsonConnection {
         }
     }
 
-    public JsonConnection(JsonConnection connection) {
-        this.nextId = connection.nextId;
-        this.requests = connection.requests;
-        this.responseQueue = connection.responseQueue;
-    }
-
-    public JsonConnection(Consumer<JsonValue> requests,
-                          Iterator<JsonValue> responses,
+    public JsonConnection(Pipe<JsonValue> pipe,
                           Function<Exception, Boolean> handleException) {
         this.nextId = new AtomicInteger(0);
-        this.requests = requests;
+        this.requests = v -> pipe.send(v);
         this.responseQueue = new ConcurrentMultiQueue<JsonValue, JsonResponse>();
 
         Thread checkResponses = new Thread(() -> {
             try {
                 boolean ok = true;
-                while (responses.hasNext() && ok) {
+                while (ok) {
                     JsonObject object;
                     try {
-                        object = responses.next().asObject();
+                        object = pipe.receive().asObject();
                     } catch (UnsupportedOperationException e) {
                         var msg = "Response is not an object";
                         var err = new InvalidRpcResponseException(msg, e);
@@ -119,15 +112,6 @@ public class JsonConnection {
         checkResponses.start();
     }
 
-    public <O, E extends Exception> O call(String method,
-                                           JsonValue params,
-                                           Function<JsonValue, O> decode,
-                                           Function<JsonRpcException, E> handle)
-        throws E, ConnectionException {
-        Call<O, E> call = new Call<O, E>(method, params, decode, handle);
-        return this.call(call);
-    }
-
     public <O, E extends Exception> O call(Call<O, E> call)
         throws E, ConnectionException {
         JsonValue id = Json.value(nextId.getAndIncrement());
@@ -161,11 +145,6 @@ public class JsonConnection {
         } catch (QueueClosedException e) {
             throw new ConnectionException("Connection closed");
         }
-    }
-
-    public void notify(String method, JsonValue params)
-        throws ConnectionException {
-        this.notify(new Notification(method, params));
     }
 
     public void notify(Notification notification)

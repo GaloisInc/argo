@@ -102,7 +102,7 @@ withState ::
   Value {- ^ raw parameters object -} ->
   Method (HistoryWrapper s) Value
 withState k params =
-  do hs               <- getState
+  do hs <- getState
      let (steps, params') = extractSteps params
      liftIO (k hs steps params')
 

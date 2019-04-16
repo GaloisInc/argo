@@ -80,7 +80,16 @@ public class Connection extends JsonConnection {
             try {
                 JsonObject callResult = o.asObject();
                 synchronized(Connection.this) {
-                    currentState = callResult.get("state");  // sets the outer state!
+                    var newState = callResult.get("state");
+                    // Update the current state if there has been an update
+                    currentState = newState != null ? newState : currentState;
+                    System.out.println("Received state: " + currentState);
+                }
+                JsonValue answer = callResult.get("answer");
+                if (answer != null) {
+                    return super.decode(answer);
+                } else {
+                    throw new IllegalArgumentException("No answer field in stateful result");
                 }
                 callResult.remove("state");
                 return super.decode(callResult);

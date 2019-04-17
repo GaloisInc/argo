@@ -12,7 +12,7 @@ import com.eclipsesource.json.*;
 import com.galois.cryptol.client.connection.*;
 import com.galois.cryptol.client.connection.queue.*;
 
-public class JsonConnection {
+public class JsonConnection implements AutoCloseable {
 
     private static final String version = "2.0";
 
@@ -65,23 +65,23 @@ public class JsonConnection {
     }
 
     public JsonConnection(Pipe<JsonValue> pipe,
-                          Function<Exception, Boolean> handleException) {
+                          Consumer<Throwable> handleException) {
         this.nextId = new AtomicInteger(0);
         this.requests = v -> pipe.send(v);
         this.responseQueue = new ConcurrentMultiQueue<JsonValue, JsonResponse>();
 
         Thread checkResponses = new Thread(() -> {
             try {
-                boolean ok = true;
-                while (ok) {
+                while (!pipe.isClosed()) {
                     JsonObject object;
                     try {
                         object = pipe.receive().asObject();
                     } catch (UnsupportedOperationException e) {
                         var msg = "Response is not an object";
                         var err = new InvalidRpcResponseException(msg, e);
-                        ok = handleException.apply(err);  // continue?
-                        return;
+                        throw err;
+                    } catch (NoSuchElementException e) {
+                        break; // The pipe was permanently closed
                     }
                     JsonValue id = object.get("id");
                     JsonResponse response = JsonResponse.parse(object);
@@ -92,9 +92,9 @@ public class JsonConnection {
                             JsonValue result = response.result();
                             var msg = "Non-error response had no id: " + object;
                             var err = new InvalidRpcResponseException(msg);
-                            ok = handleException.apply(err);   // continue?
-                        } catch (Exception err) {
-                            ok = handleException.apply(err);  // continue?
+                            throw err;
+                        } catch (JsonRpcException err) {
+                            throw new UnhandledRpcException(err);
                         }
                     }
                 }
@@ -107,6 +107,10 @@ public class JsonConnection {
                 responseQueue.close();
             }
         });
+
+        checkResponses.setUncaughtExceptionHandler((t, e) -> {
+                handleException.accept(e);
+            });
 
         // Start the background thread
         checkResponses.start();
@@ -162,7 +166,7 @@ public class JsonConnection {
         }
     }
 
-    public void close() {
+    public void close() throws IOException {
         this.responseQueue.close();
     }
 }

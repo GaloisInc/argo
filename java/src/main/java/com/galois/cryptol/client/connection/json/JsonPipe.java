@@ -2,7 +2,7 @@ package com.galois.cryptol.client.connection.json;
 
 import java.util.*;
 import java.util.function.*;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 
 import com.eclipsesource.json.*;
 
@@ -34,5 +34,13 @@ public class JsonPipe implements Pipe<JsonValue> {
         } catch (UnsupportedEncodingException e) {
             throw new RuntimeException("Impossible: UTF-8 unsupported");
         }
+    }
+
+    public void close() throws IOException {
+        this.bytePipe.close();
+    }
+
+    public boolean isClosed() {
+        return this.bytePipe.isClosed();
     }
 }

@@ -25,12 +25,14 @@ class Main {
         try(CryptolConnection c = new CryptolConnection(server, dir)) {
             System.out.print("Load module: ");
             c.loadModule(in.nextLine());
-            while (true) {
+            System.out.print("Evaluate: ");
+            while (in.hasNextLine()) {
+                var line = in.nextLine();
+                System.out.println(c.evalExpr(line));
                 System.out.print("Evaluate: ");
-                System.out.println(c.evalExpr(in.nextLine()));
             }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 

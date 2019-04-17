@@ -11,6 +11,7 @@ public class NetstringPipe implements Pipe<byte[]> {
 
     private final InputStream input;
     private final OutputStream output;
+    private boolean closed;
 
     public NetstringPipe(InputStream input, OutputStream output) {
         this.input = input;
@@ -31,5 +32,17 @@ public class NetstringPipe implements Pipe<byte[]> {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    public void close() throws IOException {
+        if (!closed) {
+            input.close();
+            output.close();
+            closed = true;
+        }
+    }
+
+    public boolean isClosed() {
+        return closed;
     }
 }

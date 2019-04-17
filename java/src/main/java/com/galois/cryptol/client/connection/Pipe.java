@@ -1,6 +1,12 @@
 package com.galois.cryptol.client.connection;
 
-public interface Pipe<A> {
+import java.util.*;
+import java.io.*;
+
+public interface Pipe<A> extends AutoCloseable {
     public void send(A input);
-    public A receive();
+    public A receive() throws NoSuchElementException;
+    @Override
+    public void close() throws IOException;
+    public boolean isClosed();
 }

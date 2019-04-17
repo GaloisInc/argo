@@ -21,17 +21,20 @@ public class CryptolConnection implements AutoCloseable {
 
     private static void forLinesAsync(InputStream i, Consumer<String> c) {
         (new Thread(() -> {
-            (new BufferedReader(new InputStreamReader(i)))
-                .lines().forEach(c);
+                try {
+                    (new BufferedReader(new InputStreamReader(i)))
+                        .lines().forEach(c);
+                } catch (Exception e) {
+                    // Do nothing; the stream is gone, for some reason
+                }
         })).start();
     }
 
-    public CryptolConnection(String cryptolExecutable, File dir) {
+    public CryptolConnection(String server, File dir) {
         // Set up source and sink for connection
         this.connectionManager =
-            new ConnectionManager<JsonValue>(
-                new ProcessBuilder(cryptolExecutable, "--dynamic4")
-                .directory(dir),
+            new ConnectionManager<>(
+                new ProcessBuilder(server, "--dynamic4").directory(dir),
                 (_i, out, err) -> {
                     try {
                         // The process will tell us what port to connect to...
@@ -50,20 +53,19 @@ public class CryptolConnection implements AutoCloseable {
                     }
                 });
 
-        Function<Exception, Boolean> logAndQuit =
-            e -> { System.err.println(e);
-                   connectionManager.stop();
-                   return false; };
-
         // Initialize the connection
-        connection = new Connection(new ManagedPipe<>(connectionManager),
-                                    logAndQuit);
+        this.connection =
+            new Connection(new ManagedPipe<>(connectionManager),
+                           e -> {
+                               System.err.println("Connection error:");
+                               e.printStackTrace();
+            });
     }
 
     // Close the connection
-    public synchronized void close() throws IOException {
+    public synchronized void close() throws Exception {
         if (closed == false) {
-            connectionManager.stop();
+            connectionManager.close();
             connection.close();
             closed = true;
         }

@@ -11,10 +11,10 @@ public class Connection extends JsonConnection {
 
     private volatile JsonValue currentState;
     private final Pipe<JsonValue> pipe;
-    private final Function<Exception, Boolean> handleException;
+    private final Consumer<Throwable> handleException;
 
     public Connection(Pipe<JsonValue> pipe,
-                      Function<Exception, Boolean> handleException) {
+                      Consumer<Throwable> handleException) {
         super(pipe, handleException);
         this.pipe = pipe;
         this.handleException = handleException;

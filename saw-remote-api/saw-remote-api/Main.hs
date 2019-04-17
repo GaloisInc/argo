@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Control.Applicative
@@ -20,6 +21,7 @@ import Argo.HistoryWrapper
 import Argo.CacheTree
 
 import SAWServer
+import SAWServer.CryptolSetup
 
 
 main :: IO ()
@@ -62,7 +64,7 @@ realMain :: Options -> IO ()
 realMain opts =
   do initSt <- initialState
      cache  <- newCache initSt
-     theApp <- mkApp (HistoryWrapper cache) (historyWrapper validateServerState sawMethods)
+     theApp <- mkApp (HistoryWrapper cache) (historyWrapper validateSAWState sawMethods)
      case transportOpt opts of
        StdIONetstring -> serveStdIONS theApp
        SocketNetstring (Port p) -> serveSocket (Just stdout) "127.0.0.1" p theApp
@@ -73,4 +75,7 @@ realMain opts =
 
 sawMethods :: [(Text, MethodType, JSON.Value -> Method SAWState JSON.Value)]
 sawMethods =
-  []
+  [ ("SAW/Cryptol/start setup", Command, method startCryptolSetup)
+  , ("SAW/Cryptol/load module", Command, method cryptolSetupLoadModule)
+  , ("SAW/Cryptol/load file", Command, method cryptolSetupLoadFile)
+  ]

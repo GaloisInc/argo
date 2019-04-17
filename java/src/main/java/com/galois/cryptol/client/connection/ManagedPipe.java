@@ -3,11 +3,11 @@ package com.galois.cryptol.client.connection;
 import java.util.*;
 import java.util.function.*;
 
-class ManagedPipe<A> implements Pipe<A> {
+public class ManagedPipe<A> implements Pipe<A> {
 
     private static int defaultMaxRetries = 1;
 
-    private volatile Pipe<A> pipe = null;
+    private volatile Pipe<A> pipe;
     private final Supplier<Pipe<A>> newPipe;
     private final int maxRetries;
 
@@ -18,14 +18,10 @@ class ManagedPipe<A> implements Pipe<A> {
     public ManagedPipe(Supplier<Pipe<A>> newPipe, int maxRetries) {
         this.newPipe = newPipe;
         this.maxRetries = maxRetries;
+        this.pipe = newPipe.get();
     }
 
     public void send(A input) {
-        // Initialize the pipe if it's not yet initialized
-        if (pipe == null) {
-            pipe = newPipe.get();
-        }
-
         int tries = maxRetries;
         while (true) {
             try {
@@ -33,6 +29,7 @@ class ManagedPipe<A> implements Pipe<A> {
                 return;
             } catch (Exception e) {
                 if (tries > 0) {
+                    // System.err.println("Retrying send after error: " + e);
                     this.pipe = this.newPipe.get();
                     tries--;
                 } else {
@@ -43,17 +40,13 @@ class ManagedPipe<A> implements Pipe<A> {
     }
 
     public A receive() {
-        // Initialize the pipe if it's not yet initialized
-        if (pipe == null) {
-            pipe = newPipe.get();
-        }
-
         int tries = maxRetries;
         while (true) {
             try {
                 return this.pipe.receive();
             } catch (Exception e) {
                 if (tries > 0) {
+                    // System.err.println("Retrying receive after error: " + e);
                     this.pipe = this.newPipe.get();
                     tries--;
                 } else {

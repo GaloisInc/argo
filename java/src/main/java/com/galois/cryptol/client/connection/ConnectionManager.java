@@ -7,24 +7,21 @@ import java.util.function.*;
 
 public class ConnectionManager<A> implements Supplier<Pipe<A>> {
 
-    private final BiFunction<InputStream, OutputStream, Pipe<A>> newPipe;
+    private final PipeFactory<A> newPipe;
     private final ProcessBuilder builder;
 
     private volatile Process process;
-    private volatile InputStream input;
-    private volatile OutputStream output;
 
-    public synchronized Pipe<A> get() {
+    public static interface PipeFactory<A> {
+        public Pipe<A> make(OutputStream in, InputStream out, InputStream err);
+    }
+
+    public Pipe<A> get() {
 
         // Destroy the old process
-        try {
-            input.close();
-            output.flush();
-            output.close();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+        if (process != null) {
+            process.destroy();
         }
-        process.destroy();
 
         // Create the new process
         try {
@@ -32,14 +29,21 @@ public class ConnectionManager<A> implements Supplier<Pipe<A>> {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        input = process.getInputStream();
-        output = process.getOutputStream();
-        return newPipe.apply(input, output);
+        var in  = process.getOutputStream();
+        var out = process.getInputStream();
+        var err = process.getErrorStream();
+        return newPipe.make(in, out, err);
     }
 
-    public ConnectionManager(ProcessBuilder builder,
-                             BiFunction<InputStream, OutputStream, Pipe<A>> newPipe) {
+    public ConnectionManager(ProcessBuilder builder, PipeFactory<A> newPipe) {
         this.newPipe = newPipe;
         this.builder = builder;
+    }
+
+    public void stop() {
+        if (process != null) {
+            process.destroy();
+        }
+        process = null;
     }
 }

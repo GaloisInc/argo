@@ -15,30 +15,22 @@ class Main {
         netJSON();
     }
 
-    // Connect as a client to localhost:8080 and receive netstring-encoded JSON
-    // objects until the server closes, printing each to stdout
     public static void netJSON() {
-        try {
-            // Acquire TCP streams from server
-            Socket socket = new Socket("127.0.0.1", 8080);
-            CryptolConnection c =
-                new CryptolConnection(socket.getOutputStream(),
-                                      socket.getInputStream());
-            Scanner in = new Scanner(System.in);
-            try {
-                System.out.print("Load module: ");
-                c.loadModule(in.nextLine());
-                while (true) {
-                    System.out.print("Evaluate: ");
-                    System.out.println(c.evalExpr(in.nextLine()));
-                }
-            } catch (Exception e) {
-                System.err.println(e);
-            } finally {
-                c.close();
+        Scanner in = new Scanner(System.in);
+        System.out.print("Cryptol server executable: ");
+        var server = in.nextLine();
+        System.out.print("Starting directory: ");
+        var dir = new File(in.nextLine());
+
+        try(CryptolConnection c = new CryptolConnection(server, dir)) {
+            System.out.print("Load module: ");
+            c.loadModule(in.nextLine());
+            while (true) {
+                System.out.print("Evaluate: ");
+                System.out.println(c.evalExpr(in.nextLine()));
             }
         } catch (IOException e) {
-            System.out.println("Error in server connection: " + e);
+            throw new UncheckedIOException(e);
         }
     }
 

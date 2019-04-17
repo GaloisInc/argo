@@ -49,7 +49,6 @@ public class Connection extends JsonConnection {
                 JsonObject params = super.params().asObject();
                 if (currentState != null) {
                     params.add("state", currentState);
-                    System.out.println("Sent state: " + currentState);
                 }
                 return Json.object().merge(params);
             } catch (UnsupportedOperationException e) {
@@ -74,7 +73,6 @@ public class Connection extends JsonConnection {
                     var newState = callResult.get("state");
                     // Update the current state if there has been an update
                     currentState = newState != null ? newState : currentState;
-                    System.out.println("Received state: " + currentState);
                 }
                 JsonValue answer = callResult.get("answer");
                 if (answer != null) {

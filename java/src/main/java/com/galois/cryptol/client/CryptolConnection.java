@@ -3,6 +3,8 @@ package com.galois.cryptol.client;
 import java.util.*;
 import java.util.function.*;
 import java.io.*;
+import java.net.*;
+import com.galois.cryptol.client.connection.ConnectionManager;
 
 import com.eclipsesource.json.*;
 
@@ -10,31 +12,58 @@ import com.galois.cryptol.client.connection.*;
 import com.galois.cryptol.client.connection.json.*;
 import com.galois.cryptol.client.connection.netstring.*;
 
-public class CryptolConnection {
+public class CryptolConnection implements AutoCloseable {
 
     private final Connection connection;
-    private final OutputStream output;
-    private final InputStream input;
+    private final ConnectionManager<JsonValue> connectionManager;
 
     private volatile boolean closed = false;
 
-    public CryptolConnection(OutputStream output, InputStream input) {
-        this.output = output;
-        this.input = input;
+    private static void forLinesAsync(InputStream i, Consumer<String> c) {
+        (new Thread(() -> {
+            (new BufferedReader(new InputStreamReader(i)))
+                .lines().forEach(c);
+        })).start();
+    }
+
+    public CryptolConnection(String cryptolExecutable, File dir) {
         // Set up source and sink for connection
-        Pipe<JsonValue> pipe =
-            new JsonPipe(new NetstringPipe(input, output));
+        this.connectionManager =
+            new ConnectionManager<JsonValue>(
+                new ProcessBuilder(cryptolExecutable, "--dynamic4")
+                .directory(dir),
+                (_i, out, err) -> {
+                    try {
+                        // The process will tell us what port to connect to...
+                        int port = (new Scanner(out)).skip("PORT ").nextInt();
+                        // Consume the remaining output and error
+                        forLinesAsync(out, l -> { });
+                        forLinesAsync(err, l -> { });
+                        // Connect to the port
+                        var s = new Socket("127.0.0.1", port);
+                        var socketIn  = s.getInputStream();
+                        var socketOut = s.getOutputStream();
+                        // Make a JSON-netstring layer across the connection
+                        return new JsonPipe(new NetstringPipe(socketIn, socketOut));
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                });
+
         Function<Exception, Boolean> logAndQuit =
-            e -> { System.err.println(e); return false; };
+            e -> { System.err.println(e);
+                   connectionManager.stop();
+                   return false; };
+
         // Initialize the connection
-        connection = new Connection(pipe, logAndQuit);
+        connection = new Connection(new ManagedPipe<>(connectionManager),
+                                    logAndQuit);
     }
 
     // Close the connection
     public synchronized void close() throws IOException {
         if (closed == false) {
-            output.close();
-            input.close();
+            connectionManager.stop();
             connection.close();
             closed = true;
         }

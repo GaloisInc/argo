@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
+
 module CryptolServer where
 
 import Control.Exception
@@ -22,7 +22,7 @@ import Cryptol.ModuleSystem.Env
 import Cryptol.ModuleSystem.Fingerprint
 import Cryptol.Parser.AST (ModName)
 import Cryptol.Utils.Logger (quietLogger)
-import Cryptol.Utils.PP (pretty)
+import Cryptol.Utils.PP (pretty, PP)
 
 import Argo
 
@@ -177,7 +177,16 @@ cryptolError err warns =
                 RenamerWarnings rnwarns ->
                   map jsonPretty rnwarns)
 
+    -- Some little helpers for common ways of building JSON values in the above:
+
+    jsonString :: String -> JSON.Value
     jsonString = JSON.String . Text.pack
+
+    jsonPretty :: PP a => a -> JSON.Value
     jsonPretty = jsonString . pretty
+
+    jsonShow :: Show a => a -> JSON.Value
     jsonShow = jsonString . show
+
+    jsonList :: [JSON.Value] -> JSON.Value
     jsonList = JSON.Array . Vector.fromList

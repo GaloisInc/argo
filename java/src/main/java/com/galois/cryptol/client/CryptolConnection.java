@@ -56,10 +56,7 @@ public class CryptolConnection implements AutoCloseable {
         // Initialize the connection
         this.connection =
             new Connection(new ManagedPipe<>(connectionManager),
-                           e -> {
-                               System.err.println("Connection error:");
-                               e.printStackTrace();
-            });
+                           e -> e.printStackTrace());
     }
 
     // Close the connection
@@ -85,7 +82,7 @@ public class CryptolConnection implements AutoCloseable {
                 });
             return connection.call(call);
         } catch (ConnectionException e) {
-            throw new IOException(e);
+            throw new IOException("Connection died and could not be restarted", e);
         }
     }
 

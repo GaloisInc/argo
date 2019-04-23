@@ -83,13 +83,13 @@ validateServerState =
 -- The schema for translating Cryptol errors/warnings into JSONRPCExceptions
 
 -- Reserved range for Cryptol exceptions: 20,000 - 21,000
-cryptolErrorPrefix :: Integer
-cryptolErrorPrefix = 20000
+cryptolErrorBase :: Integer
+cryptolErrorBase = 20000
 
 cryptolError :: ModuleError -> [ModuleWarning] -> JSONRPCException
 cryptolError err warns =
   makeJSONRPCException
-    (cryptolErrorPrefix + errorNum)
+    (cryptolErrorBase + errorNum)
     (Text.pack $ (pretty err) <> foldMap (\w -> "\n" <> pretty w) warns)
     (Just . JSON.object $ errorData ++ [("warnings", moduleWarnings warns)])
   where

@@ -18,10 +18,10 @@ public class Connection implements AutoCloseable {
                       ConnectionManager.PipeFactory<JsonValue> makePipe,
                       Consumer<Throwable> handleException)
         throws IOException {
-        this(new ConnectionManager(builder, makePipe), handleException);
+        this(new ConnectionManager<JsonValue>(builder, makePipe), handleException);
     }
 
-    public Connection(ConnectionManager connectionManager,
+    public Connection(ConnectionManager<JsonValue> connectionManager,
                       Consumer<Throwable> handleException) {
         this(new JsonConnection(connectionManager, handleException));
     }

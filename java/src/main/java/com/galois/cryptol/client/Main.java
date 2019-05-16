@@ -26,14 +26,26 @@ class Main {
     public static void cryptolEval(String server, String dir) {
         try(CryptolConnection c = new CryptolConnection(server, new File(dir))) {
             Scanner in = new Scanner(System.in);
-            System.out.print("Load module: ");
-            c.loadModule(in.nextLine());
-            System.out.print("Evaluate: ");
 
-            int x = 0;
-            while (in.hasNextLine() && x++ < 3) {
+            boolean loaded = false;
+            do {
+                System.out.print("Load module: ");
+                try {
+                    c.loadModule(in.nextLine());
+                    loaded = true;
+                } catch (CryptolException e) {
+                    System.out.println(e);
+                }
+            } while (!loaded);
+
+            System.out.print("Evaluate: ");
+            while (in.hasNextLine()) {
                 var line = in.nextLine();
-                System.out.println(c.evalExpr(line));
+                try {
+                    System.out.println(c.evalExpr(line));
+                } catch (CryptolException e) {
+                    System.out.println(e);
+                }
                 System.out.print("Evaluate: ");
             }
         } catch (Exception e) {

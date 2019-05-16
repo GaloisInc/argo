@@ -4,10 +4,10 @@ import java.util.*;
 import java.util.function.*;
 import java.io.*;
 import java.net.*;
-import com.galois.cryptol.client.connection.ConnectionManager;
 
 import com.eclipsesource.json.*;
 
+import com.galois.cryptol.client.*;
 import com.galois.cryptol.client.connection.*;
 import com.galois.cryptol.client.connection.json.*;
 import com.galois.cryptol.client.connection.netstring.*;
@@ -60,24 +60,37 @@ public class CryptolConnection implements AutoCloseable {
     // to allow the caller to not need to see ConnectionExceptions
     private <O> O call(String method, JsonValue params,
                        Function<JsonValue, O> decode)
-        throws IOException {
-        Call<O, IOException> call =
-            new Call<>(method, params, decode, e -> {
-                    // handle Cryptol exceptions
-                    return null; // FIXME, return structured Cryptol exceptions
+        throws CryptolException {
+        Call<O, CryptolException> call =
+            new Call<>(method, params, decode, error -> {
+                    // Ensure the error is in range for Cryptol
+                    if (error.code < 20000 || error.code > 21000) {
+                        return null;
+                    }
+                    final int code = error.code - 20000; // error code
+                    final String path; // maybe there's an associated path
+                    {
+                        var p = error.data.asObject().get("path");
+                        if (p != null) {
+                            path = p.asString();
+                        } else {
+                            path = null;
+                        }
+                    }
+                    return new CryptolException(error.message);
             });
         return connection.call(call);
     }
 
     // The calls available:
 
-    public void loadModule(String file) throws IOException {
+    public void loadModule(String file) throws CryptolException {
         call("load module",
              Json.object().add("file", file),
              v -> new Unit());
     }
 
-    public String evalExpr(String expr) throws IOException {
+    public String evalExpr(String expr) throws CryptolException {
         return call("evaluate expression",
                     Json.object().add("expression", expr),
                     v -> v.asObject().get("value").toString());

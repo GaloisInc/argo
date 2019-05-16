@@ -35,8 +35,8 @@ public class CryptolConnection implements AutoCloseable {
                     // The process will tell us what port to connect to...
                     int port = (new Scanner(out)).skip("PORT ").nextInt();
                     // Consume the remaining output and error
-                    forLinesAsync(out, System.out::println);
-                    forLinesAsync(err, System.err::println);
+                    forLinesAsync(out, l -> { });
+                    forLinesAsync(err, l -> System.err.println("\u001B[31m" + l + "\u001B[0m"));
                     // Connect to the port
                     var s = new Socket("127.0.0.1", port);
                     var socketIn  = s.getInputStream();
@@ -80,6 +80,6 @@ public class CryptolConnection implements AutoCloseable {
     public String evalExpr(String expr) throws IOException {
         return call("evaluate expression",
                     Json.object().add("expression", expr),
-                    v -> v.get("value").toString());
+                    v -> v.asObject().get("value").toString());
     }
 }

@@ -56,7 +56,7 @@ public class ManagedPipe<A> implements Pipe<A> {
                         if (retryCount == totalRetryCount) {
                             totalRetryCount++;
                             if (remainingRetries > 0) {
-                                // System.err.println("Retrying send after error: " + e);
+                                // System.err.println("\u001B[31m" + "Retrying send after error: " + e + "\u001B[0m");
                                 this.pipe = this.newPipe.get();
                                 remainingRetries--;
                             } else {
@@ -85,7 +85,7 @@ public class ManagedPipe<A> implements Pipe<A> {
                         if (retryCount == totalRetryCount) {
                             totalRetryCount++;
                             if (remainingRetries > 0) {
-                                // System.err.println("Retrying receive after error: " + e);
+                                // System.err.println("\u001B[31m" + "Retrying receive after error: " + e + "\u001B[0m");
                                 this.pipe = this.newPipe.get();
                                 remainingRetries--;
                             } else {

@@ -24,6 +24,9 @@ module Argo
   , getState
   , modifyState
   , setState
+  -- * "printf"-style debugging in methods
+  , getDebugLogger
+  , debugLog
   -- * JSON-RPC exceptions: The spec defines some errors and reserves some error
   -- codes (from -32768 to -32000) for its own use.
   , JSONRPCException
@@ -67,6 +70,7 @@ import Data.Maybe (maybeToList)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import GHC.Stack
 import Network.Wai (strictRequestBody)
 import System.IO
@@ -84,11 +88,11 @@ jsonRPCVersion = "2.0"
 -- each of which is a function from the JSON value representing its parameters
 -- to a JSON value representing its response.
 newtype Method state result
-  = Method (StateT state IO result)
+  = Method (ReaderT (Text -> IO ()) (StateT state IO) result)
   deriving (Functor, Applicative, Monad, MonadIO)
 
-runMethod :: Method state result -> state -> IO (state, result)
-runMethod (Method m) s = swap <$> runStateT m s
+runMethod :: Method state result -> (Text -> IO ()) -> state -> IO (state, result)
+runMethod (Method m) log s = swap <$> runStateT (runReaderT m log) s
   where
     swap (a, b) = (b, a)
 
@@ -115,6 +119,16 @@ method f p =
       raise (invalidParams p)
     JSON.Success params ->
       JSON.toJSON <$> f params
+
+-- | Get the logger from the server
+getDebugLogger :: Method state (Text -> IO ())
+getDebugLogger = Method ask
+
+-- | Log a message for debugging
+debugLog :: Text -> Method state ()
+debugLog message =
+  do logger <- getDebugLogger
+     liftIO $ logger message
 
 -- | Get the state of the server
 getState :: Method state state
@@ -330,13 +344,13 @@ instance JSON.ToJSON Request where
       "id"      .= view requestID     req <>
       "params"  .= view requestParams req
 
-handleRequest :: forall s . (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
-handleRequest out app req =
+handleRequest :: forall s . (Text -> IO ()) -> (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
+handleRequest logger out app req =
   case M.lookup method $ view appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (Command, m) ->
       withRequestID $
-      do answer <- modifyMVar theState $ runMethod (m params)
+      do answer <- modifyMVar theState $ runMethod (m params) logger
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
@@ -344,7 +358,7 @@ handleRequest out app req =
          out (JSON.encode response)
     Just (Query, m) ->
       withRequestID $
-      do (_, answer) <- runMethod (m params) =<< readMVar theState
+      do (_, answer) <- runMethod (m params) logger =<< readMVar theState
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
@@ -352,7 +366,7 @@ handleRequest out app req =
          out (JSON.encode response)
     Just (Notification, m) ->
       withoutRequestID $
-      void $ modifyMVar theState $ runMethod (m params)
+      void $ modifyMVar theState $ runMethod (m params) logger
   where
     method   = view requestMethod req
     params   = view requestParams req
@@ -386,17 +400,18 @@ synchronized f =
 -- and replying on stdout. In this system, each request must be on a
 -- line for itself, and no newlines are otherwise allowed.
 serveStdIO :: App s -> IO ()
-serveStdIO = serveHandles stdin stdout
+serveStdIO = serveHandles (Just stderr) stdin stdout
 
 -- | Serve an application, listening for input on one handle and
 -- sending output to another. Each request must be on a line for
 -- itself, and no newlines are otherwise allowed.
 serveHandles ::
+  Maybe Handle {- ^ Where to log debug info -} ->
   Handle {- ^ input handle    -} ->
   Handle {- ^ output handle   -} ->
   App s  {- ^ RPC application -} ->
   IO ()
-serveHandles hIn hOut app = init >>= loop
+serveHandles hLog hIn hOut app = init >>= loop
   where
     newline = 0x0a -- ASCII/UTF8
 
@@ -410,7 +425,7 @@ serveHandles hIn hOut app = init >>= loop
           do forkIO $
                (case JSON.eitherDecode l of
                   Left msg -> throw (parseError (T.pack msg))
-                  Right req -> handleRequest out app req)
+                  Right req -> handleRequest log out app req)
                `catch` reportError out
                `catch` reportOtherException out
              loop (out, rest)
@@ -422,24 +437,28 @@ serveHandles hIn hOut app = init >>= loop
     reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
     reportOtherException = undefined  -- TODO: convert to JSONRPCException
 
+    log = case hLog of
+            Just h -> T.hPutStrLn h
+            Nothing -> const (return ())
+
 -- | Serve an application on stdio, with messages encoded as netstrings.
 serveStdIONS :: App s -> IO ()
-serveStdIONS = serveHandlesNS Nothing stdin stdout
+serveStdIONS = serveHandlesNS (Just stderr) stdin stdout
 
 -- | Serve an application on arbitrary handles, with messages
 -- encoded as netstrings.
 serveHandlesNS ::
-  Maybe Handle {- ^ logging handle -} ->
-  Handle       {- ^ input handle    -} ->
-  Handle       {- ^ output handle   -} ->
-  App s        {- ^ RPC application -} ->
+  Maybe Handle {- ^ debug log handle -} ->
+  Handle       {- ^ input handle     -} ->
+  Handle       {- ^ output handle    -} ->
+  App s        {- ^ RPC application  -} ->
   IO ()
 serveHandlesNS hLog hIn hOut app =
   do hSetBinaryMode hIn True
      hSetBuffering hIn NoBuffering
      input <- newMVar hIn
      output <- synchronized (\msg ->
-                               do log msg
+                               do log (T.pack (show msg))
                                   BS.hPut hOut $ encodeNetstring $ netstring msg)
      loop output input
   where
@@ -453,11 +472,11 @@ serveHandlesNS hLog hIn hOut app =
                 loop output input
 
     processLine output line =
-      do log line
+      do log (T.pack (show line))
          forkIO $
            case JSON.eitherDecode (decodeNetstring line) of
              Left  msg -> throwIO (parseError (T.pack msg))
-             Right req -> handleRequest output app req
+             Right req -> handleRequest log output app req
            `catch` reportError output
            -- TODO add a catch for other errors that throws a JSON-RPC wrapper
 
@@ -465,11 +484,11 @@ serveHandlesNS hLog hIn hOut app =
     reportError output exn =
       output (JSON.encode exn)
 
-    log :: Show a => a -> IO ()
-    log =
-      case hLog of
-        Nothing -> const (return ())
-        Just h -> hPutStrLn h . show
+    log :: Text -> IO ()
+    log msg = case hLog of
+                Just h -> T.hPutStrLn h msg
+                Nothing -> return ()
+
 
 serveHTTP ::
   App s  {- JSON-RPC app -} ->
@@ -486,6 +505,6 @@ serveHTTP app port =
                                 output (JSON.encode exn <> BS.singleton newline)
             (case JSON.eitherDecode body of
                Left msg -> throw (parseError (T.pack msg))
-               Right req -> handleRequest output app req)
+               Right req -> handleRequest (T.hPutStrLn stderr) output app req)
              `catch` reportError
  where newline = 0x0a -- ASCII/UTF8

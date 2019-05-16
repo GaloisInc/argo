@@ -14,7 +14,7 @@ cryptolParseErr ::
   JSONRPCException
 cryptolParseErr expr err =
   makeJSONRPCException
-    4 "There was a Cryptol parse error."
+    20100 "There was a Cryptol parse error."
     (Just $ JSON.object ["input" .= expr, "error" .= show err])
 
 evalPolyErr ::
@@ -22,7 +22,7 @@ evalPolyErr ::
   ty {- ^ the type that was too polymorphic -} ->
   JSONRPCException
 evalPolyErr ty =
-  makeJSONRPCException 45 "Can't evaluate at polymorphic type" (Just (JSON.object ["type" .= ty]))
+  makeJSONRPCException 20101 "Can't evaluate at polymorphic type" (Just (JSON.object ["type" .= ty]))
 
 proverError :: String -> JSONRPCException
-proverError msg = makeJSONRPCException 55 "Prover error" (Just (JSON.toJSON msg))
+proverError msg = makeJSONRPCException 20102 "Prover error" (Just (JSON.toJSON msg))

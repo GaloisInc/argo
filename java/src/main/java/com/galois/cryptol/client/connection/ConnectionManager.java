@@ -5,7 +5,7 @@ import java.util.*;
 import java.io.*;
 import java.util.function.*;
 
-public class ConnectionManager<A> implements Supplier<Pipe<A>>, AutoCloseable {
+public class ConnectionManager<A> implements AutoCloseable {
 
     private final PipeFactory<A> newPipe;
     private final ProcessBuilder builder;
@@ -14,8 +14,10 @@ public class ConnectionManager<A> implements Supplier<Pipe<A>>, AutoCloseable {
     private volatile Pipe<A> currentPipe;
     private volatile boolean closed = false;
 
+    @FunctionalInterface
     public static interface PipeFactory<A> {
-        public Pipe<A> make(OutputStream in, InputStream out, InputStream err);
+        public Pipe<A> make(OutputStream in, InputStream out, InputStream err)
+            throws IOException;
     }
 
     private void destroyProcess() {
@@ -29,16 +31,12 @@ public class ConnectionManager<A> implements Supplier<Pipe<A>>, AutoCloseable {
         }
     }
 
-    public synchronized Pipe<A> get() {
+    public synchronized Pipe<A> get() throws IOException {
         if (!closed) {
             // Destroy the old process
             destroyProcess();
             // Create the new process
-            try {
-                process = builder.start();
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
+            process = builder.start();
             // System.err.println("Created process: " + process.pid());
             var in  = process.getOutputStream();
             var out = process.getInputStream();
@@ -49,7 +47,8 @@ public class ConnectionManager<A> implements Supplier<Pipe<A>>, AutoCloseable {
         }
     }
 
-    public ConnectionManager(ProcessBuilder builder, PipeFactory<A> newPipe) {
+    public ConnectionManager(ProcessBuilder builder, PipeFactory<A> newPipe)
+        throws IOException {
         this.newPipe = newPipe;
         this.builder = builder;
         // Ensure that the current process gets killed with the JVM process
@@ -62,6 +61,7 @@ public class ConnectionManager<A> implements Supplier<Pipe<A>>, AutoCloseable {
         }));
     }
 
+    @Override
     public synchronized void close() throws IOException {
         if (!closed) {
             if (currentPipe != null) {

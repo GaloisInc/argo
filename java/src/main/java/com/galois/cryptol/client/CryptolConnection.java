@@ -15,9 +15,6 @@ import com.galois.cryptol.client.connection.netstring.*;
 public class CryptolConnection implements AutoCloseable {
 
     private final Connection connection;
-    private final ConnectionManager<JsonValue> connectionManager;
-
-    private volatile boolean closed = false;
 
     private static void forLinesAsync(InputStream i, Consumer<String> c) {
         (new Thread(() -> {
@@ -30,45 +27,32 @@ public class CryptolConnection implements AutoCloseable {
         })).start();
     }
 
-    public CryptolConnection(String server, File dir) {
-        // Set up source and sink for connection
-        this.connectionManager =
-            new ConnectionManager<>(
-                new ProcessBuilder(server, "--dynamic4").directory(dir),
-                (_i, out, err) -> {
-                    try {
-                        // The process will tell us what port to connect to...
-                        int port = (new Scanner(out)).skip("PORT ").nextInt();
-                        // Consume the remaining output and error
-                        forLinesAsync(out, l -> { });
-                        forLinesAsync(err, l -> { });
-                        // Connect to the port
-                        var s = new Socket("127.0.0.1", port);
-                        var socketIn  = s.getInputStream();
-                        var socketOut = s.getOutputStream();
-                        // Make a JSON-netstring layer across the connection
-                        return new JsonPipe(new NetstringPipe(socketIn, socketOut));
-                    } catch (IOException e) {
-                        throw new UncheckedIOException(e);
-                    }
-                });
-
-        // Initialize the connection
+    public CryptolConnection(String server, File dir) throws IOException {
         this.connection =
-            new Connection(new ManagedPipe<>(connectionManager),
-                           e -> {
-                               System.err.println("Connection error:");
-                               e.printStackTrace();
-            });
+            new Connection(
+                new ProcessBuilder(server, "--dynamic4").directory(dir),
+                (_in, out, err) -> {
+                    // The process will tell us what port to connect to...
+                    int port = (new Scanner(out)).skip("PORT ").nextInt();
+                    // Consume the remaining output and error
+                    forLinesAsync(out, System.out::println);
+                    forLinesAsync(err, System.err::println);
+                    // Connect to the port
+                    var s = new Socket("127.0.0.1", port);
+                    var socketIn  = s.getInputStream();
+                    var socketOut = s.getOutputStream();
+                    // Make a JSON-netstring layer across the connection
+                    return new JsonPipe(new NetstringPipe(socketIn, socketOut));
+                },
+                e -> {
+                    System.err.println("Connection error:");
+                    e.printStackTrace();
+                });
     }
 
     // Close the connection
-    public synchronized void close() throws Exception {
-        if (closed == false) {
-            connectionManager.close();
-            connection.close();
-            closed = true;
-        }
+    public synchronized void close() throws IOException {
+        connection.close();
     }
 
     // Since this runs on actual output/input streams, we know that connection
@@ -77,16 +61,12 @@ public class CryptolConnection implements AutoCloseable {
     private <O> O call(String method, JsonValue params,
                        Function<JsonValue, O> decode)
         throws IOException {
-        try {
-            Call<O, IOException> call =
-                new Call<O, IOException>(method, params, decode, e -> {
-                        // handle Cryptol exceptions
-                        return null; // FIXME, return structured Cryptol exceptions
-                });
-            return connection.call(call);
-        } catch (ConnectionException e) {
-            throw new IOException(e);
-        }
+        Call<O, IOException> call =
+            new Call<>(method, params, decode, e -> {
+                    // handle Cryptol exceptions
+                    return null; // FIXME, return structured Cryptol exceptions
+            });
+        return connection.call(call);
     }
 
     // The calls available:
@@ -100,6 +80,6 @@ public class CryptolConnection implements AutoCloseable {
     public String evalExpr(String expr) throws IOException {
         return call("evaluate expression",
                     Json.object().add("expression", expr),
-                    v -> v.toString());
+                    v -> v.get("value").toString());
     }
 }

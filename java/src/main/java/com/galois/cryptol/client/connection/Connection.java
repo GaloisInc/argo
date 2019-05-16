@@ -3,39 +3,53 @@ package com.galois.cryptol.client.connection;
 import com.eclipsesource.json.*;
 import java.util.function.*;
 import java.util.*;
+import java.io.*;
+import com.galois.cryptol.client.connection.ConnectionManager.PipeFactory;
 
 import com.galois.cryptol.client.connection.*;
 import com.galois.cryptol.client.connection.json.*;
 
-public class Connection extends JsonConnection {
+public class Connection implements AutoCloseable {
 
     private volatile JsonValue currentState;
-    private final Pipe<JsonValue> pipe;
-    private final Consumer<Throwable> handleException;
+    private final JsonConnection jsonConnection;
 
-    public Connection(Pipe<JsonValue> pipe,
+    public Connection(ProcessBuilder builder,
+                      ConnectionManager.PipeFactory<JsonValue> makePipe,
+                      Consumer<Throwable> handleException)
+        throws IOException {
+        this(new ConnectionManager(builder, makePipe), handleException);
+    }
+
+    public Connection(ConnectionManager connectionManager,
                       Consumer<Throwable> handleException) {
-        super(pipe, handleException);
-        this.pipe = pipe;
-        this.handleException = handleException;
+        this(new JsonConnection(connectionManager, handleException));
+    }
+
+    public Connection(JsonConnection jsonConnection) {
+        this.jsonConnection = jsonConnection;
         this.currentState = null;
     }
 
-    public Connection copy() {
-        var c = new Connection(this.pipe, this.handleException);
-        c.currentState = this.currentState;
-        return c;
+    public Connection(Connection other) {
+        this.jsonConnection = other.jsonConnection;
+        this.currentState = other.currentState;
     }
 
     public <O, E extends Exception> O call(Call<O, E> call)
         throws E, ConnectionException {
-        return super.call(new StatefulCall<O, E>(call));
+        return jsonConnection.call(new StatefulCall<O, E>(call));
     }
 
     public void notify(Notification notification)
         throws ConnectionException {
-        super.notify(new StatefulNotification(notification.method(),
-                                              notification.params()));
+        jsonConnection.notify(new StatefulNotification(notification.method(),
+                                                       notification.params()));
+    }
+
+    @Override
+    public void close() throws IOException {
+        this.jsonConnection.close();
     }
 
     private class StatefulNotification extends Notification {

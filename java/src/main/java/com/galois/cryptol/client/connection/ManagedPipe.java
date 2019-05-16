@@ -3,72 +3,107 @@ package com.galois.cryptol.client.connection;
 import java.util.*;
 import java.util.function.*;
 import java.io.*;
+import java.util.concurrent.atomic.*;
 
 public class ManagedPipe<A> implements Pipe<A> {
 
     private static int defaultMaxRetries = 1;
 
-    private volatile Pipe<A> pipe;
     private final ConnectionManager<A> newPipe;
+    private final Runnable onRetry;
     private final int maxRetries;
 
+    private volatile Pipe<A> pipe;
+    private volatile int remainingRetries;
+    private volatile int totalRetryCount = 0;
+
     public ManagedPipe(ConnectionManager<A> newPipe) {
-        this(newPipe, ManagedPipe.defaultMaxRetries);
+        this(newPipe, () -> { });
     }
 
-    public ManagedPipe(ConnectionManager<A> newPipe, int maxRetries) {
+    public ManagedPipe(ConnectionManager<A> newPipe, Runnable onRetry) {
+        this(newPipe, onRetry, ManagedPipe.defaultMaxRetries);
+    }
+
+    public ManagedPipe(ConnectionManager<A> newPipe,
+                       Runnable onRetry,
+                       int maxRetries) {
         this.newPipe = newPipe;
+        this.onRetry = onRetry;
         this.maxRetries = maxRetries;
+        this.remainingRetries = maxRetries;
     }
 
-    private void initPipe() {
+    private void initPipe() throws IOException {
         if (pipe == null) {
             pipe = newPipe.get();
         }
     }
 
+    @Override
     public void send(A input) {
-        initPipe();
-        int tries = maxRetries;
-        while (true) {
-            try {
-                this.pipe.send(input);
-                return;
-            } catch (Exception e) {
-                if (tries > 0) {
-                    // System.err.println("Retrying send after error: " + e);
-                    this.pipe = this.newPipe.get();
-                    tries--;
-                } else {
-                    throw e;
+        try {
+            initPipe();
+            while (true) {
+                int retryCount = totalRetryCount;
+                try {
+                    this.pipe.send(input);
+                    remainingRetries = maxRetries;
+                    return;
+                } catch (Exception e) {
+                    // Only re-initialize pipe if nobody else has in the meantime
+                    synchronized(this) {
+                        if (retryCount == totalRetryCount) {
+                            totalRetryCount++;
+                            if (remainingRetries > 0) {
+                                // System.err.println("Retrying send after error: " + e);
+                                this.pipe = this.newPipe.get();
+                                remainingRetries--;
+                            } else {
+                                throw new ConnectionException(e);
+                            }
+                        }
+                    }
                 }
             }
+        } catch (IOException e) {
+            throw new ConnectionException(e);
         }
     }
 
     public A receive() {
         try {
             initPipe();
-            int tries = maxRetries;
             while (true) {
+                int retryCount = totalRetryCount;
                 try {
-                    return this.pipe.receive();
+                    A result = this.pipe.receive();
+                    remainingRetries = maxRetries;
+                    return result;
                 } catch (Exception e) {
-                    if (tries > 0) {
-                        // System.err.println("Retrying receive after error: " + e);
-                        this.pipe = this.newPipe.get();
-                        tries--;
-                    } else {
-                        throw e;
+                    synchronized(this) {
+                        if (retryCount == totalRetryCount) {
+                            totalRetryCount++;
+                            if (remainingRetries > 0) {
+                                // System.err.println("Retrying receive after error: " + e);
+                                this.pipe = this.newPipe.get();
+                                remainingRetries--;
+                            } else {
+                                throw new ConnectionException(e);
+                            }
+                        }
                     }
                 }
             }
         } catch (IllegalStateException e) {
-            throw new NoSuchElementException();
+            throw new ConnectionException(e);
+        } catch (IOException e) {
+            throw new ConnectionException(e);
         }
     }
 
     public void close() throws IOException {
+        this.newPipe.close();
         this.pipe.close();
     }
 

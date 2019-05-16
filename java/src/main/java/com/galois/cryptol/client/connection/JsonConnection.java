@@ -16,9 +16,16 @@ public class JsonConnection implements AutoCloseable {
 
     private static final String version = "2.0";
 
-    private final Consumer<JsonValue> requests;
-    private final ConcurrentMultiQueue<JsonValue, JsonResponse> responseQueue;
-    private final AtomicInteger nextId;
+    private final ConcurrentMultiQueue<JsonValue, JsonResponse> responseQueue =
+        new ConcurrentMultiQueue<>();
+    private final AtomicInteger nextId =
+        new AtomicInteger(0);
+    private final Map<JsonValue, Call<?, ?>> pendingCalls =
+        new ConcurrentHashMap<>();
+
+    private final Pipe<JsonValue> pipe;
+
+    private volatile boolean closed = false;
 
     private static class JsonResponse {
         private final JsonValue result;
@@ -64,11 +71,39 @@ public class JsonConnection implements AutoCloseable {
         }
     }
 
-    public JsonConnection(Pipe<JsonValue> pipe,
+    private void sendCall(JsonValue id, Call<?, ?> call) {
+        JsonValue message = Json.object()
+            .add("jsonrpc", version)
+            .add("id", id)
+            .add("method", call.method())
+            .add("params", call.params());
+        try {
+            pipe.send(message);
+        } catch (Exception e) {
+            throw new ConnectionException(e);
+        }
+    }
+
+    private void sendNotification(Notification notification) {
+        JsonValue message = Json.object()
+            .add("jsonrpc", version)
+            .add("method", notification.method())
+            .add("params", notification.params());
+        try {
+            pipe.send(message);
+        } catch (Exception e) {
+            throw new ConnectionException(e);
+        }
+    }
+
+    public JsonConnection(ConnectionManager<JsonValue> connectionManager,
                           Consumer<Throwable> handleException) {
-        this.nextId = new AtomicInteger(0);
-        this.requests = v -> pipe.send(v);
-        this.responseQueue = new ConcurrentMultiQueue<JsonValue, JsonResponse>();
+
+        // When the connection dies, resend all pending calls to the new
+        // connection -- that way, waiting calling threads don't block forever
+        this.pipe = new ManagedPipe<>(connectionManager, () -> {
+                pendingCalls.forEach(this::sendCall);
+        });
 
         Thread checkResponses = new Thread(() -> {
             try {
@@ -80,12 +115,15 @@ public class JsonConnection implements AutoCloseable {
                         var msg = "Response is not an object";
                         var err = new InvalidRpcResponseException(msg, e);
                         throw err;
+                    } catch (ConnectionException e) {
+                        break; // The pipe cannot be re-created and is broken
                     } catch (NoSuchElementException e) {
                         break; // The pipe was permanently closed
                     }
                     JsonValue id = object.get("id");
                     JsonResponse response = JsonResponse.parse(object);
                     if (id != null) {
+                        pendingCalls.remove(id); // call is no longer pending
                         responseQueue.send(id, response);
                     } else {
                         try {
@@ -116,21 +154,10 @@ public class JsonConnection implements AutoCloseable {
         checkResponses.start();
     }
 
-    public <O, E extends Exception> O call(Call<O, E> call)
-        throws E, ConnectionException {
+    public <O, E extends Exception> O call(Call<O, E> call) throws E {
         JsonValue id = Json.value(nextId.getAndIncrement());
-        JsonValue message = Json.object()
-            .add("jsonrpc", version)
-            .add("id", id)
-            .add("method", call.method())
-            .add("params", call.params());
-        try {
-            synchronized(requests) {
-                requests.accept(message);
-            }
-        } catch (Exception e) {
-            throw new ConnectionException(e);
-        }
+        pendingCalls.put(id, call); // call is now pending
+        this.sendCall(id, call);
         try {
             JsonValue response = responseQueue.request(id).result();
             O result = call.decode(response);
@@ -151,22 +178,15 @@ public class JsonConnection implements AutoCloseable {
         }
     }
 
-    public void notify(Notification notification)
-        throws ConnectionException {
-        JsonValue message = Json.object()
-            .add("jsonrpc", version)
-            .add("method", notification.method())
-            .add("params", notification.params());
-        try {
-            synchronized(requests) {
-                requests.accept(message);
-            }
-        } catch (Exception e) {
-            throw new ConnectionException(e);
-        }
+    public void notify(Notification notification) {
+        sendNotification(notification);
     }
 
-    public void close() throws IOException {
-        this.responseQueue.close();
+    public synchronized void close() throws IOException {
+        if (!this.closed) {
+            this.responseQueue.close();
+            this.pipe.close();
+            this.closed = true;
+        }
     }
 }

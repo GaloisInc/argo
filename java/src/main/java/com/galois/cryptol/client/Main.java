@@ -12,21 +12,26 @@ import com.galois.cryptol.client.connection.queue.*;
 
 class Main {
     public static void main(String[] args) {
-        netJSON();
+        if (args.length == 2) {
+            String cryptolServer = args[0];
+            String startingDir = args[1];
+            cryptolEval(cryptolServer, startingDir);
+        } else {
+            var error = "Please specify a server executable and starting directory";
+            System.err.println(error);
+            System.exit(1);
+        }
     }
 
-    public static void netJSON() {
-        Scanner in = new Scanner(System.in);
-        System.out.print("Cryptol server executable: ");
-        var server = in.nextLine();
-        System.out.print("Starting directory: ");
-        var dir = new File(in.nextLine());
-
-        try(CryptolConnection c = new CryptolConnection(server, dir)) {
+    public static void cryptolEval(String server, String dir) {
+        try(CryptolConnection c = new CryptolConnection(server, new File(dir))) {
+            Scanner in = new Scanner(System.in);
             System.out.print("Load module: ");
             c.loadModule(in.nextLine());
             System.out.print("Evaluate: ");
-            while (in.hasNextLine()) {
+
+            int x = 0;
+            while (in.hasNextLine() && x++ < 3) {
                 var line = in.nextLine();
                 System.out.println(c.evalExpr(line));
                 System.out.print("Evaluate: ");

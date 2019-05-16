@@ -1,6 +1,6 @@
 package com.galois.cryptol.client.connection;
 
-public class ConnectionException extends Exception {
+public class ConnectionException extends RuntimeException {
     public static final long serialVersionUID = 0;
     public ConnectionException(String e) { super(e); }
     public ConnectionException(Throwable e) { super(e); }

@@ -16,7 +16,7 @@ import Verifier.SAW.SharedTerm (Term, SharedContext, mkSharedContext, scLoadModu
 import Verifier.SAW.Term.Functor (mkModuleName)
 import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
-import SAWScript.Value (CrucibleSetupM)
+import SAWScript.Value (LLVMCrucibleSetupM)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import qualified Verifier.Java.SAWBackend as JavaSAW
 import qualified Verifier.LLVM.Backend.SAW as LLVMSAW
@@ -31,12 +31,12 @@ type SAWCont = (SAWEnv, SAWTask)
 data SAWTask
   = CryptolSetup ServerName CryptolEnv -- ^ The name to bind and the environment being built
   | ProofScript
-  | CrucibleSetup ServerName (CrucibleSetupM ())
+  | LLVMCrucibleSetup ServerName (LLVMCrucibleSetupM ())
 
 instance Show SAWTask where
   show (CryptolSetup n _) = "(CryptolSetup " ++ show n ++ " _)"
   show ProofScript = "ProofScript"
-  show (CrucibleSetup n _) = "(CrucibleSetup" ++ show n ++ " _)"
+  show (LLVMCrucibleSetup n _) = "(LLVMCrucibleSetup" ++ show n ++ " _)"
 
 data SAWState =
   SAWState
@@ -105,7 +105,7 @@ data ServerVal
   | VType Cryptol.Schema
   | VCryptolModule CryptolModule -- from SAW, includes Term mappings
   | VCryptolEnv CryptolEnv  -- from SAW, includes Term mappings
-  | VCrucibleSetup (CrucibleSetupM ())
+  | VLLVMCrucibleSetup (LLVMCrucibleSetupM ())
 
 instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"

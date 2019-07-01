@@ -21,7 +21,7 @@ common deps
                  aeson,
                  argo,
                  containers >= 0.6 && < 0.7,
-                 cryptol == 2.6.1,
+                 cryptol == 2.7.1,
                  cryptol-verifier,
                  directory,
                  jvm-verifier,

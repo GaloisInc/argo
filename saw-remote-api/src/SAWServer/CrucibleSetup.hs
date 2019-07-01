@@ -21,7 +21,7 @@ import SAWServer.OK
 
 startCrucibleSetup :: StartCrucibleSetupParams -> Method SAWState OK
 startCrucibleSetup (StartCrucibleSetupParams n) =
-  do pushTask (CrucibleSetup n (return ()))
+  do pushTask (LLVMCrucibleSetup n (return ()))
      ok
 
 data StartCrucibleSetupParams =

@@ -217,6 +217,45 @@ errors."
                             (lambda (code err-message &optional err-data)
                               (error "When finishing setup got error %s (%S) with info %S" code err-message err-data))))
 
+(defun proto-test-saw-llvm-start-setup (name)
+  "Start setting up LLVM in SAW, calling the result NAME."
+  (interactive "MName for LLVM setup: ")
+  (proto-test--message-send "SAW/LLVM/start setup" (proto-test-hash (:name name))
+                            (lambda (res)
+                              (message "The result is %S" res))))
+
+(defun proto-test-saw-llvm-finish-setup ()
+  "Finish setting up SAW LLVM Crucible."
+  (interactive)
+  (proto-test--message-send "SAW/LLVM/finish setup"
+                            (proto-test-hash)
+                            (lambda (res)
+                              (message "Finished setup %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When finishing setup got error %s (%S) with info %S" code err-message err-data))))
+
+
+(defun proto-test-saw-llvm-load-module (name filename)
+  "Load an LLVM module in FILENAME in SAW, saving it as NAME."
+  (proto-test--message-send "SAW/LLVM/load module"
+                            (proto-test-hash ("name" name) ("bitcode file" filename))
+                            (lambda (res)
+                              (message "Loaded module %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When loading LLVM module got error %s (%S) with info %S" code err-message err-data))))
+
+
+(defun proto-test-saw-return (val)
+  "Specify a return value VAL in LLVM."
+  (interactive (list (proto-test-saw-get-setup-value)))
+  (proto-test--message-send "SAW/LLVM/return"
+                            (proto-test-hash ("value" val))
+                            (lambda (res)
+                              (message "Returned %s" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "Failed in return of setup value: error %s (%S) with info %S" code error err-data))))
+
+
 (defun proto-test-saw-save-term (name cryptol-setup expr)
   "Save Cryptol expression EXPR in configuration CRYPTOL-SETUP to NAME."
   (interactive (list (read-string "Name: ")
@@ -238,7 +277,7 @@ errors."
     (incf proto-test--saw-unique-string-counter)
     (format "%s%s" x proto-test--saw-unique-string-counter)))
 
-(defun proto-test--saw-multi-command-test (file)
+(defun proto-test--saw-multi-command-test-cryptol (file)
   "Run some test steps using FILE."
   (interactive "FPath to Foo.cry: ")
   (let ((setup-name (proto-test--saw-unique-name "setup"))
@@ -250,6 +289,16 @@ errors."
     (proto-test-saw-cryptol-finish-setup)
     (sit-for 1)
     (proto-test-saw-save-term term-name setup-name (proto-test-cryptol-get-arg))))
+
+(defun proto-test--saw-multi-command-test-llvm ()
+  "Run some test steps."
+  (interactive)
+  (let ((setup-name (proto-test--saw-unique-name "setup")))
+    (proto-test-saw-llvm-start-setup setup-name)
+    (sit-for 1)
+    (proto-test-saw-return "null")
+    (sit-for 1)
+    (proto-test-saw-llvm-finish-setup)))
 
 (defvar proto-test--cryptol-get-arg-context '()
   "The context to show in the argument-getting prompt.")
@@ -399,6 +448,15 @@ Returns nil when no argument provided."
         nil
       (let ((val (proto-test--with-arg-context (concat x "=") (proto-test-cryptol-get-arg))))
         (proto-test-hash (:name x) (:definition val))))))
+
+(defun proto-test-saw-get-setup-value ()
+  "Prompt the user for a setup value."
+  (interactive)
+  (pcase (completing-read (proto-test--cryptol-get-arg-prompt "What kind of argument? ")
+                          '("null pointer"))
+    ("null pointer"
+     "null")
+    (_ nil)))
 
 (defun proto-test-quit ()
   "Quit the test process."

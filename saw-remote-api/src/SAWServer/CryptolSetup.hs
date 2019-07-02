@@ -10,6 +10,7 @@ import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (textToModName)
+import SAWScript.Value (biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 
@@ -22,7 +23,7 @@ import SAWServer.OK
 
 startCryptolSetup :: StartCryptolSetupParams -> Method SAWState OK
 startCryptolSetup (StartCryptolSetupParams n) =
-  do sc <- view sawSC <$> getState
+  do sc <- biSharedContext . view sawBIC <$> getState
      cenv <- liftIO $ CEnv.initCryptolEnv sc
      pushTask (CryptolSetup n cenv)
      ok
@@ -40,7 +41,7 @@ cryptolSetupLoadModule :: CryptolSetupLoadModuleParams -> Method SAWState OK
 cryptolSetupLoadModule (CryptolSetupLoadModuleParams modName) =
   cryptolSetupMethod $
     \cenv ->
-      do sc <- view sawSC <$> getState
+      do sc <- biSharedContext . view sawBIC <$> getState
          let qual = Nothing -- TODO add field to params
          let importSpec = Nothing -- TODO add field to params
          cenv' <- liftIO $ CEnv.importModule sc cenv (Right modName) qual importSpec
@@ -60,7 +61,7 @@ cryptolSetupLoadFile :: CryptolSetupLoadFileParams -> Method SAWState OK
 cryptolSetupLoadFile (CryptolSetupLoadFileParams fileName) =
   cryptolSetupMethod $
     \cenv ->
-      do sc <- view sawSC <$> getState
+      do sc <- biSharedContext . view sawBIC <$> getState
          let qual = Nothing -- TODO add field to params
          let importSpec = Nothing -- TODO add field to params
          cenv' <- liftIO $ CEnv.importModule sc cenv (Left fileName) qual importSpec

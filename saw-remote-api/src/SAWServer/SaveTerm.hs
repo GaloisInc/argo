@@ -22,8 +22,10 @@ import Cryptol.TypeCheck.Monad (InferOutput(..), inpVars, inpTSyns)
 import Cryptol.Utils.Ident (interactiveName)
 import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP
+import SAWScript.Value (biSharedContext)
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.TypedTerm(TypedTerm(..))
+
 
 import Argo
 
@@ -35,7 +37,7 @@ import SAWServer.OK
 saveTerm :: SaveTermParams -> Method SAWState OK
 saveTerm (SaveTermParams name envName e) =
   do expr <- getExpr e
-     sc <- view sawSC <$> getState
+     sc <- biSharedContext . view sawBIC <$> getState
      cenv <- getCryptolEnv envName
      let env = eModuleEnv cenv
 

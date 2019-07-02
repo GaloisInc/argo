@@ -1,22 +1,29 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SAWServer where
 
 import Control.Lens
+import Control.Monad.ST
 import Data.Aeson (FromJSON(..), ToJSON(..), fromJSON, withText)
 import qualified Data.Aeson as JSON
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import Data.Parameterized.Some
 import Data.Text (Text)
 import qualified Data.Text as T
 
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
+import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
+import qualified Verifier.Java.Codebase as JSS
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.Module (emptyModule)
 import Verifier.SAW.SharedTerm (Term, SharedContext, mkSharedContext, scLoadModule)
 import Verifier.SAW.Term.Functor (mkModuleName)
 import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
-import SAWScript.Value (LLVMCrucibleSetupM)
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule(..))
+import SAWScript.Prover.Rewrite (basic_ss)
+import SAWScript.Value (BuiltinContext(..), LLVMCrucibleSetupM)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import qualified Verifier.Java.SAWBackend as JavaSAW
 import qualified Verifier.LLVM.Backend.SAW as LLVMSAW
@@ -41,31 +48,38 @@ instance Show SAWTask where
 data SAWState =
   SAWState
     { _sawEnv :: SAWEnv
-    , _sawSC :: SharedContext
+    , _sawBIC :: BuiltinContext
     , _sawTask :: [(SAWTask, SAWEnv)]
+    , _sawHandleAllocator :: Crucible.HandleAllocator RealWorld
     }
 
 instance Show SAWState where
-  show (SAWState e _ t) = "(SAWState " ++ show e ++ " _sc_ " ++ show t ++ ")"
+  show (SAWState e _ t _) = "(SAWState " ++ show e ++ " _sc_ " ++ show t ++ " _halloc_)"
 
 sawEnv :: Simple Lens SAWState SAWEnv
 sawEnv = lens _sawEnv (\v e -> v { _sawEnv = e })
 
-sawSC :: Simple Lens SAWState SharedContext
-sawSC = lens _sawSC (\v sc -> v { _sawSC = sc })
+sawBIC :: Simple Lens SAWState BuiltinContext
+sawBIC = lens _sawBIC (\v bic -> v { _sawBIC = bic })
 
 sawTask :: Simple Lens SAWState [(SAWTask, SAWEnv)]
 sawTask = lens _sawTask (\v t -> v { _sawTask = t })
 
+sawHandleAllocator :: Simple Lens SAWState (Crucible.HandleAllocator RealWorld)
+sawHandleAllocator = lens _sawHandleAllocator (\v ha -> v { _sawHandleAllocator = ha })
+
 pushTask :: SAWTask -> Method SAWState ()
 pushTask t = modifyState mod
-  where mod (SAWState env sc stack) = SAWState env sc ((t, env) : stack)
+  where mod (SAWState env sc stack halloc) = SAWState env sc ((t, env) : stack) halloc
 
 dropTask :: Method SAWState ()
 dropTask = modifyState mod
-  where mod (SAWState _ _ []) = error "Internal error - stack underflow"
-        mod (SAWState _ sc ((t, env):stack)) =
-          SAWState env sc stack
+  where mod (SAWState _ _ [] _) = error "Internal error - stack underflow"
+        mod (SAWState _ sc ((t, env):stack) halloc) =
+          SAWState env sc stack halloc
+
+getHandleAlloc :: Method SAWState (Crucible.HandleAllocator RealWorld)
+getHandleAlloc = view sawHandleAllocator <$> getState
 
 initialState :: IO SAWState
 initialState =
@@ -76,15 +90,23 @@ initialState =
      CryptolSAW.scLoadCryptolModule sc
      let mn = mkModuleName ["SAWScript"]
      scLoadModule sc (emptyModule mn)
-
-     return (SAWState emptyEnv sc [])
+     ss <- basic_ss sc
+     let jarFiles = []
+         classPaths = []
+     jcb <- JSS.loadCodebase jarFiles classPaths
+     let bic = BuiltinContext { biSharedContext = sc
+                              , biJavaCodebase = jcb
+                              , biBasicSS = ss
+                              }
+     halloc <- stToIO $ Crucible.newHandleAllocator
+     return (SAWState emptyEnv bic [] halloc)
 
 validateSAWState :: SAWState -> IO Bool
 validateSAWState _ = pure True
 
 
 newtype SAWEnv =
-  SAWEnv { sawEnvBindings :: (Map ServerName ServerVal) }
+  SAWEnv { sawEnvBindings :: Map ServerName ServerVal }
   deriving Show
 
 emptyEnv :: SAWEnv
@@ -106,12 +128,15 @@ data ServerVal
   | VCryptolModule CryptolModule -- from SAW, includes Term mappings
   | VCryptolEnv CryptolEnv  -- from SAW, includes Term mappings
   | VLLVMCrucibleSetup (LLVMCrucibleSetupM ())
+  | VLLVMModule (Some CMS.LLVMModule)
 
 instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"
   show (VType t) = "(VType " ++ show t ++ ")"
   show (VCryptolModule _) = "VCryptolModule"
   show (VCryptolEnv _) = "VCryptolEnv"
+  show (VLLVMCrucibleSetup _) = "VLLVMCrucibleSetup"
+  show (VLLVMModule (Some _)) = "VLLVMModule"
 
 class IsServerVal a where
   toServerVal :: a -> ServerVal
@@ -127,6 +152,12 @@ instance IsServerVal CryptolModule where
 
 instance IsServerVal CryptolEnv where
   toServerVal = VCryptolEnv
+
+instance IsServerVal (LLVMCrucibleSetupM ()) where
+  toServerVal = VLLVMCrucibleSetup
+
+instance IsServerVal (Some CMS.LLVMModule) where
+  toServerVal = VLLVMModule
 
 setServerVal :: IsServerVal val => ServerName -> val -> Method SAWState ()
 setServerVal name val =

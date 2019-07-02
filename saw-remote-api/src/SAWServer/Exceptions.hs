@@ -1,5 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
-module SAWServer.Exceptions where
+module SAWServer.Exceptions (
+  -- * Environment errors
+    serverValNotFound
+  , notACryptolEnv
+  -- * Wrong monad errors
+  , notSettingUpCryptol
+  , notSettingUpLLVMCrucible
+  , notAtTopLevel
+  -- * LLVM errors
+  , cantLoadLLVMModule
+  -- * To be eventually eliminated
+  , genericError
+  ) where
 
 import Data.Aeson
 import Data.Text (Text)
@@ -29,8 +41,19 @@ notACryptolEnv name =
 
 notSettingUpCryptol :: JSONRPCException
 notSettingUpCryptol = makeJSONRPCException 1003 "Not currently setting up Cryptol" noData
-  where noData :: Maybe ()
-        noData = Nothing
+
+notSettingUpLLVMCrucible :: JSONRPCException
+notSettingUpLLVMCrucible = makeJSONRPCException 1004 "Not currently setting up Crucible/LLVM" noData
+
+notAtTopLevel :: JSONRPCException
+notAtTopLevel = makeJSONRPCException 1005 "Not at top level" noData
+
+cantLoadLLVMModule :: String -> JSONRPCException
+cantLoadLLVMModule err = makeJSONRPCException 5000 "Can't load LLVM module" (Just err)
+
+noData :: Maybe ()
+noData = Nothing
+
 
 -- TODO: Get rid of these and make them specific
 genericError :: Text -> JSONRPCException

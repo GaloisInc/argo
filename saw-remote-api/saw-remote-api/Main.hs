@@ -22,7 +22,9 @@ import Argo.CacheTree
 
 import SAWServer
 import SAWServer.CryptolSetup
+import SAWServer.LLVMCrucibleSetup
 import SAWServer.SaveTerm
+
 
 main :: IO ()
 main =
@@ -80,4 +82,8 @@ sawMethods =
   , ("SAW/Cryptol/load file",    Command, method cryptolSetupLoadFile)
   , ("SAW/Cryptol/finish setup", Command, method cryptolSetupDone)
   , ("SAW/Cryptol/save term",    Command, method saveTerm)
+  , ("SAW/LLVM/start setup",     Command, method startLLVMCrucibleSetup)
+  , ("SAW/LLVM/return",          Command, method llvmCrucibleReturn)
+  , ("SAW/LLVM/finish setup",    Command, method llvmCrucibleSetupDone)
+  , ("SAW/LLVM/load module",     Command, method llvmLoadModule)
   ]

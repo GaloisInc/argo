@@ -11,10 +11,13 @@ module SAWServer.Exceptions (
   , notAtTopLevel
   -- * LLVM errors
   , cantLoadLLVMModule
+  -- * Verification
+  , verificationException
   -- * To be eventually eliminated
   , genericError
   ) where
 
+import Control.Exception
 import Data.Aeson
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -76,6 +79,9 @@ notAtTopLevel tasks = makeJSONRPCException 1005 "Not at top level" (Just tasks)
 
 cantLoadLLVMModule :: String -> JSONRPCException
 cantLoadLLVMModule err = makeJSONRPCException 5000 "Can't load LLVM module" (Just err)
+
+verificationException :: Exception e => e -> JSONRPCException
+verificationException e = makeJSONRPCException 6000 "Verification exception" (Just (displayException e))
 
 noData :: Maybe ()
 noData = Nothing

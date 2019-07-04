@@ -13,7 +13,9 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
+import qualified Data.ABC.GIA as GIA
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
+import qualified Lang.Crucible.JVM as CJ
 import qualified Verifier.Java.Codebase as JSS
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.Module (emptyModule)
@@ -21,10 +23,14 @@ import Verifier.SAW.SharedTerm (Term, SharedContext, mkSharedContext, scLoadModu
 import Verifier.SAW.Term.Functor (mkModuleName)
 import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
+
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule(..))
+import SAWScript.Options (defaultOptions)
+import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
-import SAWScript.Value (BuiltinContext(..), LLVMCrucibleSetupM)
+import SAWScript.Value (AIGProxy(..), BuiltinContext(..), LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
+import Verifier.SAW.CryptolEnv (initCryptolEnv)
 import qualified Verifier.Java.SAWBackend as JavaSAW
 import qualified Verifier.LLVM.Backend.SAW as LLVMSAW
 
@@ -45,16 +51,20 @@ instance Show SAWTask where
   show ProofScript = "ProofScript"
   show (LLVMCrucibleSetup n _) = "(LLVMCrucibleSetup" ++ show n ++ " _)"
 
+instance ToJSON SAWTask where
+  toJSON = toJSON . show
+
 data SAWState =
   SAWState
     { _sawEnv :: SAWEnv
     , _sawBIC :: BuiltinContext
     , _sawTask :: [(SAWTask, SAWEnv)]
-    , _sawHandleAllocator :: Crucible.HandleAllocator RealWorld
+    , _sawTopLevelRO :: TopLevelRO
+    , _sawTopLevelRW :: TopLevelRW
     }
 
 instance Show SAWState where
-  show (SAWState e _ t _) = "(SAWState " ++ show e ++ " _sc_ " ++ show t ++ " _halloc_)"
+  show (SAWState e _ t _ _) = "(SAWState " ++ show e ++ " _sc_ " ++ show t ++ " _ro_ _rw)"
 
 sawEnv :: Simple Lens SAWState SAWEnv
 sawEnv = lens _sawEnv (\v e -> v { _sawEnv = e })
@@ -65,21 +75,25 @@ sawBIC = lens _sawBIC (\v bic -> v { _sawBIC = bic })
 sawTask :: Simple Lens SAWState [(SAWTask, SAWEnv)]
 sawTask = lens _sawTask (\v t -> v { _sawTask = t })
 
-sawHandleAllocator :: Simple Lens SAWState (Crucible.HandleAllocator RealWorld)
-sawHandleAllocator = lens _sawHandleAllocator (\v ha -> v { _sawHandleAllocator = ha })
+sawTopLevelRO :: Simple Lens SAWState TopLevelRO
+sawTopLevelRO = lens _sawTopLevelRO (\v ro -> v { _sawTopLevelRO = ro })
+
+sawTopLevelRW :: Simple Lens SAWState TopLevelRW
+sawTopLevelRW = lens _sawTopLevelRW (\v rw -> v { _sawTopLevelRW = rw })
+
 
 pushTask :: SAWTask -> Method SAWState ()
 pushTask t = modifyState mod
-  where mod (SAWState env sc stack halloc) = SAWState env sc ((t, env) : stack) halloc
+  where mod (SAWState env bic stack ro rw) = SAWState env bic ((t, env) : stack) ro rw
 
 dropTask :: Method SAWState ()
 dropTask = modifyState mod
-  where mod (SAWState _ _ [] _) = error "Internal error - stack underflow"
-        mod (SAWState _ sc ((t, env):stack) halloc) =
-          SAWState env sc stack halloc
+  where mod (SAWState _ _ [] _ _) = error "Internal error - stack underflow"
+        mod (SAWState _ sc ((t, env):stack) ro rw) =
+          SAWState env sc stack ro rw
 
 getHandleAlloc :: Method SAWState (Crucible.HandleAllocator RealWorld)
-getHandleAlloc = view sawHandleAllocator <$> getState
+getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> getState
 
 initialState :: IO SAWState
 initialState =
@@ -98,8 +112,29 @@ initialState =
                               , biJavaCodebase = jcb
                               , biBasicSS = ss
                               }
+     cenv <- initCryptolEnv sc
      halloc <- stToIO $ Crucible.newHandleAllocator
-     return (SAWState emptyEnv bic [] halloc)
+     jvmTrans <- CJ.mkInitialJVMContext halloc
+     let ro = TopLevelRO
+                { roSharedContext = sc
+                , roJavaCodebase = jcb
+                , roOptions = defaultOptions
+                , roHandleAlloc = halloc
+                , roPosition = PosInternal "SAWServer"
+                , roProxy = AIGProxy GIA.proxy
+                }
+         rw = TopLevelRW
+                { rwValues = mempty
+                , rwTypes = mempty
+                , rwTypedef = mempty
+                , rwDocs = mempty
+                , rwCryptol = cenv
+                , rwPPOpts = defaultPPOpts
+                , rwJVMTrans = jvmTrans
+                , rwPrimsAvail = mempty
+                , rwSMTArrayMemoryModel = False
+                }
+     return (SAWState emptyEnv bic [] ro rw)
 
 validateSAWState :: SAWState -> IO Bool
 validateSAWState _ = pure True
@@ -186,3 +221,17 @@ getCryptolEnv n =
      case v of
        VCryptolEnv env -> return env
        other -> raise (notACryptolEnv n)
+
+getLLVMModule :: ServerName -> Method SAWState (Some CMS.LLVMModule)
+getLLVMModule n =
+  do v <- getServerVal n
+     case v of
+       VLLVMModule m -> return m
+       other -> raise (notAnLLVMModule n)
+
+getLLVMSetup :: ServerName -> Method SAWState (LLVMCrucibleSetupM ())
+getLLVMSetup n =
+  do v <- getServerVal n
+     case v of
+       VLLVMCrucibleSetup setup -> return setup
+       other -> raise (notAnLLVMSetup n)

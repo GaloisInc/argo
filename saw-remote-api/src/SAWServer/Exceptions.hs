@@ -3,6 +3,8 @@ module SAWServer.Exceptions (
   -- * Environment errors
     serverValNotFound
   , notACryptolEnv
+  , notAnLLVMModule
+  , notAnLLVMSetup
   -- * Wrong monad errors
   , notSettingUpCryptol
   , notSettingUpLLVMCrucible
@@ -39,14 +41,38 @@ notACryptolEnv name =
      " is not a Cryptol environment")
     (Just $ object ["name" .= name])
 
+notAnLLVMModule ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to an LLVM module -}->
+  JSONRPCException
+notAnLLVMModule name =
+  makeJSONRPCException 1003
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not an LLVM module")
+    (Just $ object ["name" .= name])
+
+notAnLLVMSetup ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to an LLVM setup script -}->
+  JSONRPCException
+notAnLLVMSetup name =
+  makeJSONRPCException 1004
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not an LLVM setup script")
+    (Just $ object ["name" .= name])
+
+
+
 notSettingUpCryptol :: JSONRPCException
 notSettingUpCryptol = makeJSONRPCException 1003 "Not currently setting up Cryptol" noData
 
 notSettingUpLLVMCrucible :: JSONRPCException
 notSettingUpLLVMCrucible = makeJSONRPCException 1004 "Not currently setting up Crucible/LLVM" noData
 
-notAtTopLevel :: JSONRPCException
-notAtTopLevel = makeJSONRPCException 1005 "Not at top level" noData
+notAtTopLevel :: ToJSON a => a -> JSONRPCException
+notAtTopLevel tasks = makeJSONRPCException 1005 "Not at top level" (Just tasks)
 
 cantLoadLLVMModule :: String -> JSONRPCException
 cantLoadLLVMModule err = makeJSONRPCException 5000 "Can't load LLVM module" (Just err)

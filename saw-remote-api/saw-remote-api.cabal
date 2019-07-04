@@ -18,17 +18,20 @@ extra-source-files:  CHANGELOG.md
 
 common deps
   build-depends: base >=4.11.1.0 && <4.13,
+                 abcBridge,
                  aeson,
                  argo,
                  containers >= 0.6 && < 0.7,
                  cryptol == 2.7.1,
                  cryptol-verifier,
                  crucible,
+                 crucible-jvm,
                  directory,
                  jvm-verifier,
                  lens,
                  llvm-pretty-bc-parser,
                  llvm-verifier,
+                 mtl,
                  parameterized-utils,
                  saw-core,
                  saw-script,
@@ -44,11 +47,13 @@ library
                    SAWServer.CryptolSetup,
                    SAWServer.Exceptions,
                    SAWServer.LLVMCrucibleSetup,
+                   SAWServer.LLVMVerify,
                    SAWServer.NoParams,
                    SAWServer.OK,
                    SAWServer.SaveTerm,
                    SAWServer.SetupValue,
-                   SAWServer.Term
+                   SAWServer.Term,
+                   SAWServer.TopLevel
 
 executable saw-remote-api
   import: deps

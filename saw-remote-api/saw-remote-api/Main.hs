@@ -23,6 +23,7 @@ import Argo.CacheTree
 import SAWServer
 import SAWServer.CryptolSetup
 import SAWServer.LLVMCrucibleSetup
+import SAWServer.LLVMVerify
 import SAWServer.SaveTerm
 
 
@@ -86,4 +87,5 @@ sawMethods =
   , ("SAW/LLVM/return",          Command, method llvmCrucibleReturn)
   , ("SAW/LLVM/finish setup",    Command, method llvmCrucibleSetupDone)
   , ("SAW/LLVM/load module",     Command, method llvmLoadModule)
+  , ("SAW/LLVM/verify",          Command, method llvmVerify)
   ]

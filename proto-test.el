@@ -269,6 +269,19 @@ errors."
                               (error "When saving term, got error %s (%S) with info %S"
                                      code err-message err-data))))
 
+(defun proto-test-saw-llvm-verify (module function lemmas check-sat setup tactic lemma-name)
+  "Attempt LLVM verification for FUNCTION in MODULE, based on LEMMAS, with CHECK-SAT, using SETUP as a spec and TACTIC to invoke a prover, saving the result as LEMMA-NAME."
+  (proto-test--message-send "SAW/LLVM/verify"
+                            (proto-test-hash ("module" module)
+                                             ("function" function)
+                                             ("lemmas" lemmas)
+                                             ("check sat" (if check-sat t json-false))
+                                             ("setup" setup)
+                                             ("tactic" tactic)
+                                             ("lemma name" lemma-name))
+                            (lambda (res)
+                              (message "Verification result: %S" res))))
+
 
 (defvar proto-test--saw-unique-string-counter 0)
 (defun proto-test--saw-unique-name (&optional basis)
@@ -293,12 +306,18 @@ errors."
 (defun proto-test--saw-multi-command-test-llvm ()
   "Run some test steps."
   (interactive)
-  (let ((setup-name (proto-test--saw-unique-name "setup")))
+  (let ((setup-name (proto-test--saw-unique-name "setup"))
+        (module-name (proto-test--saw-unique-name "module"))
+        (lemma-out-name (proto-test--saw-unique-name "lemma-out")))
+    (proto-test-saw-llvm-load-module module-name "seven.bc")
+    (sit-for 1)
     (proto-test-saw-llvm-start-setup setup-name)
     (sit-for 1)
     (proto-test-saw-return "null")
     (sit-for 1)
-    (proto-test-saw-llvm-finish-setup)))
+    (proto-test-saw-llvm-finish-setup)
+    (sit-for 1)
+    (proto-test-saw-llvm-verify module-name "seven" '[] nil setup-name "abc" lemma-out-name)))
 
 (defvar proto-test--cryptol-get-arg-context '()
   "The context to show in the argument-getting prompt.")

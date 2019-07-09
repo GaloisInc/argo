@@ -44,6 +44,7 @@ library
   import: deps
   hs-source-dirs: src
   exposed-modules: SAWServer,
+                   SAWServer.CryptolExpression,
                    SAWServer.CryptolSetup,
                    SAWServer.Exceptions,
                    SAWServer.LLVMCrucibleSetup,

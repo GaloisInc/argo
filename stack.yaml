@@ -1,4 +1,4 @@
-resolver: lts-13.10
+resolver: lts-13.27
 
 packages:
 - argo
@@ -47,7 +47,10 @@ extra-deps:
 - network-3.0.1.0
 - panic-0.4.0.1
 - simple-smt-0.9.4
-- sbv-8.0
+- sbv-8.2
+- config-schema-1.0.0.0
+- config-value-0.6.3.1
+- simple-get-opt-0.3
 
 # stack's metadata gets out of date
 allow-newer: true

@@ -38,7 +38,7 @@ extra-deps:
 - deps/saw-core-what4/
 # not local things
 - IfElse-0.85
-- itanium-abi-0.1.1.0
+- itanium-abi-0.1.1.1
 - boomerang-1.4.5.6
 - fgl-visualize-0.1.0.1
 - GraphSCC-1.0.4
@@ -47,10 +47,11 @@ extra-deps:
 - network-3.0.1.0
 - panic-0.4.0.1
 - simple-smt-0.9.4
-- sbv-8.2
+- sbv-8.3
 - config-schema-1.0.0.0
 - config-value-0.6.3.1
 - simple-get-opt-0.3
+- th-abstraction-0.3.1.0
 
 # stack's metadata gets out of date
 allow-newer: true

@@ -71,6 +71,7 @@ them, their precise structure is considered an implementation detail
 that could change at any time. Please treat them as opaque tokens that
 may be saved and re-used, but not created by the client directly.
 
+
 Cryptol
 =======
 
@@ -317,7 +318,103 @@ three fields:
   The type in which the variables from ``"forall"`` are in scope and
   the constraints in ``"propositions"`` are in effect.
 
-TODO: document the representation of types.
+Concrete Types
+______________
+
+Types are represented as JSON objects. The ``"type"`` field contains one of the following tags:
+
+``"variable"``
+  The type is a type variable. The remaining fields are ``"name"``,
+  which contains the variable's name, and ``"kind"``, which contains
+  its kind (represented as in the ``"forall"`` section).
+
+``"record"``
+  The type is a record type. The remaining field is ``"fields"``,
+  which contains a JSON object whose keys are the names of fields and
+  whose values are the fields' types.
+
+``"number"``
+  The type is a number. The field ``"value"`` contains the number
+  itself.
+
+``"inf"``
+  The type is the infinite number. There are no further fields.
+
+``"Bit"``
+  The type is the bit type. There are no further fields.
+
+``"Integer"``
+  The type is the integer type. There are no further fields.
+
+``"Z"``
+  The type is integers modulo another value. The field ``"modulus"``
+  contains the modulus, which is a type.
+
+``"bitvector"``
+  The type is a bitvector. The field ``"width"`` contains the number
+  of bits, which is a type.
+
+``"sequence"``
+  The type is a sequence. The field ``"length"`` contains the length
+  of the sequence (a type), and the field ``"contents"`` contains the
+  type of entries in the sequence.
+
+``"function"``
+  The type is a function type. The fields ``"domain"`` and ``"range"``
+  contain the domain and range types.
+
+``"unit"``
+  The type is the unit type. There are no further fields.
+
+``"tuple"``
+  The type is a tuple. The field ``"contents"`` is a JSON array
+  containing the types of the projections from the tuple.
+
+One of ``"+"``, ``"-"``, ``"*"``, ``"/"``, ``"%"``, ``"^^"``, ``"width"``, ``"min"``, ``"max"``, ``"/^"``, ``"%^"``, ``"lengthFromThenTo"``
+  The type is an application of the indicated type function. The
+  arguments are contained in the ``"arguments"`` field, as a JSON
+  array.
+
+Propositions
+____________
+
+Propositions/constraints have the key ``"prop"``, mapped to one of the
+following tags:
+
+``"=="``
+  Equality. The equated terms are in the ``"left"`` and ``"right"``
+  fields.
+
+``"!="``
+  Inequality. The disequated terms are in the ``"left"`` and
+  ``"right"`` fields.
+
+``">="``
+  Greater than. The greater type is in the ``"greater"`` field and the
+  lesser type is in the ``"lesser"`` field.
+
+``"fin"``
+  Finitude. The finite type is in the ``"subject"`` field.
+
+``"has"``
+  The selector is in the ``"selector"`` field, the type that has this
+  selector is in the ``"type"`` field, and the type expected for the
+  projection is in the ``"is"`` field.
+
+``"Arith"``, ``"Cmp"``, ``"SignedCmp"``, ``"Zero"``, ``"Logic"``
+  The type that has these operations defined is in the ``"subject"``
+  field.
+
+``"Literal"``
+  The size is in the ``"size"`` field, and the type is in the
+  ``"subject"`` field.
+
+``"True"``
+  There are no further fields.
+
+``"And"``
+  The conjuncts are in the ``"left"`` and ``"right"`` fields.
+
 
 SAW Messages
 ============

@@ -14,7 +14,7 @@ about the Cryptol-specific interaction commands, and one about the
 SAW-specific commands.
 
 Overall Protocol Structure
-==================
+==========================
 
 The interaction protocols are designed primarily to support
 interactive, rather than batch mode, use of SAW. SAW is a stateful

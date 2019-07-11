@@ -53,6 +53,7 @@ extra-deps:
 - simple-get-opt-0.3
 - th-abstraction-0.3.1.0
 - aeson-1.4.4.0
+- time-compat-1.9.2.2
 
 # stack's metadata gets out of date
 allow-newer: true

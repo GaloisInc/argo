@@ -70,7 +70,6 @@ with two fields:
   The new state, to be sent in subsequent requests
 
 ``"answer"``
-
   The value returned as a response to the request (the precise
   contents depend on which request was sent)
 

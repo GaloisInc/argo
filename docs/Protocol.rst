@@ -63,7 +63,16 @@ When the first message is sent from the client to the server, the
 ``"state"`` parameter should be initialized to the empty JSON array
 ``[]``. Replies from the server contain a new state that should be
 used in subsequent requests, so that state changes executed by the
-request are visible.
+request are visible. In particular, replies are always a JSON object
+with two fields:
+
+``"state"``
+  The new state, to be sent in subsequent requests
+
+``"answer"``
+
+  The value returned as a response to the request (the precise
+  contents depend on which request was sent)
 
 While the state representations returned from the server presently
 have a predictable relationship to the commands that gave rise to

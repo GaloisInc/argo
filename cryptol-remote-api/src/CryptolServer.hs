@@ -18,7 +18,7 @@ import Cryptol.ModuleSystem
    checkExpr, evalExpr, loadModuleByPath, loadModuleByName)
 import Cryptol.ModuleSystem.Env
   (getLoadedModules, lmCanonicalPath, lmFingerprint, meLoadedModules,
-   initialModuleEnv, meSolverConfig)
+   initialModuleEnv, meSearchPath, meSolverConfig)
 import Cryptol.ModuleSystem.Fingerprint
 import Cryptol.Parser.AST (ModName)
 import Cryptol.Utils.Logger (quietLogger)
@@ -62,6 +62,10 @@ moduleEnv = lens _moduleEnv (\v n -> v { _moduleEnv = n })
 
 initialState :: IO ServerState
 initialState = ServerState Nothing <$> initialModuleEnv
+
+setSearchPath :: [FilePath] -> ServerState -> ServerState
+setSearchPath paths =
+  over moduleEnv $ \me -> me { meSearchPath = paths ++ meSearchPath me }
 
 theEvalOpts :: EvalOpts
 theEvalOpts = EvalOpts quietLogger (PPOpts False 10 25)

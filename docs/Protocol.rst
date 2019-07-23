@@ -103,8 +103,19 @@ Method name: ``"load module"``
 
 Parameters:
 
+``"module name"``
+  The name of the Cryptol module to be loaded.
+
+Loading Files
+~~~~~~~~~~~~~~~
+
+Method name: ``"load file"``
+
+Parameters:
+
 ``"file"``
-  The name of the Cryptol module file to be loaded.
+  The name of the Cryptol source file to be loaded.
+
 
 Module Context
 ~~~~~~~~~~~~~~

@@ -108,12 +108,22 @@ errors."
 (defun proto-test-cryptol-load-file (file)
   "Load FILE in Cryptol."
   (interactive "FFile to load: ")
-  (proto-test--message-send "load module"
+  (proto-test--message-send "load file"
                             (proto-test-hash (:file file))
                             (lambda (res)
                               (message "Loaded file %S" res))
                             (lambda (code err-message &optional err-data)
                               (error "When loading file, got error %s (%S) with info %S" code err-message err-data))))
+
+(defun proto-test-cryptol-load-module (module)
+  "Load MODULE in Cryptol."
+  (interactive "MModule to load: ")
+  (proto-test--message-send "load module"
+                            (proto-test-hash ("module name" module))
+                            (lambda (res)
+                              (message "Loaded module %S" res))
+                            (lambda (code err-message &optional err-data)
+                              (error "When loading module, got error %s (%S) with info %S" code err-message err-data))))
 
 
 (defun proto-test-cryptol-eval (expr)

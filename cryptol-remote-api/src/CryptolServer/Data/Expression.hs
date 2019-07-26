@@ -351,11 +351,9 @@ readBack prims ty val =
       , VWord _ wv <- val ->
         do BV w v <- wv >>= asWordVal
            return $ Num Hex (T.pack $ showHex v "") w
-      | TC.TCon (TC (TCNum k)) [] <- len ->
-        Sequence <$> sequence [ do v <- evalSel val (ListSel n Nothing)
-                                   readBack prims contents v
-                              | n <- [0 .. fromIntegral k]
-                              ]
+      | TC.TCon (TC (TCNum k)) [] <- len
+      , VSeq l (enumerateSeqMap k -> vs) <- val ->
+        Sequence <$> mapM (>>= readBack prims contents) vs
     other -> liftIO $ throwIO (invalidType other)
 
 

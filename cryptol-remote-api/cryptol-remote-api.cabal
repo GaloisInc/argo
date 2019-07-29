@@ -67,3 +67,4 @@ test-suite test-cryptol-remote-api
     quickcheck-instances ^>= 0.3.19,
     tasty                ^>= 1.2.1,
     tasty-quickcheck     ^>= 0.10,
+    tasty-program        ^>= 1.0.5,

@@ -12,6 +12,7 @@ import Test.QuickCheck.Instances.ByteString
 import Test.QuickCheck.Instances.Scientific
 import Test.QuickCheck.Instances.Text
 import Test.Tasty
+import Test.Tasty.Program
 import Test.Tasty.QuickCheck
 
 import CryptolServer.Call
@@ -22,8 +23,13 @@ main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "The tests" [ callMsgProps ]
+tests = testGroup "The tests" [ callMsgProps {-, pythonTests  Need to figure out how to make it find the file -} ]
 
+
+pythonTests =
+  testGroup "Python tests"
+    [ testProgram "Python regression tests" "python3" ["python/cryptol-tests.py"] (Just ".")
+    ]
 
 instance Arbitrary Encoding where
   arbitrary = oneof [pure Hex, pure Base64]

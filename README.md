@@ -85,16 +85,11 @@ Python bindings are in the `python` subdirectory. Right now, only
 Cryptol functionality is implemented, but SAW is on the way. The
 bindings are tested only with Python 3.7.
 
-To test out the Python bindings, first start the server listening on a
-socket:
-
-`cabal v2-exec cryptol-remote-api -- --socket 10006`
-
-Then, load the test file in a Python REPL. We recommend `ipython3`,
-because it provides easy access to docstrings and tab
-completion. Here's an example command line and Python session to give
-you an idea of what's currently implemented, with commentary in the
-form of Python comments:
+To test out the Python bindings, load the test file in a Python
+REPL. We recommend `ipython3`, because it provides easy access to
+docstrings and tab completion. Here's an example command line and
+Python session to give you an idea of what's currently implemented,
+with commentary in the form of Python comments:
 
 ```
 $ ipython3 -i cryptol-api_test.py

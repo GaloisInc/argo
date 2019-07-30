@@ -72,3 +72,39 @@ assert(reply_5['result']['answer']['value'] ==
                   'encoding': 'hex'},
                  'unit':
                  {'expression': 'unit'}}})
+
+id_6 = c.send_message("evaluate expression",
+                      {"state": state_1,
+                       "expression": {"expression": "let",
+                                      "binders": [{"name": "theRecord", "definition": a_record}],
+                                      "body": {"expression": "tuple",
+                                               "data": [a_record, "theRecord"]}}})
+reply_6 = c.wait_for_reply_to(id_6)
+assert('result' in reply_6)
+assert('answer' in reply_6['result'])
+assert('value' in reply_6['result']['answer'])
+assert(reply_6['result']['answer']['value'] ==
+       {'expression': 'tuple',
+        'data': [{'data': {'fifteen': {'data': 'f', 'width': 4, 'expression': 'bits', 'encoding': 'hex'},
+                           'unit': {'expression': 'unit'}},
+                  'expression': 'record'},
+                 {'data': {'fifteen': {'data': 'f', 'width': 4, 'expression': 'bits', 'encoding': 'hex'},
+                           'unit': {'expression': 'unit'}},
+                  'expression': 'record'}]})
+
+id_7 = c.send_message("evaluate expression",
+                      {"state": state_1,
+                       "expression": {"expression": "sequence",
+                                      "data": [a_record, a_record]}})
+reply_7 = c.wait_for_reply_to(id_7)
+assert('result' in reply_7)
+assert('answer' in reply_7['result'])
+assert('value' in reply_7['result']['answer'])
+assert(reply_7['result']['answer']['value'] ==
+       {'expression': 'sequence',
+        'data': [{'data': {'fifteen': {'data': 'f', 'width': 4, 'expression': 'bits', 'encoding': 'hex'},
+                           'unit': {'expression': 'unit'}},
+                  'expression': 'record'},
+                 {'data': {'fifteen': {'data': 'f', 'width': 4, 'expression': 'bits', 'encoding': 'hex'},
+                           'unit': {'expression': 'unit'}},
+                  'expression': 'record'}]})

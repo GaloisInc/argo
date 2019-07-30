@@ -283,12 +283,12 @@ The tag values in objects are:
   object that maps record field names to JSON Cryptol expressions.
 
 ``"sequence"``
-  The expression is a sequence. The field ``"sequence"`` contains a
+  The expression is a sequence. The field ``"data"`` contains a
   JSON array of the elements of the sequence; each is a JSON Cryptol
   expression.
 
 ``"tuple"``
-  The expression is a tuple. The field ``"tuple"`` contains a JSON
+  The expression is a tuple. The field ``"data"`` contains a JSON
   array of the elements of the tuple; each is a JSON Cryptol
   expression.
 

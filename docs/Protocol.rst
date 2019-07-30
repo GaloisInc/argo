@@ -279,7 +279,7 @@ The tag values in objects are:
     An integer: the bit-width of the represented bit vector
 
 ``"record"``
-  The expression is a record. The field ``"record data"`` is a JSON
+  The expression is a record. The field ``"data"`` is a JSON
   object that maps record field names to JSON Cryptol expressions.
 
 ``"sequence"``

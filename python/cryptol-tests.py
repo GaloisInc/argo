@@ -50,3 +50,25 @@ assert(reply_4['result']['answer']['value'] ==
        {'data': [{'data': 'ff', 'width': 8, 'expression': 'bits', 'encoding': 'hex'},
                  {'data': 'ff', 'width': 8, 'expression': 'bits', 'encoding': 'hex'}],
         'expression': 'sequence'})
+
+a_record = {"expression": "record",
+            "data": {"unit": "()",
+                     "fifteen": {"expression": "bits",
+                                 "encoding": "hex",
+                                 "width": 4,
+                                 "data": "f"}}}
+
+id_5 = c.send_message("evaluate expression", {"state": state_1, "expression": a_record})
+reply_5 = c.wait_for_reply_to(id_5)
+assert('result' in reply_5)
+assert('answer' in reply_5['result'])
+assert('value' in reply_5['result']['answer'])
+assert(reply_5['result']['answer']['value'] ==
+       {'expression': 'record',
+        'data': {'fifteen':
+                 {'data': 'f',
+                  'width': 4,
+                  'expression': 'bits',
+                  'encoding': 'hex'},
+                 'unit':
+                 {'expression': 'unit'}}})

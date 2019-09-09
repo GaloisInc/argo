@@ -116,7 +116,7 @@ method ::
 method f p =
   case JSON.fromJSON @params p of
     JSON.Error msg ->
-      raise (invalidParams p)
+      raise (invalidParams msg p)
     JSON.Success params ->
       JSON.toJSON <$> f params
 
@@ -208,10 +208,10 @@ instance JSON.ToJSON JSONRPCException where
       ]
 
 -- | A method was provided with incorrect parameters (from the JSON-RPC spec)
-invalidParams ::  JSON.Value -> JSONRPCException
-invalidParams params =
+invalidParams :: String -> JSON.Value -> JSONRPCException
+invalidParams msg params =
   JSONRPCException { errorCode = -32602
-                   , message = "Invalid params"
+                   , message = T.pack ("Invalid params: " ++ msg)
                    , errorData = Just params
                    , errorID = Nothing
                    }

@@ -15,6 +15,8 @@ import qualified Data.Aeson.Types as JSON
 import Data.Text (Text)
 import qualified Options.Applicative as Opt
 import System.Directory (doesDirectoryExist, setCurrentDirectory)
+import System.Environment (lookupEnv)
+import System.FilePath (splitSearchPath)
 import System.IO (stdout, hSetBuffering, BufferMode(..))
 
 import Argo
@@ -68,9 +70,15 @@ transport = dyn4 <|> dyn6 <|> socket <|> stdio <|> pure StdIONetstring
     dyn6        = Opt.flag' (SocketNetstringDyn "::1"      ) (Opt.long "dynamic")
 
 
+getSearchPaths :: IO [FilePath]
+getSearchPaths =
+  maybe [] splitSearchPath <$> lookupEnv "CRYPTOLPATH"
+
+
 realMain :: Options -> IO ()
 realMain opts =
-  do initSt <- initialState
+  do paths <- getSearchPaths
+     initSt <- setSearchPath paths <$> initialState
      cache  <- newCache initSt
      theApp <- mkApp (HistoryWrapper cache) (historyWrapper validateServerState cryptolMethods)
      case transportOpt opts of
@@ -87,6 +95,7 @@ cryptolMethods :: [(Text, MethodType, JSON.Value -> Method ServerState JSON.Valu
 cryptolMethods =
   [ ("change directory",    Command, method cd)
   , ("load module",         Command, method loadModule)
+  , ("load file",           Command, method loadFile)
   , ("focused module",      Query,   method focusedModule)
   , ("evaluate expression", Query,   method evalExpression)
   , ("call",                Query,   method call)

@@ -36,6 +36,8 @@ public class CryptolConnection implements AutoCloseable {
                     int port = (new Scanner(out)).skip("PORT ").nextInt();
                     // Consume the remaining output and error
                     forLinesAsync(out, l -> { });
+                    // Output debug messages from the subprocess to stderr
+                    // (the ANSI escape codes mean "foreground = red")
                     forLinesAsync(err, l -> System.err.println("\u001B[31m" + l + "\u001B[0m"));
                     // Connect to the port
                     var s = new Socket("127.0.0.1", port);

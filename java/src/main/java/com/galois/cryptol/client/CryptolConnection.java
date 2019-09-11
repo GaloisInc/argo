@@ -60,11 +60,11 @@ public class CryptolConnection implements AutoCloseable {
     // Since this runs on actual output/input streams, we know that connection
     // exceptions in this case are really IOExceptions, so we use this wrapper
     // to allow the caller to not need to see ConnectionExceptions
-    private <O> O call(String method, JsonValue params,
-                       Function<JsonValue, O> decode)
+    private <O> O callMethod(String method, JsonValue params,
+                             Function<JsonValue, O> decode)
         throws CryptolException {
-        Call<O, CryptolException> call =
-            new Call<>(method, params, decode, error -> {
+        JsonRpcCall<O, CryptolException> call =
+            new JsonRpcCall<>(method, params, decode, error -> {
                     // Ensure the error is in range for Cryptol
                     if (error.code < 20000 || error.code > 21000) {
                         return null;
@@ -87,14 +87,14 @@ public class CryptolConnection implements AutoCloseable {
     // The calls available:
 
     public void loadModule(String file) throws CryptolException {
-        call("load module",
-             Json.object().add("file", file),
-             v -> new Unit());
+        this.callMethod("load module",
+                        Json.object().add("file", file),
+                        v -> new Unit());
     }
 
     public String evalExpr(String expr) throws CryptolException {
-        return call("evaluate expression",
-                    Json.object().add("expression", expr),
-                    v -> v.asObject().get("value").toString());
+        return this.callMethod("evaluate expression",
+                               Json.object().add("expression", expr),
+                               v -> v.asObject().get("value").toString());
     }
 }

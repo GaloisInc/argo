@@ -20,7 +20,7 @@ public class JsonConnection implements AutoCloseable {
         new ConcurrentMultiQueue<>();
     private final AtomicInteger nextId =
         new AtomicInteger(0);
-    private final Map<JsonValue, Call<?, ?>> pendingCalls =
+    private final Map<JsonValue, JsonRpcCall<?, ?>> pendingCalls =
         new ConcurrentHashMap<>();
 
     private final Pipe<JsonValue> pipe;
@@ -71,7 +71,7 @@ public class JsonConnection implements AutoCloseable {
         }
     }
 
-    private void sendCall(JsonValue id, Call<?, ?> call) {
+    private void sendCall(JsonValue id, JsonRpcCall<?, ?> call) {
         JsonValue message = Json.object()
             .add("jsonrpc", version)
             .add("id", id)
@@ -84,7 +84,7 @@ public class JsonConnection implements AutoCloseable {
         }
     }
 
-    private void sendNotification(Notification notification) {
+    private void sendNotification(JsonRpcNotification notification) {
         JsonValue message = Json.object()
             .add("jsonrpc", version)
             .add("method", notification.method())
@@ -154,7 +154,7 @@ public class JsonConnection implements AutoCloseable {
         checkResponses.start();
     }
 
-    public <O, E extends Exception> O call(Call<O, E> call) throws E {
+    public <O, E extends Exception> O call(JsonRpcCall<O, E> call) throws E {
         JsonValue id = Json.value(nextId.getAndIncrement());
         pendingCalls.put(id, call); // call is now pending
         this.sendCall(id, call);
@@ -178,7 +178,7 @@ public class JsonConnection implements AutoCloseable {
         }
     }
 
-    public void notify(Notification notification) {
+    public void notify(JsonRpcNotification notification) {
         sendNotification(notification);
     }
 

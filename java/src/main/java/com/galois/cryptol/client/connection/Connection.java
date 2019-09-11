@@ -36,12 +36,12 @@ public class Connection implements AutoCloseable {
         this.currentState = other.currentState;
     }
 
-    public <O, E extends Exception> O call(Call<O, E> call)
+    public <O, E extends Exception> O call(JsonRpcCall<O, E> call)
         throws E, ConnectionException {
         return jsonConnection.call(new StatefulCall<O, E>(call));
     }
 
-    public void notify(Notification notification)
+    public void notify(JsonRpcNotification notification)
         throws ConnectionException {
         jsonConnection.notify(new StatefulNotification(notification.method(),
                                                        notification.params()));
@@ -52,7 +52,7 @@ public class Connection implements AutoCloseable {
         this.jsonConnection.close();
     }
 
-    private class StatefulNotification extends Notification {
+    private class StatefulNotification extends JsonRpcNotification {
 
         public StatefulNotification(String method, JsonValue params) {
             super(method, params);
@@ -71,9 +71,9 @@ public class Connection implements AutoCloseable {
         }
     }
 
-    private class StatefulCall<O, E extends Exception> extends Call<O, E> {
+    private class StatefulCall<O, E extends Exception> extends JsonRpcCall<O, E> {
 
-        public StatefulCall(Call<O, E> call) {
+        public StatefulCall(JsonRpcCall<O, E> call) {
             // We inherit the special params() behavior from StatefulNotification
             super(new StatefulNotification(call.method(), call.params()),
                   call.decoder, call.handler);

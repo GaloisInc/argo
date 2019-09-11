@@ -5,7 +5,7 @@ import java.util.function.*;
 import com.eclipsesource.json.*;
 import com.galois.cryptol.client.connection.*;
 
-public class Call<O, E extends Exception> extends Notification {
+public class JsonRpcCall<O, E extends Exception> extends JsonRpcNotification {
     // How to convert the server response to the function call result; should
     // return null if it cannot be decoded
     public O decode(JsonValue o) { return this.decoder.apply(o); };
@@ -19,17 +19,17 @@ public class Call<O, E extends Exception> extends Notification {
     protected final Function<JsonValue, O> decoder;
     protected final Function<JsonRpcException, E> handler;
 
-    public Call(String method, JsonValue params,
-                Function<JsonValue, O> decode,
-                Function<JsonRpcException, E> handle) {
+    public JsonRpcCall(String method, JsonValue params,
+                       Function<JsonValue, O> decode,
+                       Function<JsonRpcException, E> handle) {
         super(method, params);
         this.decoder = decode;
         this.handler = handle;
     }
 
-    public Call(Notification notification,
-                Function<JsonValue, O> decode,
-                Function<JsonRpcException, E> handle) {
+    public JsonRpcCall(JsonRpcNotification notification,
+                       Function<JsonValue, O> decode,
+                       Function<JsonRpcException, E> handle) {
         super(notification.method(), notification.params());
         this.decoder = decode;
         this.handler = handle;

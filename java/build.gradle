@@ -36,6 +36,12 @@ run {
     standardInput = System.in
 }
 
+task(queuedemo, dependsOn: 'classes', type: JavaExec) {
+    main = 'com.galois.cryptol.client.MultiQueueDemo'
+    classpath = sourceSets.test.runtimeClasspath
+    standardInput = System.in
+}
+
 tasks.withType(JavaCompile) {
     options.compilerArgs << '-Xdiags:verbose'
     options.compilerArgs << '-Xlint:unchecked'

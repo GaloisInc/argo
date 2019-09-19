@@ -1,16 +1,18 @@
 import os
 from pathlib import Path
 
+import argo.connection as argo
+import cryptol
 from cryptol import CryptolConnection, CryptolContext, cry
 
 dir_path = Path(os.path.dirname(os.path.realpath(__file__)))
 
 cryptol_path = dir_path.parent.joinpath('test-data')
 
-c = CryptolConnection(
-    "cabal v2-exec cryptol-remote-api -- --dynamic4",
-    cryptol_path=cryptol_path
-)
+c = argo.ServerConnection(
+      cryptol.CryptolProcess(
+          "cabal v2-exec cryptol-remote-api -- --dynamic4",
+          cryptol_path=cryptol_path))
 
 # Regression tests on nested sequences
 

@@ -1,5 +1,5 @@
-Remote Interaction for SAW and Cryptol
---------------------------------------
+Protocol Description
+--------------------
 
 This repository contains servers that implement APIs for interacting
 remotely with SAW and Cryptol. These APIs are realized as JSON-RPC_

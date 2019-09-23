@@ -40,7 +40,7 @@ class LLVMStartSetup(argo.interaction.Command):
     def __init__(self, connection, name):
         self.method = 'SAW/LLVM/start setup'
         self.params = {'name': name}
-        super(CryptolFinishSetup, self).__init__(connection)
+        super(LLVMStartSetup, self).__init__(connection)
 
     def process_result(self, _res):
         return None
@@ -49,7 +49,7 @@ class LLVMFinishSetup(argo.interaction.Command):
     def __init__(self, connection):
         self.method = 'SAW/LLVM/finish setup'
         self.params = {}
-        super(CryptolFinishSetup, self).__init__(connection)
+        super(LLVMFinishSetup, self).__init__(connection)
 
     def process_result(self, _res):
         return None

@@ -46,7 +46,9 @@ class ServerProcess:
             self.proc = subprocess.Popen(
                 self.command,
                 shell=True,
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, # stderr=sys.stdout,
+                stdout=subprocess.PIPE,
+                # stderr=sys.stdout,
+                stderr=subprocess.DEVNULL,
                 env=self.get_environment(),
                 text=True)
             out_line = self.proc.stdout.readline()

@@ -44,3 +44,23 @@ class SAWConnection:
     def cryptol_finish_setup(self):
         self.most_recent_result = CryptolFinishSetup(self)
         return self.most_recent_result
+
+    def llvm_load_module(self, name, bitcode_file):
+        self.most_recent_result = LLVMLoadModule(self, name, bitcode_file)
+        return self.most_recent_result
+
+    def llvm_verify(self, module, function, lemmas, check_sat, setup, tactic, lemma_name):
+        self.most_recent_result = LLVMVerify(self, module, function, lemmas, check_sat, setup, tactic, lemma_name)
+        return self.most_recent_result
+
+    def llvm_start_setup(self, name):
+        self.most_recent_result = LLVMStartSetup(self, name)
+        return self.most_recent_result
+
+    def llvm_finish_setup(self):
+        self.most_recent_result = LLVMFinishSetup(self)
+        return self.most_recent_result
+
+    def llvm_return(self, val):
+        self.most_recent_result = LLVMReturn(self, val)
+        return self.most_recent_result

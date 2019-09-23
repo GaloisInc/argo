@@ -13,7 +13,7 @@ import qualified Data.Aeson.Types as JSON
 import Data.Text (Text)
 import qualified Options.Applicative as Opt
 import System.Directory (doesDirectoryExist, setCurrentDirectory)
-import System.IO (stdout)
+import System.IO (BufferMode(..), hSetBuffering, stdout)
 
 import Argo
 import Argo.Socket
@@ -72,7 +72,8 @@ realMain opts =
        StdIONetstring -> serveStdIONS theApp
        SocketNetstring (Port p) -> serveSocket "127.0.0.1" p theApp
        SocketNetstringDyn h ->
-         do (a, p) <- serveSocketDynamic h theApp
+         do hSetBuffering stdout NoBuffering
+            (a, p) <- serveSocketDynamic h theApp
             putStrLn ("PORT " ++ show p)
             wait a
 

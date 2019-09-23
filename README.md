@@ -32,6 +32,12 @@ $ cabal v2-configure -w ghc-8.6.4
 $ cabal v2-build all
 ```
 
+## Documentation
+
+The protocol and the Python bindings are described in Sphinx-buildable
+ReStructuredText format in the [docs](docs/) subdirectory. Use `make html`
+in that directory to build readable HTML output.
+
 ## Usage
 
 ### Emacs

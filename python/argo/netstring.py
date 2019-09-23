@@ -1,5 +1,5 @@
 
-__doc__ = """Argo uses D. J. Berstein's `netstrings <https://cr.yp.to/proto/netstrings.txt>`
+__doc__ = """Argo uses D. J. Berstein's `netstrings <https://cr.yp.to/proto/netstrings.txt>`_
           as a lightweight transport layer for JSON RPC.
           """
 

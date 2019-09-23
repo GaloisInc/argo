@@ -243,8 +243,11 @@ This method is not yet ready for public consumption.
 Datatypes
 ~~~~~~~~~
 
+.. _cryptol-json-expression:
+
 JSON Cryptol Expressions
 ________________________
+
 
 
 In the API, Cryptol expressions can be represented by the following:

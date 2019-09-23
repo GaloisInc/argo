@@ -44,3 +44,82 @@ class Interaction():
         should be obtained from the result of ``self.raw_result()``.
         """
         raise NotImplementedError('result')
+
+class ArgoException(Exception):
+    pass
+
+class Command(Interaction):
+    """A higher-level interface to a JSON RPC command that follows Argo conventions.
+
+    In particular, for a non-error result, the actual result should be
+    in the `answer` field of the `result` dictionary, and the
+    resulting state should be in the `state` field.
+
+    Subclasses should implement ``process_result``, which transforms a
+    dictionary representation of a JSON answer object into the
+    corresponding command's appropriate representation.
+    """
+
+    def _result_and_state(self):
+        res = self.raw_result()
+        if 'error' in res:
+            msg = res['error']['message']
+            if 'data' in res['error']:
+                msg += " " + str(res['error']['data'])
+            raise ArgoException(msg)
+        elif 'result' in res:
+            return (res['result']['answer'], res['result']['state'])
+
+    def process_result(self, result):
+        """Subclasses should override this, to transform a JSON-encoded result
+        into the application-specific result.
+        """
+        raise NotImplementedError('process_result')
+
+    def state(self):
+        """Return the protocol state after the command is complete."""
+        return self._result_and_state()[1]
+
+    def result(self):
+        """Return the result of the command."""
+        return self.process_result(self._result_and_state()[0])
+
+class Query(Interaction):
+    """A higher-level interface to a JSON RPC query that follows Argo conventions.
+
+    In particular, for a non-error result, the actual result should be
+    in the ``answer`` field of the ``result`` dictionary. Because queries
+    do not change the state, it will be returned unchanged.
+
+    Subclasses should implement ``process_result``, which transforms a
+    dictionary representation of a JSON answer object into the
+    corresponding command's appropriate representation.
+
+    """
+
+    def state(self):
+        """Return the state prior to the query, because queries don't change the
+        state.
+        """
+        return self.init_state
+
+    def _result(self):
+        res = self.raw_result()
+        if 'error' in res:
+            msg = res['error']['message']
+            if 'data' in res['error']:
+                msg += " " + str(res['error']['data'])
+            raise ArgoException(msg)
+        elif 'result' in res:
+            return res['result']['answer']
+
+    def process_result(self, result):
+        """Subclasses should override this, to transform a JSON-encoded result
+        into the application-specific result.
+        """
+        raise NotImplementedError('process_result')
+
+
+    def result(self):
+        """Return the result of the query."""
+        return self.process_result(self._result())

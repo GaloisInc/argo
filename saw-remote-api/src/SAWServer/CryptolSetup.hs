@@ -1,8 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module SAWServer.CryptolSetup where
 
 import Control.Applicative
+import Control.Exception (SomeException, try)
 import Control.Monad.IO.Class
 import Control.Lens hiding ((.:))
 import Data.Aeson (FromJSON(..), withObject, withText, (.:))
@@ -64,8 +66,10 @@ cryptolSetupLoadFile (CryptolSetupLoadFileParams fileName) =
       do sc <- biSharedContext . view sawBIC <$> getState
          let qual = Nothing -- TODO add field to params
          let importSpec = Nothing -- TODO add field to params
-         cenv' <- liftIO $ CEnv.importModule sc cenv (Left fileName) qual importSpec
-         return (cenv', OK)
+         cenv' <- liftIO $ try $ CEnv.importModule sc cenv (Left fileName) qual importSpec
+         case cenv' of
+           Left (ex :: SomeException) -> raise $ cryptolError (T.pack (show ex))
+           Right cenv'' -> return (cenv'', OK)
 
 data CryptolSetupLoadFileParams =
   CryptolSetupLoadFileParams FilePath

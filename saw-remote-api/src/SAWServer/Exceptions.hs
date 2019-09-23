@@ -9,6 +9,8 @@ module SAWServer.Exceptions (
   , notSettingUpCryptol
   , notSettingUpLLVMCrucible
   , notAtTopLevel
+  -- * Cryptol errors
+  , cryptolError
   -- * LLVM errors
   , cantLoadLLVMModule
   -- * Verification
@@ -67,6 +69,8 @@ notAnLLVMSetup name =
     (Just $ object ["name" .= name])
 
 
+cryptolError :: Text -> JSONRPCException
+cryptolError why = makeJSONRPCException 5001 why noData
 
 notSettingUpCryptol :: JSONRPCException
 notSettingUpCryptol = makeJSONRPCException 1003 "Not currently setting up Cryptol" noData

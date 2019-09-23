@@ -3,6 +3,7 @@ import re
 import socket
 import subprocess
 from . import netstring
+import sys
 
 __doc__ = """Utilities for connecting to Argo-based servers."""
 
@@ -45,7 +46,7 @@ class ServerProcess:
             self.proc = subprocess.Popen(
                 self.command,
                 shell=True,
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, # stderr=sys.stdout,
                 env=self.get_environment(),
                 text=True)
             out_line = self.proc.stdout.readline()

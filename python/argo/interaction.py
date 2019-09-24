@@ -46,7 +46,9 @@ class Interaction():
         raise NotImplementedError('result')
 
 class ArgoException(Exception):
-    pass
+    def __init__(self, message, data):
+        super().__init__(message)
+        self.data = data
 
 class Command(Interaction):
     """A higher-level interface to a JSON RPC command that follows Argo conventions.
@@ -66,7 +68,7 @@ class Command(Interaction):
             msg = res['error']['message']
             if 'data' in res['error']:
                 msg += " " + str(res['error']['data'])
-            raise ArgoException(msg)
+            raise ArgoException(msg, res['error'].get('data'))
         elif 'result' in res:
             return (res['result']['answer'], res['result']['state'])
 
@@ -109,7 +111,7 @@ class Query(Interaction):
             msg = res['error']['message']
             if 'data' in res['error']:
                 msg += " " + str(res['error']['data'])
-            raise ArgoException(msg)
+            raise ArgoException(msg, res['error'].get('data'))
         elif 'result' in res:
             return res['result']['answer']
 

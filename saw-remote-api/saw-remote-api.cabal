@@ -15,6 +15,7 @@ maintainer:          kwf@galois.com
 -- copyright:
 category:            Network
 extra-source-files:  CHANGELOG.md
+data-files:          test-scripts/*.py
 
 common deps
   build-depends: base >=4.11.1.0 && <4.13,
@@ -71,7 +72,10 @@ test-suite test-saw-remote-api
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Test.hs
+  other-modules:       Paths_saw_remote_api
   build-depends:       cryptol-remote-api,
                        quickcheck-instances,
                        tasty,
+                       tasty-hunit,
                        tasty-quickcheck,
+                       tasty-script-exitcode

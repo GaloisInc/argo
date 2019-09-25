@@ -4,6 +4,7 @@ packages:
 - argo
 - cryptol-remote-api
 - saw-remote-api
+- tasty-script-exitcode
 
 extra-deps:
 # local things

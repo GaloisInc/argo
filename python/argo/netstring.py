@@ -1,9 +1,10 @@
+"""Argo uses D. J. Berstein's `netstrings <https://cr.yp.to/proto/netstrings.txt>`_
+as a lightweight transport layer for JSON RPC.
+"""
 
-__doc__ = """Argo uses D. J. Berstein's `netstrings <https://cr.yp.to/proto/netstrings.txt>`_
-          as a lightweight transport layer for JSON RPC.
-          """
+from typing import Tuple
 
-def encode(string):
+def encode(string : str) -> bytes:
     """Encode a ``str`` into a netstring.
 
     >>> encode("hello")
@@ -12,7 +13,7 @@ def encode(string):
     bytestring = string.encode()
     return str(len(bytestring)).encode() + b':' + bytestring + b','
 
-def decode(netstring):
+def decode(netstring : bytes) -> Tuple[str, bytes]:
     """Decode the first valid netstring from a bytestring, returning its
     string contents and the remainder of the bytestring.
 

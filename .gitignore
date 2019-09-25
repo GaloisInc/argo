@@ -40,3 +40,5 @@ wip
 __pycache__
 .gradle/
 .meghanada/
+.mypy_cache
+python/_build/*

@@ -1,17 +1,30 @@
-class Interaction():
+"""Higher-level tracking of the semantics of specific commands."""
+
+from argo.connection import ServerConnection
+
+from typing import Any, Dict, Tuple
+from typing_extensions import Protocol
+
+class HasProtocolState(Protocol):
+    def protocol_state(self) -> Any: ...
+    server_connection : ServerConnection
+
+class Interaction:
     """A representation of a concrete interaction with the
     server. Applications should subclass this according to their needs.
 
-    Subclasses should set ``self.method`` to a string and
-    ``self.params`` to a dictionary before calling the superclass
-    constructor. They should additionally implement methods
+    Subclasses should call the superclass constructor with the method
+    name and the parameters. They should additionally implement methods
     ``state()`` and ``result()`` that return the protocol state and
     the result from a non-error response to the method. Both methods
     may call ``self.raw_result()`` to get the JSON RPC response
     associated with the resquest.
-    """
 
-    def __init__(self, connection):
+    """
+    _method : str
+    _params : Dict[str, Any]
+
+    def __init__(self, method : str, params : Dict[str, Any], connection : HasProtocolState) -> None:
         if 'method' not in self.__dict__:
             raise NotImplementedError('self.method')
         if 'params' not in self.__dict__:
@@ -20,35 +33,49 @@ class Interaction():
         self.connection = connection
         self._raw_response = None
         self.init_state = connection.protocol_state()
-        self.params['state'] = self.init_state
-        self.request_id = connection.server_connection.send_message(self.method, self.params)
+        self._method = method
+        self._params = {}
+        self.add_param('state', self.init_state)
+        self.request_id = \
+            connection. \
+            server_connection. \
+            send_message(self._method, self._params)
 
-    def raw_result(self):
+    def add_param(self, name : str, val : Any) -> None:
+        self._params[name] = val
+
+    def raw_result(self) -> Any:
         """Get the JSON response associated with the request. Blocks until the
         reply is received.
         """
         if self._raw_response is None:
-            self._raw_response = self.connection.server_connection.wait_for_reply_to(self.request_id)
+            self._raw_response = \
+                self.connection. \
+                server_connection. \
+                wait_for_reply_to(self.request_id)
         return self._raw_response
 
-    def state(self):
+    def state(self) -> Any:
         """Subclasses should implement this method to return the protocol
         state after the RPC call is complete. This should be obtained from
         the result of ``self.raw_result()``.
         """
         raise NotImplementedError('state')
 
-    def result(self):
+    def result(self) -> Any:
         """Subclasses should implement this method to return the protocol
         result after the RPC call is complete and succeeds. This
         should be obtained from the result of ``self.raw_result()``.
         """
         raise NotImplementedError('result')
 
+
 class ArgoException(Exception):
-    def __init__(self, message, data):
+    """A Python representation of the underlying JSON RPC error."""
+    def __init__(self, message : str, data : Any) -> None:
         super().__init__(message)
         self.data = data
+
 
 class Command(Interaction):
     """A higher-level interface to a JSON RPC command that follows Argo conventions.
@@ -62,7 +89,8 @@ class Command(Interaction):
     corresponding command's appropriate representation.
     """
 
-    def _result_and_state(self):
+
+    def _result_and_state(self) -> Tuple[Any, Any]:
         res = self.raw_result()
         if 'error' in res:
             msg = res['error']['message']
@@ -71,18 +99,20 @@ class Command(Interaction):
             raise ArgoException(msg, res['error'].get('data'))
         elif 'result' in res:
             return (res['result']['answer'], res['result']['state'])
+        else:
+            raise ValueError("Invalid result type from JSON RPC")
 
-    def process_result(self, result):
+    def process_result(self, result : Any) -> Any:
         """Subclasses should override this, to transform a JSON-encoded result
         into the application-specific result.
         """
         raise NotImplementedError('process_result')
 
-    def state(self):
+    def state(self) -> Any:
         """Return the protocol state after the command is complete."""
         return self._result_and_state()[1]
 
-    def result(self):
+    def result(self) -> Any:
         """Return the result of the command."""
         return self.process_result(self._result_and_state()[0])
 
@@ -99,13 +129,13 @@ class Query(Interaction):
 
     """
 
-    def state(self):
+    def state(self) -> Any:
         """Return the state prior to the query, because queries don't change the
         state.
         """
         return self.init_state
 
-    def _result(self):
+    def _result(self) -> Any:
         res = self.raw_result()
         if 'error' in res:
             msg = res['error']['message']
@@ -115,13 +145,13 @@ class Query(Interaction):
         elif 'result' in res:
             return res['result']['answer']
 
-    def process_result(self, result):
+    def process_result(self, result : Any) -> Any:
         """Subclasses should override this, to transform a JSON-encoded result
         into the application-specific result.
         """
         raise NotImplementedError('process_result')
 
 
-    def result(self):
+    def result(self) -> Any:
         """Return the result of the query."""
         return self.process_result(self._result())

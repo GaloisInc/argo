@@ -25,16 +25,12 @@ class Interaction:
     _params : Dict[str, Any]
 
     def __init__(self, method : str, params : Dict[str, Any], connection : HasProtocolState) -> None:
-        if 'method' not in self.__dict__:
-            raise NotImplementedError('self.method')
-        if 'params' not in self.__dict__:
-            raise NotImplementedError('self.params')
 
         self.connection = connection
         self._raw_response = None
         self.init_state = connection.protocol_state()
         self._method = method
-        self._params = {}
+        self._params = params
         self.add_param('state', self.init_state)
         self.request_id = \
             connection. \

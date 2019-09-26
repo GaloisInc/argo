@@ -145,15 +145,15 @@ instance JSON.ToJSON JSONType where
           (PLiteral, [t1, t2]) ->
             [ "prop" .= T.pack "Literal"
             , "size" .= JSONType ns t1
-            , "subject " .= JSONType ns t2
+            , "subject" .= JSONType ns t2
             ]
           (PZero, [t]) ->
             [ "prop" .= T.pack "Zero"
-            , "subject " .= JSONType ns t
+            , "subject" .= JSONType ns t
             ]
           (PLogic, [t]) ->
             [ "prop" .= T.pack "Logic"
-            , "subject " .= JSONType ns t
+            , "subject" .= JSONType ns t
             ]
           (PTrue, []) ->
             [ "prop" .= T.pack "True"

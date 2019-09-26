@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argo
 import argo.connection as ac
 import argo.interaction

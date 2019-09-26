@@ -17,7 +17,7 @@ description:         This package defines some convenient functions for writing
                      "from the outside" or for testing your program's API to
                      other languages.
 -- bug-reports:
-license:             Apache-2.0
+license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Kenny Foner
 maintainer:          kwf@galois.com

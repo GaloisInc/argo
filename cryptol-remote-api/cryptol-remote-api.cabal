@@ -1,7 +1,7 @@
 cabal-version:       2.4
 name:                cryptol-remote-api
 version:             0.1.0.0
-license:             Apache-2.0
+license:             BSD-3-Clause
 license-file:        LICENSE
 author:              David Thrane Christiansen
 maintainer:          dtc@galois.com

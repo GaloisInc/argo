@@ -8,7 +8,7 @@ version:             0.1.0.0
 -- synopsis:
 -- description:
 -- bug-reports:
-license:             Apache-2.0
+license:             BSD-3-Clause
 license-file:        LICENSE
 author:              Kenny Foner
 maintainer:          kwf@galois.com

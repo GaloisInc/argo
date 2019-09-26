@@ -5,7 +5,7 @@ import saw
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
-c = saw.connect("cabal new-exec saw-remote-api -- --dynamic4")
+c = saw.connect("cabal new-exec --verbose=0 saw-remote-api -- --dynamic4")
 c.cryptol_start_setup("x")
 d = c.snapshot()
 

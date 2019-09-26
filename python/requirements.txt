@@ -1,0 +1,3 @@
+BitVector==3.4.9
+
+mypy==0.730

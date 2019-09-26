@@ -42,3 +42,4 @@ __pycache__
 .meghanada/
 .mypy_cache
 python/_build/*
+python/env

@@ -2,18 +2,19 @@
 
 set -e
 
-D=dist/cryptol-remote-api
+CDIR=dist/cryptol-saw-remote-api
 BIN=$(stack path --local-install-root)/bin
+DATE=$(date "+%Y-%m-%d")
 
-mkdir -p ${D}
-mkdir -p ${D}/bin
-mkdir -p ${D}/doc
-mkdir -p ${D}/python
+mkdir -p ${CDIR}
+mkdir -p ${CDIR}/bin
+mkdir -p ${CDIR}/doc
+mkdir -p ${CDIR}/python
 
-cp ${BIN}/cryptol-remote-api ${D}/bin
-cp docs/*.rst ${D}/doc
-cp -r python/cryptol* ${D}/python
-cp -r python/Foo.cry ${D}/python
+cp ${BIN}/cryptol-remote-api ${CDIR}/bin
+cp ${BIN}/saw-remote-api ${CDIR}/bin
+cp docs/*.rst ${CDIR}/doc
+cp -r python ${CDIR}
 
 cd dist
-tar -czvf cryptol-remote-api.tar.gz cryptol-remote-api
+tar -czvf cryptol-saw-remote-api-${DATE}.tar.gz cryptol-saw-remote-api

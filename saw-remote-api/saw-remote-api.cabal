@@ -15,7 +15,11 @@ maintainer:          kwf@galois.com
 -- copyright:
 category:            Network
 extra-source-files:  CHANGELOG.md
-data-files:          test-scripts/*.py
+data-files:          ../python/requirements.txt
+                     test-scripts/*.py
+                     virtenv/
+                     ../python/argo/*.py
+                     ../python/saw/*.py
 
 common deps
   build-depends: base >=4.11.1.0 && <4.13,
@@ -74,6 +78,8 @@ test-suite test-saw-remote-api
   main-is:             Test.hs
   other-modules:       Paths_saw_remote_api
   build-depends:       cryptol-remote-api,
+                       filepath,
+                       process,
                        quickcheck-instances,
                        tasty,
                        tasty-hunit,

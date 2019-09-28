@@ -52,6 +52,46 @@ Python bindings are in the ``python`` subdirectory. Right now, the
 Cryptol support is more advanced, but the SAW support is under
 development. The bindings are tested only with Python 3.7.
 
+To install the Python bindings, we recommend the use of a "virtual
+environment" that isolates collections of Python packages that are
+used for different projects. To create a virtual environment, use the
+command::
+
+    python3 -m venv virtenv
+
+The preferred mode of use for virtual environments is to *activate*
+them, which modifies various environment variables to cause the
+current shell's view of the Python implementations, tools, and
+libraries to match the environment. For instance, ``PATH`` is modified
+to prioritize the virtual environment's Python version, and that
+Python is pointed at the specific collection of libraries that are
+available. Under a broadly Bourne-compatible shell like ``bash`` or
+``zsh``, source the appropriate file in the environment::
+
+   . virtenv/bin/activate
+
+to activate the environment. Deactivate it using the shell alias
+``deactivate`` that is defined by ``activate``. For other shells or
+operating systems, please consult the documentation for ``venv``. If
+you prefer not to activate the environment, it is also possible to run
+the environment's version of Python tooling by invoking the scripts in
+its ``bin`` directory.
+
+In the virtual environment, run the following command to install the
+library's dependencies::
+
+    pip install -r python/requirements.txt
+
+Next, install the library itself::
+
+    pip install -e python/
+
+The ``-e`` flag to ``pip install`` causes it to use the current files
+in the repository as the library's source rather than copying them to
+a central location in the virtual environment. This means that they
+can be edited in-place and tested immediately, with no reinstallation
+step. If you'd prefer to just install them, then omit the ``-e`` flag.
+
 To test out the Python bindings, load the test file in a Python
 REPL. We recommend ``ipython3``, because it provides easy access to
 docstrings and tab completion. Here's an example command line and

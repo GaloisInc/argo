@@ -17,7 +17,6 @@ category:            Network
 extra-source-files:  CHANGELOG.md
 data-files:          ../python/requirements.txt
                      test-scripts/*.py
-                     virtenv/
                      ../python/argo/*.py
                      ../python/saw/*.py
 

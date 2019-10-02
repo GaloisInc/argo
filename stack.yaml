@@ -2,6 +2,7 @@ resolver: lts-13.27
 
 packages:
 - argo
+- python
 - cryptol-remote-api
 - saw-remote-api
 - tasty-script-exitcode

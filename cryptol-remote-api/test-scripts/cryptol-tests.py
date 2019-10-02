@@ -7,17 +7,18 @@ from cryptol import CryptolConnection, CryptolContext, cry
 
 dir_path = Path(os.path.dirname(os.path.realpath(__file__)))
 
-cryptol_path = dir_path.parent.joinpath('test-data')
+cryptol_path = dir_path.joinpath('test-data')
 
 c = argo.ServerConnection(
       cryptol.CryptolProcess(
-          "cabal v2-exec cryptol-remote-api -- --dynamic4",
+          "cabal v2-exec cryptol-remote-api  --verbose=0 -- --dynamic4",
           cryptol_path=cryptol_path))
 
 # Regression tests on nested sequences
 
 id_1 = c.send_message("load module", {"module name": "M", "state": []})
 reply_1 = c.wait_for_reply_to(id_1)
+print(reply_1)
 assert('result' in reply_1)
 assert('state' in reply_1['result'])
 assert('answer' in reply_1['result'])

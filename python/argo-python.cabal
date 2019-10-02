@@ -7,9 +7,9 @@ license:             BSD-3-Clause
 author:              Galois, Inc.
 maintainer:          dtc@galois.com
 category:            Network
-data-files:          argo/*.py
-                     cryptol/*.py
-                     saw/*.py
+data-files:          argo/**/*.py
+                     cryptol/**/*.py
+                     saw/**/*.py
                      requirements.txt
 
 library

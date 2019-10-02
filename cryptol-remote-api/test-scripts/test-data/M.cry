@@ -1,0 +1,9 @@
+module M where
+f : [8] -> [2][8]
+f x = repeat x
+
+g : [8] -> [2][8]
+g x = [x, x]
+
+h : [2][8] -> [2][8]
+h x = x

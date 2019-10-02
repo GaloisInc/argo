@@ -2,13 +2,14 @@
 
 module Main where
 
-import Argo.PythonBindings
-
 import System.FilePath ((</>))
+
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.HUnit.ScriptExit
+
 import Paths_saw_remote_api
+import Argo.PythonBindings
 
 main :: IO ()
 main =
@@ -21,5 +22,4 @@ main =
           scriptTests <- makeScriptTests testScriptsDir [python]
 
           defaultMain $
-            testGroup "Tests for saw-remote-api"
-              [testGroup "Scripting API tests" scriptTests]
+            testGroup "Tests for saw-remote-api" scriptTests

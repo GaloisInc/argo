@@ -16,6 +16,9 @@ maintainer:          kwf@galois.com
 category:            Network
 extra-source-files:  CHANGELOG.md
 data-files:          test-scripts/*.py
+                     test-scripts/*.cry
+                     test-scripts/*.bc
+                     test-scripts/*.c
 
 common deps
   build-depends: base >=4.11.1.0 && <4.13,

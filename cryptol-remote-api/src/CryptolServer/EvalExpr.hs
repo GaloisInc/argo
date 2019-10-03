@@ -1,18 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module CryptolServer.EvalExpr (evalExpression) where
 
-import Control.Exception
 import Control.Lens hiding ((.=))
 import Control.Monad.IO.Class
 import Data.Aeson as JSON
-import Data.Text (Text)
-import qualified Data.Text as T
-import System.Directory
 
 
-import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, getPrimMap, loadModuleByPath, loadModuleByName)
-import Cryptol.ModuleSystem.Env (initialModuleEnv, meSolverConfig)
-import Cryptol.Parser (parseExpr, parseModName)
+import Cryptol.ModuleSystem (checkExpr, evalExpr, getPrimMap)
+import Cryptol.ModuleSystem.Env (meSolverConfig)
 import Cryptol.TypeCheck.AST (sType)
 import Cryptol.TypeCheck.Solve (defaultReplExpr)
 import Cryptol.TypeCheck.Subst (apSubst, listParamSubst)
@@ -29,7 +24,7 @@ import CryptolServer.Exceptions
 evalExpression :: EvalExprParams -> Method ServerState JSON.Value
 evalExpression (EvalExprParams jsonExpr) =
   do e <- getExpr jsonExpr
-     (expr, ty, schema) <- runModuleCmd (checkExpr e)
+     (_expr, ty, schema) <- runModuleCmd (checkExpr e)
       -- TODO: see Cryptol REPL for how to check whether we
       -- can actually evaluate things, which we can't do in
       -- a parameterized module
@@ -38,7 +33,7 @@ evalExpression (EvalExprParams jsonExpr) =
      perhapsDef <- liftIO $ SMT.withSolver cfg (\s -> defaultReplExpr s ty schema)
      case perhapsDef of
        Nothing ->
-         raise (evalPolyErr (JSONSchema schema))
+         raise (evalPolyErr schema)
        Just (tys, checked) ->
          do -- TODO: warnDefaults here
             let su = listParamSubst tys
@@ -51,8 +46,8 @@ evalExpression (EvalExprParams jsonExpr) =
                                 , "type" .= JSONSchema (Forall [] [] theType)
                                 ])
 
-data EvalExprParams =
-  EvalExprParams { evalExprExpression :: Expression }
+newtype EvalExprParams =
+  EvalExprParams Expression
 
 instance JSON.FromJSON EvalExprParams where
   parseJSON =

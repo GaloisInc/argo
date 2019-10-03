@@ -105,68 +105,68 @@ cryptolError err warns =
 
     moduleError err = case err of
       ModuleNotFound src path ->
-        (0, [ ("source", jsonPretty src)
-            , ("path", jsonList (map jsonString path))
-            ])
+        (500, [ ("source", jsonPretty src)
+              , ("path", jsonList (map jsonString path))
+              ])
       CantFindFile path ->
-        (1, [ ("path", jsonString path)
-            ])
+        (050, [ ("path", jsonString path)
+              ])
       BadUtf8 path ue ->
-        (2, [ ("path", jsonString path)
-            , ("error", jsonShow ue)
-            ])
+        (010, [ ("path", jsonString path)
+              , ("error", jsonShow ue)
+              ])
       OtherIOError path exn ->
-        (3, [ ("path", jsonString path)
-            , ("error", jsonShow exn)
-            ])
+        (060, [ ("path", jsonString path)
+              , ("error", jsonShow exn)
+              ])
       ModuleParseError source err ->
-        (4, [ ("source", jsonString source)
-            , ("error", jsonShow err)
-            ])
+        (540, [ ("source", jsonString source)
+              , ("error", jsonShow err)
+              ])
       RecursiveModules mods ->
-        (5, [ ("modules", jsonList (reverse (map jsonPretty mods)))
-            ])
+        (550, [ ("modules", jsonList (reverse (map jsonPretty mods)))
+              ])
       RenamerErrors src errs ->
         -- TODO: structured error here
-        (6, [ ("source", jsonPretty src)
-            , ("errors", jsonList (map jsonPretty errs))
-            ])
+        (700, [ ("source", jsonPretty src)
+              , ("errors", jsonList (map jsonPretty errs))
+              ])
       NoPatErrors src errs ->
         -- TODO: structured error here
-        (7, [ ("source", jsonPretty src)
-            , ("errors", jsonList (map jsonPretty errs))
-            ])
+        (710, [ ("source", jsonPretty src)
+              , ("errors", jsonList (map jsonPretty errs))
+              ])
       NoIncludeErrors src errs ->
         -- TODO: structured error here
-        (8, [ ("source", jsonPretty src)
-            , ("errors", jsonList (map jsonShow errs))
-            ])
+        (720, [ ("source", jsonPretty src)
+              , ("errors", jsonList (map jsonShow errs))
+              ])
       TypeCheckingFailed src errs ->
         -- TODO: structured error here
-        (9, [ ("source", jsonPretty src)
-            , ("errors", jsonList (map jsonShow errs))
-            ])
+        (730, [ ("source", jsonPretty src)
+              , ("errors", jsonList (map jsonShow errs))
+              ])
       ModuleNameMismatch expected found ->
-        (10, [ ("expected", jsonPretty expected)
-             , ("found", jsonPretty found)
-             ])
+        (600, [ ("expected", jsonPretty expected)
+              , ("found", jsonPretty found)
+              ])
       DuplicateModuleName name path1 path2 ->
-        (11, [ ("name", jsonPretty name)
-             , ("paths", jsonList [jsonString path1, jsonString path2])
-             ])
-      OtherFailure x ->
-        (12, [ ("error", jsonString x)
-             ])
+        (610, [ ("name", jsonPretty name)
+              , ("paths", jsonList [jsonString path1, jsonString path2])
+              ])
       ImportedParamModule x ->
-        (13, [ ("module", jsonPretty x)
-             ])
+        (630, [ ("module", jsonPretty x)
+              ])
       FailedToParameterizeModDefs x xs ->
-        (14, [ ("module", jsonPretty x)
-             , ("parameters", jsonList (map (jsonString . pretty) xs))
-             ])
+        (640, [ ("module", jsonPretty x)
+              , ("parameters", jsonList (map (jsonString . pretty) xs))
+              ])
       NotAParameterizedModule x ->
-        (15, [ ("module", jsonPretty x)
-             ])
+        (650, [ ("module", jsonPretty x)
+              ])
+      OtherFailure x ->
+        (999, [ ("error", jsonString x)
+              ])
       ErrorInFile x y ->
         (n, ("path", jsonString x) : err)
         where (n, err) = moduleError y

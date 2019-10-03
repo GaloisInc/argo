@@ -10,6 +10,7 @@ import Data.Aeson as JSON hiding (Encoding, Value, decode)
 import qualified Data.Aeson as JSON
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Base64 as Base64
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
@@ -20,6 +21,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
 import qualified Data.Vector as V
+import qualified Data.HashMap.Strict as HashMap
 import Data.Text.Encoding (encodeUtf8)
 import Numeric (showHex)
 
@@ -47,6 +49,7 @@ import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import Argo
 import CryptolServer
 import CryptolServer.Exceptions
+import CryptolServer.Data.Type
 
 data Encoding = Base64 | Hex
   deriving (Eq, Show, Ord)
@@ -285,35 +288,6 @@ getExpr (Application fun (arg :| [])) =
   EApp <$> getExpr fun <*> getExpr arg
 getExpr (Application fun (arg1 :| (arg : args))) =
   getExpr (Application (Application fun (arg1 :| [])) (arg :| args))
-
-invalidBase64 :: ByteString -> String -> JSONRPCException
-invalidBase64 invalidData msg =
-  makeJSONRPCException
-    32 (T.pack msg) (Just (JSON.toJSON (T.pack (show invalidData))))
-
-invalidHex :: Char -> JSONRPCException
-invalidHex invalidData =
-  makeJSONRPCException
-    33 "Not a hex digit"
-    (Just (JSON.toJSON (T.pack (show invalidData))))
-
-invalidType :: TC.Type -> JSONRPCException
-invalidType ty =
-  makeJSONRPCException
-    34 "Can't convert Cryptol data from this type to JSON"
-    (Just (JSON.toJSON (T.pack (show ty))))
-
-unwantedDefaults :: [(TC.TParam, TC.Type)] -> JSONRPCException
-unwantedDefaults defs =
-  makeJSONRPCException
-    35 "Execution would have required these defaults"
-    (Just (JSON.toJSON (T.pack (show defs))))
-
-evalInParamMod :: [Cryptol.ModuleSystem.Name.Name] -> JSONRPCException -- FIXME: this is deliberately wrong to find correct type later
-evalInParamMod mods =
-  makeJSONRPCException
-    36 "Can't evaluate Cryptol in a parameterized module."
-    (Just (toJSON (map pretty mods)))
 
 -- TODO add tests that this is big-endian
 -- | Interpret a ByteString as an Integer

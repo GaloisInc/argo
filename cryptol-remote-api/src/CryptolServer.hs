@@ -3,28 +3,20 @@
 
 module CryptolServer where
 
-import Control.Exception
 import Control.Lens
-import Control.Monad
 import Control.Monad.IO.Class
-import qualified Data.Aeson as JSON
-import Data.Foldable
-import qualified Data.Text as Text
-import qualified Data.Vector as Vector
 
 import Cryptol.Eval.Monad (EvalOpts(..), PPOpts(..))
-import Cryptol.ModuleSystem
-  (ModuleCmd, ModuleEnv, ModuleError(..), ModuleWarning(..),
-   checkExpr, evalExpr, loadModuleByPath, loadModuleByName)
+import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv)
 import Cryptol.ModuleSystem.Env
   (getLoadedModules, lmCanonicalPath, lmFingerprint, meLoadedModules,
-   initialModuleEnv, meSearchPath, meSolverConfig)
+   initialModuleEnv, meSearchPath)
 import Cryptol.ModuleSystem.Fingerprint
 import Cryptol.Parser.AST (ModName)
 import Cryptol.Utils.Logger (quietLogger)
-import Cryptol.Utils.PP (pretty, PP)
 
 import Argo
+import CryptolServer.Exceptions
 
 runModuleCmd :: ModuleCmd a -> Method ServerState a
 runModuleCmd cmd =
@@ -34,6 +26,8 @@ runModuleCmd cmd =
          (Left x, warns) ->
            raise (cryptolError x warns)
          (Right (x, newEnv), warns) ->
+           -- TODO: What to do about warnings when a command completes
+           -- successfully?
            do setState (set moduleEnv newEnv s)
               return x
 
@@ -81,116 +75,3 @@ validateServerState =
          if fp == Just (lmFingerprint lm)
            then continue
            else return False
-
---------------------------------------------------------------------------------
-
--- The schema for translating Cryptol errors/warnings into JSONRPCExceptions
-
--- Reserved range for Cryptol exceptions: 20,000 - 21,000
-cryptolErrorBase :: Integer
-cryptolErrorBase = 20000
-
-cryptolError :: ModuleError -> [ModuleWarning] -> JSONRPCException
-cryptolError err warns =
-  makeJSONRPCException
-    (cryptolErrorBase + errorNum)
-    (Text.pack $ (pretty err) <> foldMap (\w -> "\n" <> pretty w) warns)
-    (Just . JSON.object $ errorData ++ [("warnings", moduleWarnings warns)])
-  where
-    -- TODO: make sub-errors (parse, typecheck, etc.) into structured data so
-    -- that another client can parse them and make use of them (possible
-    -- locations noted below)
-
-    (errorNum, errorData) = moduleError err
-
-    moduleError err = case err of
-      ModuleNotFound src path ->
-        (500, [ ("source", jsonPretty src)
-              , ("path", jsonList (map jsonString path))
-              ])
-      CantFindFile path ->
-        (050, [ ("path", jsonString path)
-              ])
-      BadUtf8 path ue ->
-        (010, [ ("path", jsonString path)
-              , ("error", jsonShow ue)
-              ])
-      OtherIOError path exn ->
-        (060, [ ("path", jsonString path)
-              , ("error", jsonShow exn)
-              ])
-      ModuleParseError source err ->
-        (540, [ ("source", jsonString source)
-              , ("error", jsonShow err)
-              ])
-      RecursiveModules mods ->
-        (550, [ ("modules", jsonList (reverse (map jsonPretty mods)))
-              ])
-      RenamerErrors src errs ->
-        -- TODO: structured error here
-        (700, [ ("source", jsonPretty src)
-              , ("errors", jsonList (map jsonPretty errs))
-              ])
-      NoPatErrors src errs ->
-        -- TODO: structured error here
-        (710, [ ("source", jsonPretty src)
-              , ("errors", jsonList (map jsonPretty errs))
-              ])
-      NoIncludeErrors src errs ->
-        -- TODO: structured error here
-        (720, [ ("source", jsonPretty src)
-              , ("errors", jsonList (map jsonShow errs))
-              ])
-      TypeCheckingFailed src errs ->
-        -- TODO: structured error here
-        (730, [ ("source", jsonPretty src)
-              , ("errors", jsonList (map jsonShow errs))
-              ])
-      ModuleNameMismatch expected found ->
-        (600, [ ("expected", jsonPretty expected)
-              , ("found", jsonPretty found)
-              ])
-      DuplicateModuleName name path1 path2 ->
-        (610, [ ("name", jsonPretty name)
-              , ("paths", jsonList [jsonString path1, jsonString path2])
-              ])
-      ImportedParamModule x ->
-        (630, [ ("module", jsonPretty x)
-              ])
-      FailedToParameterizeModDefs x xs ->
-        (640, [ ("module", jsonPretty x)
-              , ("parameters", jsonList (map (jsonString . pretty) xs))
-              ])
-      NotAParameterizedModule x ->
-        (650, [ ("module", jsonPretty x)
-              ])
-      OtherFailure x ->
-        (999, [ ("error", jsonString x)
-              ])
-      ErrorInFile x y ->
-        (n, ("path", jsonString x) : err)
-        where (n, err) = moduleError y
-
-    moduleWarnings :: [ModuleWarning] -> JSON.Value
-    moduleWarnings =
-      -- TODO: structured error here
-      jsonList . concatMap
-        (\w -> case w of
-                TypeCheckWarnings tcwarns ->
-                  map (jsonPretty . snd) tcwarns
-                RenamerWarnings rnwarns ->
-                  map jsonPretty rnwarns)
-
-    -- Some little helpers for common ways of building JSON values in the above:
-
-    jsonString :: String -> JSON.Value
-    jsonString = JSON.String . Text.pack
-
-    jsonPretty :: PP a => a -> JSON.Value
-    jsonPretty = jsonString . pretty
-
-    jsonShow :: Show a => a -> JSON.Value
-    jsonShow = jsonString . show
-
-    jsonList :: [JSON.Value] -> JSON.Value
-    jsonList = JSON.Array . Vector.fromList

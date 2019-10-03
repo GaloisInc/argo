@@ -8,9 +8,17 @@ module CryptolServer.Exceptions
   , evalPolyErr
   , proverError
   , cryptolParseErr
+  , cryptolError
   ) where
 
-import Data.Aeson as JSON hiding (Encoding, Value, decode)
+import qualified Data.Aeson as JSON
+import qualified Data.Text as Text
+import qualified Data.Vector as Vector
+
+import Cryptol.ModuleSystem (ModuleError(..), ModuleWarning(..))
+import Cryptol.Utils.PP (pretty, PP)
+
+import Data.Aeson hiding (Encoding, Value, decode)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as B8
 import Data.Text (Text)
@@ -20,10 +28,114 @@ import qualified Data.HashMap.Strict as HashMap
 import Cryptol.ModuleSystem.Name (Name)
 import Cryptol.Parser
 import qualified Cryptol.TypeCheck.Type as TC
-import Cryptol.Utils.PP (pretty)
 
 import Argo
 import CryptolServer.Data.Type
+
+cryptolError :: ModuleError -> [ModuleWarning] -> JSONRPCException
+cryptolError modErr warns =
+  makeJSONRPCException
+    errorNum
+    (Text.pack $ (pretty modErr) <> foldMap (\w -> "\n" <> pretty w) warns)
+    (Just . JSON.object $ errorData ++ [("warnings", moduleWarnings warns)])
+  where
+    -- TODO: make sub-errors (parse, typecheck, etc.) into structured data so
+    -- that another client can parse them and make use of them (possible
+    -- locations noted below)
+
+    (errorNum, errorData) = moduleError modErr
+
+    moduleError err = case err of
+      ModuleNotFound src path ->
+        (20500, [ ("source", jsonPretty src)
+                , ("path", jsonList (map jsonString path))
+                ])
+      CantFindFile path ->
+        (20050, [ ("path", jsonString path)
+                ])
+      BadUtf8 path ue ->
+        (20010, [ ("path", jsonString path)
+                , ("error", jsonShow ue)
+                ])
+      OtherIOError path exn ->
+        (20060, [ ("path", jsonString path)
+                , ("error", jsonShow exn)
+                ])
+      ModuleParseError source message ->
+        (20540, [ ("source", jsonString source)
+                , ("error", jsonShow message)
+                ])
+      RecursiveModules mods ->
+        (20550, [ ("modules", jsonList (reverse (map jsonPretty mods)))
+                ])
+      RenamerErrors src errs ->
+        -- TODO: structured error here
+        (20700, [ ("source", jsonPretty src)
+                , ("errors", jsonList (map jsonPretty errs))
+                ])
+      NoPatErrors src errs ->
+        -- TODO: structured error here
+        (20710, [ ("source", jsonPretty src)
+                , ("errors", jsonList (map jsonPretty errs))
+                ])
+      NoIncludeErrors src errs ->
+        -- TODO: structured error here
+        (20720, [ ("source", jsonPretty src)
+                , ("errors", jsonList (map jsonShow errs))
+                ])
+      TypeCheckingFailed src errs ->
+        -- TODO: structured error here
+        (20730, [ ("source", jsonPretty src)
+                , ("errors", jsonList (map jsonShow errs))
+                ])
+      ModuleNameMismatch expected found ->
+        (20600, [ ("expected", jsonPretty expected)
+                , ("found", jsonPretty found)
+                ])
+      DuplicateModuleName name path1 path2 ->
+        (20610, [ ("name", jsonPretty name)
+                , ("paths", jsonList [jsonString path1, jsonString path2])
+                ])
+      ImportedParamModule x ->
+        (20630, [ ("module", jsonPretty x)
+                ])
+      FailedToParameterizeModDefs x xs ->
+        (20640, [ ("module", jsonPretty x)
+                , ("parameters", jsonList (map (jsonString . pretty) xs))
+                ])
+      NotAParameterizedModule x ->
+        (20650, [ ("module", jsonPretty x)
+                ])
+      OtherFailure x ->
+        (29999, [ ("error", jsonString x)
+                ])
+      ErrorInFile x y ->
+        (n, ("path", jsonString x) : e)
+        where (n, e) = moduleError y
+
+    moduleWarnings :: [ModuleWarning] -> JSON.Value
+    moduleWarnings =
+      -- TODO: structured error here
+      jsonList . concatMap
+        (\w -> case w of
+                TypeCheckWarnings tcwarns ->
+                  map (jsonPretty . snd) tcwarns
+                RenamerWarnings rnwarns ->
+                  map jsonPretty rnwarns)
+
+    -- Some little helpers for common ways of building JSON values in the above:
+
+    jsonString :: String -> JSON.Value
+    jsonString = JSON.String . Text.pack
+
+    jsonPretty :: PP a => a -> JSON.Value
+    jsonPretty = jsonString . pretty
+
+    jsonShow :: Show a => a -> JSON.Value
+    jsonShow = jsonString . show
+
+    jsonList :: [JSON.Value] -> JSON.Value
+    jsonList = JSON.Array . Vector.fromList
 
 invalidBase64 :: ByteString -> String -> JSONRPCException
 invalidBase64 invalidData msg =
@@ -42,12 +154,6 @@ invalidType ty =
   makeJSONRPCException
     20040 "Can't convert Cryptol data from this type to JSON"
     (Just (jsonTypeAndString ty))
-
-jsonTypeAndString :: TC.Type -> JSON.Object
-jsonTypeAndString ty =
-  HashMap.fromList
-    [ "type" .= JSONSchema (TC.Forall [] [] ty)
-    , "type string" .= pretty ty ]
 
 unwantedDefaults :: [(TC.TParam, TC.Type)] -> JSONRPCException
 unwantedDefaults defs =
@@ -86,3 +192,11 @@ cryptolParseErr expr err =
   makeJSONRPCException
     20000 "Cryptol parse error"
     (Just $ JSON.object ["input" .= expr, "error" .= show err])
+
+-- The standard way of presenting a type: a structured type, plus a
+-- human-readable string
+jsonTypeAndString :: TC.Type -> JSON.Object
+jsonTypeAndString ty =
+  HashMap.fromList
+    [ "type" .= JSONSchema (TC.Forall [] [] ty)
+    , "type string" .= pretty ty ]

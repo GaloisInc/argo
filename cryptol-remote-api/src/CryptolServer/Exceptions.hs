@@ -55,7 +55,7 @@ cryptolError modErr warns =
         (20050, [ ("path", jsonString path)
                 ])
       BadUtf8 path ue ->
-        (20010, [ ("path", jsonString path)
+        (20010, [ ("path", jsonShow path)
                 , ("error", jsonShow ue)
                 ])
       OtherIOError path exn ->
@@ -63,7 +63,7 @@ cryptolError modErr warns =
                 , ("error", jsonShow exn)
                 ])
       ModuleParseError source message ->
-        (20540, [ ("source", jsonString source)
+        (20540, [ ("source", jsonShow source)
                 , ("error", jsonShow message)
                 ])
       RecursiveModules mods ->
@@ -111,7 +111,7 @@ cryptolError modErr warns =
         (29999, [ ("error", jsonString x)
                 ])
       ErrorInFile x y ->
-        (n, ("path", jsonString x) : e)
+        (n, ("path", jsonShow x) : e)
         where (n, e) = moduleError y
 
     moduleWarnings :: [ModuleWarning] -> JSON.Value

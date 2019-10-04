@@ -1,11 +1,12 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-module SAWServer where
+module SAWServer
+  ( module SAWServer
+  ) where
 
+import Prelude hiding (mod)
 import Control.Lens
-import Control.Monad.ST
-import Data.Aeson (FromJSON(..), ToJSON(..), fromJSON, withText)
-import qualified Data.Aeson as JSON
+import Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Parameterized.Some
@@ -19,7 +20,7 @@ import qualified Lang.Crucible.JVM as CJ
 import qualified Verifier.Java.Codebase as JSS
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.Module (emptyModule)
-import Verifier.SAW.SharedTerm (Term, SharedContext, mkSharedContext, scLoadModule)
+import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
 import Verifier.SAW.Term.Functor (mkModuleName)
 import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
@@ -89,10 +90,10 @@ pushTask t = modifyState mod
 dropTask :: Method SAWState ()
 dropTask = modifyState mod
   where mod (SAWState _ _ [] _ _) = error "Internal error - stack underflow"
-        mod (SAWState _ sc ((t, env):stack) ro rw) =
+        mod (SAWState _ sc ((_t, env):stack) ro rw) =
           SAWState env sc stack ro rw
 
-getHandleAlloc :: Method SAWState (Crucible.HandleAllocator RealWorld)
+getHandleAlloc :: Method SAWState Crucible.HandleAllocator
 getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> getState
 
 initialState :: IO SAWState
@@ -113,7 +114,7 @@ initialState =
                               , biBasicSS = ss
                               }
      cenv <- initCryptolEnv sc
-     halloc <- stToIO $ Crucible.newHandleAllocator
+     halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      let ro = TopLevelRO
                 { roSharedContext = sc
@@ -133,6 +134,7 @@ initialState =
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty
                 , rwSMTArrayMemoryModel = False
+                , rwProfilingFile = Nothing
                 }
      return (SAWState emptyEnv bic [] ro rw)
 
@@ -220,18 +222,18 @@ getCryptolEnv n =
   do v <- getServerVal n
      case v of
        VCryptolEnv env -> return env
-       other -> raise (notACryptolEnv n)
+       _other -> raise (notACryptolEnv n)
 
 getLLVMModule :: ServerName -> Method SAWState (Some CMS.LLVMModule)
 getLLVMModule n =
   do v <- getServerVal n
      case v of
        VLLVMModule m -> return m
-       other -> raise (notAnLLVMModule n)
+       _other -> raise (notAnLLVMModule n)
 
 getLLVMSetup :: ServerName -> Method SAWState (LLVMCrucibleSetupM ())
 getLLVMSetup n =
   do v <- getServerVal n
      case v of
        VLLVMCrucibleSetup setup -> return setup
-       other -> raise (notAnLLVMSetup n)
+       _other -> raise (notAnLLVMSetup n)

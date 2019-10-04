@@ -15,12 +15,10 @@ module SAWServer.Exceptions (
   , cantLoadLLVMModule
   -- * Verification
   , verificationException
-  -- * To be eventually eliminated
-  , genericError
   ) where
 
 import Control.Exception
-import Data.Aeson
+import Data.Aeson as JSON
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -81,7 +79,7 @@ notSettingUpLLVMCrucible =
   makeJSONRPCException
     10110 "Not currently setting up Crucible/LLVM" noData
 
-notAtTopLevel :: [SAWTask] -> JSONRPCException
+notAtTopLevel :: ToJSON a => [a] -> JSONRPCException
 notAtTopLevel tasks =
   makeJSONRPCException
     10120 "Not at top level"
@@ -101,9 +99,3 @@ verificationException e =
 
 noData :: Maybe ()
 noData = Nothing
-
-
--- TODO: Get rid of these and make them specific
-genericError :: Text -> JSONRPCException
-genericError msg =
-  makeJSONRPCException 100000 msg (Nothing :: Maybe ())

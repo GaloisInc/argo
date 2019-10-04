@@ -6,45 +6,22 @@
 {-# LANGUAGE ViewPatterns #-}
 module CryptolServer.Call (Expression(..), Encoding(..), LetBinding(..), call) where
 
-import Control.Applicative
-import Control.Exception (throwIO)
-import Control.Lens hiding ((.:), (.=))
-import Control.Monad (guard, unless)
+import Control.Lens hiding ((.=))
+import Control.Monad (unless)
 import Control.Monad.IO.Class
 import Data.Aeson as JSON hiding (Encoding, Value, decode)
 import qualified Data.Aeson as JSON
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Base64 as Base64
-import Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HM
-import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
-import qualified Data.Scientific as Sc
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as T
-import Data.Traversable
-import qualified Data.Vector as V
-import Data.Text.Encoding (encodeUtf8)
-import Numeric (showHex)
 
-import Cryptol.Eval (evalSel)
-import Cryptol.Eval.Monad
-import Cryptol.Eval.Value
-import Cryptol.IR.FreeVars (freeVars, FreeVars, tyDeps, valDeps)
-import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, getPrimMap, loadModuleByPath, loadModuleByName, meLoadedModules)
-import Cryptol.ModuleSystem.Env (initialModuleEnv, isLoadedParamMod, meSolverConfig)
+import Cryptol.IR.FreeVars (freeVars, tyDeps, valDeps)
+import Cryptol.ModuleSystem (checkExpr, evalExpr, getPrimMap, meLoadedModules)
+import Cryptol.ModuleSystem.Env (isLoadedParamMod, meSolverConfig)
 import Cryptol.ModuleSystem.Name (NameInfo(Declared), nameInfo)
-import Cryptol.Parser
-import Cryptol.Parser.AST (Bind(..), BindDef(..), Decl(..), Expr(..), Type(..), PName(..), Ident(..), Literal(..), Named(..), NumInfo(..))
-import Cryptol.Parser.Position (Located(..), emptyRange)
-import Cryptol.Parser.Selector
-import Cryptol.Prims.Syntax
-import Cryptol.TypeCheck.AST (PrimMap, sType)
+import Cryptol.Parser.AST (Expr(..), PName(..))
+import Cryptol.TypeCheck.AST (sType)
 import Cryptol.TypeCheck.Solve (defaultReplExpr)
 import Cryptol.TypeCheck.Subst (apSubst, listParamSubst)
-import qualified Cryptol.TypeCheck.Type as TC
 import Cryptol.Utils.Ident
 import Cryptol.Utils.PP (pretty)
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
@@ -60,7 +37,7 @@ call :: CallParams -> Method ServerState JSON.Value
 call (CallParams fun rawArgs) =
   do args <- traverse getExpr rawArgs
      let appExpr = mkEApp (EVar (UnQual (mkIdent fun))) args
-     (expr, ty, schema) <- runModuleCmd (checkExpr appExpr)
+     (_expr, ty, schema) <- runModuleCmd (checkExpr appExpr)
      evalAllowed ty
      evalAllowed schema
      me <- view moduleEnv <$> getState
@@ -98,11 +75,8 @@ call (CallParams fun rawArgs) =
            raise (evalInParamMod (Set.toList bad))
 
 
-data CallParams =
-  CallParams
-    { functionName :: Text
-    , functionArgs :: [Expression]
-    }
+data CallParams
+  = CallParams Text [Expression]
 
 instance FromJSON CallParams where
   parseJSON =

@@ -9,8 +9,8 @@ import Control.Monad.IO.Class
 import Cryptol.Eval.Monad (EvalOpts(..), PPOpts(..))
 import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv)
 import Cryptol.ModuleSystem.Env
-  (getLoadedModules, lmCanonicalPath, lmFingerprint, meLoadedModules,
-   initialModuleEnv, meSearchPath)
+  (getLoadedModules, lmFilePath, lmFingerprint, meLoadedModules,
+   initialModuleEnv, meSearchPath, ModulePath(..))
 import Cryptol.ModuleSystem.Fingerprint
 import Cryptol.Parser.AST (ModName)
 import Cryptol.Utils.Logger (quietLogger)
@@ -25,7 +25,7 @@ runModuleCmd cmd =
        case out of
          (Left x, warns) ->
            raise (cryptolError x warns)
-         (Right (x, newEnv), warns) ->
+         (Right (x, newEnv), _warns) ->
            -- TODO: What to do about warnings when a command completes
            -- successfully?
            do setState (set moduleEnv newEnv s)
@@ -71,7 +71,10 @@ validateServerState =
   foldr check (return True) . getLoadedModules . meLoadedModules . view moduleEnv
   where
     check lm continue =
-      do fp <- fingerprintFile (lmCanonicalPath lm)
-         if fp == Just (lmFingerprint lm)
-           then continue
-           else return False
+      case lmFilePath lm of
+        InMem{} -> continue
+        InFile file ->
+          do fp <- fingerprintFile file
+             if fp == Just (lmFingerprint lm)
+               then continue
+               else return False

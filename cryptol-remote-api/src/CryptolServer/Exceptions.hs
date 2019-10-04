@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module CryptolServer.Exceptions
-  ( invalidBase64
+  ( dirNotFound
+  , invalidBase64
   , invalidHex
   , invalidType
   , unwantedDefaults
@@ -136,6 +137,12 @@ cryptolError modErr warns =
 
     jsonList :: [JSON.Value] -> JSON.Value
     jsonList = JSON.Array . Vector.fromList
+
+dirNotFound :: FilePath -> JSONRPCException
+dirNotFound dir =
+  makeJSONRPCException
+    20051 (T.pack ("Directory doesn't exist: " <> dir))
+    (Just (JSON.object ["path" .= dir]))
 
 invalidBase64 :: ByteString -> String -> JSONRPCException
 invalidBase64 invalidData msg =

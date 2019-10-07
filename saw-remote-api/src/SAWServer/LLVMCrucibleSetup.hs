@@ -98,6 +98,6 @@ llvmLoadModule (LLVMLoadModuleParams serverName fileName) =
            Left err -> raise (cantLoadLLVMModule (LLVM.formatError err))
            Right llvmMod ->
              do halloc <- getHandleAlloc
-                Some mtrans <- liftIO $ stToIO $ Crucible.translateModule halloc llvmMod
+                Some mtrans <- liftIO $ Crucible.translateModule halloc llvmMod
                 setServerVal serverName (Some (CMS.LLVMModule fileName llvmMod mtrans))
                 ok

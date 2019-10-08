@@ -1,10 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module CryptolServer.ChangeDir (cd) where
 
-import Control.Exception
 import Control.Monad.IO.Class
 import Data.Aeson as JSON
-import qualified Data.Text as T
 import System.Directory
 
 import CryptolServer
@@ -18,8 +16,8 @@ cd (ChangeDirectoryParams newDir) =
        then liftIO $ setCurrentDirectory newDir
        else raise (dirNotFound newDir)
 
-data ChangeDirectoryParams =
-  ChangeDirectoryParams { newDirectory :: FilePath }
+data ChangeDirectoryParams
+  = ChangeDirectoryParams FilePath
 
 instance FromJSON ChangeDirectoryParams where
   parseJSON =

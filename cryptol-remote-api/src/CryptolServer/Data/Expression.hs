@@ -2,7 +2,9 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
-module CryptolServer.Data.Expression where
+module CryptolServer.Data.Expression
+  ( module CryptolServer.Data.Expression
+  ) where
 
 import Control.Applicative
 import Control.Exception (throwIO)

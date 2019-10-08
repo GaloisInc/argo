@@ -1,13 +1,17 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module SAWServer.CryptolSetup where
+module SAWServer.CryptolSetup
+  ( startCryptolSetup
+  , cryptolSetupLoadFile
+  , cryptolSetupLoadModule
+  , cryptolSetupDone
+  ) where
 
-import Control.Applicative
 import Control.Exception (SomeException, try)
 import Control.Monad.IO.Class
-import Control.Lens hiding ((.:))
-import Data.Aeson (FromJSON(..), withObject, withText, (.:))
+import Control.Lens
+import Data.Aeson (FromJSON(..), withObject, (.:))
 import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
@@ -30,8 +34,8 @@ startCryptolSetup (StartCryptolSetupParams n) =
      pushTask (CryptolSetup n cenv)
      ok
 
-data StartCryptolSetupParams =
-  StartCryptolSetupParams { name :: ServerName }
+newtype StartCryptolSetupParams
+  = StartCryptolSetupParams ServerName
 
 instance FromJSON StartCryptolSetupParams where
   parseJSON =
@@ -50,8 +54,8 @@ cryptolSetupLoadModule (CryptolSetupLoadModuleParams modName) =
          debugLog "loaded"
          return (cenv', OK)
 
-data CryptolSetupLoadModuleParams =
-  CryptolSetupLoadModuleParams P.ModName
+newtype CryptolSetupLoadModuleParams
+  = CryptolSetupLoadModuleParams P.ModName
 
 instance FromJSON CryptolSetupLoadModuleParams where
   parseJSON =
@@ -71,8 +75,8 @@ cryptolSetupLoadFile (CryptolSetupLoadFileParams fileName) =
            Left (ex :: SomeException) -> raise $ cryptolError (T.pack (show ex))
            Right cenv'' -> return (cenv'', OK)
 
-data CryptolSetupLoadFileParams =
-  CryptolSetupLoadFileParams FilePath
+newtype CryptolSetupLoadFileParams
+  = CryptolSetupLoadFileParams FilePath
 
 instance FromJSON CryptolSetupLoadFileParams where
   parseJSON =

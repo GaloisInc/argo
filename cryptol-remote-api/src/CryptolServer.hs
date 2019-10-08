@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module CryptolServer where
+module CryptolServer (module CryptolServer) where
 
 import Control.Lens
 import Control.Monad.IO.Class

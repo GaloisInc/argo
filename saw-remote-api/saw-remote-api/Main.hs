@@ -1,18 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Main where
+module Main (main) where
 
 import Control.Applicative
 import Control.Concurrent.Async (wait)
-import Control.Exception
-import Control.Lens hiding ((.=))
-import Control.Monad (ap)
-import Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.Aeson as JSON
-import Data.Aeson ((.:), (.=))
-import qualified Data.Aeson.Types as JSON
 import Data.Text (Text)
 import qualified Options.Applicative as Opt
-import System.Directory (doesDirectoryExist, setCurrentDirectory)
 import System.IO (BufferMode(..), hSetBuffering, stdout)
 
 import Argo

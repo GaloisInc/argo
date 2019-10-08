@@ -1,10 +1,9 @@
-module SAWServer.CryptolExpression where
+module SAWServer.CryptolExpression (getTypedTerm) where
 
-import Control.Lens
+import Control.Lens hiding (re)
 import Control.Monad.IO.Class
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
-import qualified Data.Text as T
 
 import Cryptol.Eval (EvalOpts(..), defaultPPOpts)
 import Cryptol.ModuleSystem (ModuleRes)
@@ -26,7 +25,6 @@ import Verifier.SAW.TypedTerm(TypedTerm(..))
 import Argo
 import CryptolServer.Data.Expression
 import SAWServer
-import SAWServer.Exceptions
 
 getTypedTerm :: Expression -> Method SAWState TypedTerm
 getTypedTerm inputExpr =
@@ -68,7 +66,7 @@ moduleCmdResult (res, ws) =
   do mapM_ (liftIO . print . pp) ws
      case res of
        Right (a, me) -> return (a, me)
-       Left err      -> raise $ error "TODO: handle Cryptol error"
+       Left _err     -> raise $ error "TODO: handle Cryptol error"
        -- FIXME: handle structured Cryptol error above
 
 defaultEvalOpts :: EvalOpts

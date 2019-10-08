@@ -1,6 +1,7 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.Sat where
+module CryptolServer.Sat (sat) where
 
 import Control.Applicative
 import Control.Lens hiding ((.=))
@@ -88,7 +89,7 @@ instance ToJSON SatResult where
                 ]
 
 
-newtype Prover = Prover { proverName :: String }
+newtype Prover = Prover String
 
 instance FromJSON Prover where
   parseJSON =
@@ -102,7 +103,7 @@ instance FromJSON Prover where
 
 data ProveSatParams =
   ProveSatParams
-    { prover :: Prover
+    { prover     :: Prover
     , expression :: Expression
     , numResults :: SatNum
     }
@@ -110,9 +111,11 @@ data ProveSatParams =
 instance FromJSON ProveSatParams where
   parseJSON =
     JSON.withObject "sat or prove parameters" $
-    \o -> ProveSatParams <$> o .: "prover"
-                         <*> o .: "expression"
-                         <*> (o .: "result count" >>= num)
+    \o ->
+      do prover     <- o .: "prover"
+         expression <- o .: "expression"
+         numResults <- (o .: "result count" >>= num)
+         pure ProveSatParams{prover, expression, numResults}
     where
       num v = ((JSON.withText "all" $
                \t -> if t == "all" then pure AllSat else empty) v) <|>

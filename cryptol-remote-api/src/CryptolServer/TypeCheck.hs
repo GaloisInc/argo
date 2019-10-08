@@ -19,12 +19,13 @@ checkType :: TypeCheckParams -> Method ServerState JSON.Value
 checkType (TypeCheckParams e) =
   do e' <- getExpr e
      (_expr, _ty, schema) <- runModuleCmd (checkExpr e')
+     -- FIXME: why are we running this command if the result isn't used?
      _cfg <- meSolverConfig . view moduleEnv <$> getState
      return (JSON.object [ "type schema" .= JSONSchema schema ])
   where
     -- FIXME: Why is this check not being used?
-    noDefaults [] = return ()
-    noDefaults xs@(_:_) = raise (unwantedDefaults xs)
+    _noDefaults [] = return ()
+    _noDefaults xs@(_:_) = raise (unwantedDefaults xs)
 
 newtype TypeCheckParams =
   TypeCheckParams Expression

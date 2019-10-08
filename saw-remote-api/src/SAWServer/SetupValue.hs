@@ -1,10 +1,9 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-module SAWServer.SetupValue where
+module SAWServer.SetupValue (getSetupVal, LLVMSetupVal) where
 
 import Control.Applicative
-import Data.Aeson (FromJSON(..), withObject, withText, (.:))
-import qualified Data.Text as T
+import Data.Aeson (FromJSON(..), withText)
 
 import SAWScript.Crucible.Common.MethodSpec
 import SAWScript.Crucible.LLVM.MethodSpecIR

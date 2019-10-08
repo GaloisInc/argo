@@ -8,11 +8,8 @@ module Argo.CacheTree
 
 import           Control.Concurrent
 import           Control.Monad
-import           Control.Monad.IO.Class
 import           Data.HashMap.Lazy (HashMap)
 import qualified Data.HashMap.Lazy as HashMap
-import           Data.ByteString (ByteString)
-import qualified Data.ByteString as ByteString
 
 import           Data.Hashable (Hashable)
 

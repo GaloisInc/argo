@@ -1,15 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWServer.LLVMVerify where
+module SAWServer.LLVMVerify (llvmVerify) where
 
+import Prelude hiding (mod)
 import Control.Lens
-import Data.Aeson (FromJSON(..), ToJSON(..), object, withObject, (.=), (.:))
-import Data.Parameterized.Some
+import Data.Aeson (FromJSON(..), withObject, (.:))
 
 import SAWScript.Builtins (satABC)
 import SAWScript.Crucible.LLVM.Builtins (crucible_llvm_verify)
-import SAWScript.Crucible.LLVM.MethodSpecIR (SomeLLVM)
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import SAWScript.Options (defaultOptions)
 
 import Argo
@@ -41,7 +39,13 @@ instance FromJSON LLVMVerifyParams where
                      <*> o .: "lemma name"
 
 llvmVerify :: LLVMVerifyParams -> Method SAWState OK
-llvmVerify (LLVMVerifyParams modName fun lemmas checkSat setupName tactic lemmaName) =
+llvmVerify (LLVMVerifyParams{verifyModule = modName,
+                             verifyFunctionName = fun,
+                             verifyLemmas = _lemmas,
+                             verifyCheckSat = checkSat,
+                             verifySetup = setupName,
+                             verifyTactic = _tactic,
+                             verifyLemmaName = _lemmaName}) =
   do tasks <- view sawTask <$> getState
      case tasks of
        (_:_) -> raise $ notAtTopLevel $ map fst tasks
@@ -51,6 +55,6 @@ llvmVerify (LLVMVerifyParams modName fun lemmas checkSat setupName tactic lemmaN
             -- TODO lemmas
             -- TODO proof script - currently hard-coding abc
             setup <- getLLVMSetup setupName
-            res <- tl $ crucible_llvm_verify bic defaultOptions mod fun [] checkSat setup satABC
+            _res <- tl $ crucible_llvm_verify bic defaultOptions mod fun [] checkSat setup satABC
             -- TODO anything here?
             ok

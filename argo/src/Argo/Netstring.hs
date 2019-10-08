@@ -28,9 +28,11 @@ import qualified Data.ByteString.Builder as BS
 import Data.Word
 import System.IO
 
-import Debug.Trace
-
-data BadNetstring = BadLength | MissingColon (Maybe Word8) | MissingComma (Maybe Word8) deriving Show
+data BadNetstring
+  = BadLength
+  | MissingColon (Maybe Word8)
+  | MissingComma (Maybe Word8)
+  deriving Show
 
 instance Exception BadNetstring
 

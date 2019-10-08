@@ -8,9 +8,7 @@ module Argo.HistoryWrapper
 import Argo
 import Argo.CacheTree
 
-import Control.Monad
 import Control.Monad.IO.Class
-import Control.Lens
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Aeson (Result(..), Value(..), fromJSON, toJSON, object)
@@ -64,7 +62,8 @@ wrapMethod ::
   (Value -> Method s Value)      {- ^ method implementation     -} ->
   (Value -> Method (HistoryWrapper s) Value)
 
-wrapMethod commands validate name Query q =
+-- TODO: should we be using the name of the method somewhere?
+wrapMethod commands validate _name Query q =
   withState $ \logger hs steps params ->
   do cache            <- cacheLookup
                            (runHistoryCommand commands)

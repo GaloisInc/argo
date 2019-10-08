@@ -1,27 +1,23 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-module SAWServer.LLVMCrucibleSetup where
+module SAWServer.LLVMCrucibleSetup
+  ( startLLVMCrucibleSetup
+  , llvmCrucibleReturn
+  , llvmLoadModule
+  , llvmCrucibleSetupDone
+  ) where
 
-import Control.Applicative
-import Control.Lens hiding ((.:))
+import Control.Lens
 import Control.Monad.IO.Class
-import Control.Monad.ST
-import Data.Aeson (FromJSON(..), withObject, withText, (.:))
+import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.Parameterized.Some
-import qualified Data.Text as T
 
-
-import qualified Cryptol.Parser.AST as P
-import Cryptol.Utils.Ident (textToModName)
 import qualified Data.LLVM.BitCode as LLVM
 import SAWScript.Crucible.LLVM.Builtins (crucible_return)
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible (translateModule)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule(..))
 import SAWScript.Options (defaultOptions)
-import qualified Verifier.SAW.CryptolEnv as CEnv
-import Verifier.SAW.CryptolEnv (CryptolEnv)
-
 
 import Argo
 import SAWServer
@@ -36,14 +32,13 @@ startLLVMCrucibleSetup (StartLLVMCrucibleSetupParams n) =
   do pushTask (LLVMCrucibleSetup n (return ()))
      ok
 
-data StartLLVMCrucibleSetupParams =
-  StartLLVMCrucibleSetupParams { llvmSetupName :: ServerName }
+data StartLLVMCrucibleSetupParams
+  = StartLLVMCrucibleSetupParams ServerName
 
 instance FromJSON StartLLVMCrucibleSetupParams where
   parseJSON =
     withObject "params for \"SAW/Crucible setup\"" $ \o ->
     StartLLVMCrucibleSetupParams <$> o .: "name"
-
 
 llvmCrucibleSetupDone :: NoParams -> Method SAWState OK
 llvmCrucibleSetupDone NoParams =
@@ -77,11 +72,8 @@ llvmCrucibleReturn v =
        _ -> raise notSettingUpLLVMCrucible
 
 
-data LLVMLoadModuleParams =
-  LLVMLoadModuleParams
-    { llvmModuleName :: ServerName
-    , llvmModuleFilename :: FilePath
-    }
+data LLVMLoadModuleParams
+  = LLVMLoadModuleParams ServerName FilePath
 
 instance FromJSON LLVMLoadModuleParams where
   parseJSON =

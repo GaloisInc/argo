@@ -16,6 +16,9 @@ maintainer:          kwf@galois.com
 category:            Network
 extra-source-files:  CHANGELOG.md
 data-files:          test-scripts/*.py
+                     test-scripts/*.cry
+                     test-scripts/*.bc
+                     test-scripts/*.c
 
 common warnings
   ghc-options:
@@ -86,7 +89,10 @@ test-suite test-saw-remote-api
   hs-source-dirs:      test
   main-is:             Test.hs
   other-modules:       Paths_saw_remote_api
-  build-depends:       cryptol-remote-api,
+  build-depends:       argo-python,
+                       cryptol-remote-api,
+                       filepath,
+                       process,
                        quickcheck-instances,
                        tasty,
                        tasty-hunit,

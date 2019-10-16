@@ -1,13 +1,15 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
 module Test.Tasty.HUnit.ScriptExit where
 
 import Test.Tasty
 import Test.Tasty.HUnit
-import System.Process
+import System.Directory
 import System.Exit
 import System.FilePath
-import System.Directory
+import System.IO.Temp (withSystemTempDirectory)
+import System.Process
 import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -26,9 +28,9 @@ import qualified Data.Map as Map
 -- interpret multiple different kinds of files but may need different
 -- command-line setup to do so).
 makeScriptTests :: FilePath -> [TestLang] -> IO [TestTree]
-makeScriptTests scriptTestDir testLanguages = do
-  scriptTestFiles <- map (scriptTestDir </>) <$> listDirectory scriptTestDir
-  pure $ perLanguageTests testLanguages scriptTestFiles
+makeScriptTests scriptTestDir testLanguages =
+  do scriptTestFiles <- map (scriptTestDir </>) <$> listDirectory scriptTestDir
+     pure $ perLanguageTests testLanguages scriptTestFiles
 
 -- | Defines the information necessary to run an exit-code test for another
 -- language (usually a scripting language like Python).
@@ -53,6 +55,54 @@ python3 =
     , testLangExecutable = "python3"
     , testLangArgsFormat = \file -> [file]
     }
+
+-- | Python 3 in a virtual environment: this definition assumes that
+-- an executable named @python3@ is present in @$PATH@. The first
+-- argument is a description of the Python packages to make available
+-- in the virtual environment, expressed in the form of a path to the
+-- standard @requirements.txt@ file that lists the packages. The
+-- second argument consists of the tests to be run in this
+-- environment, which will be provided with a means of invoking @pip@
+-- and a scripting language. The means of invoking @pip@ is a function
+-- that, when provided with an argument list for @pip@, returns an
+-- @IO@ action that provides the virtual environment's @pip@ with
+-- those arguments. If @pip@ fails, the tests all fail.
+withPython3venv ::
+  Maybe FilePath {- ^ The path to requirements.txt, if desired -} ->
+  (([String] -> IO ()) -> TestLang -> IO a) {- ^ The tests that run using the virtual environment, given pip and Python -}->
+  IO a
+withPython3venv requirements todo =
+  withSystemTempDirectory "virtenv" $ \venvDir ->
+  do let process = proc "python3" ["-m", "venv", venvDir]
+     (exitCode, stdout, stderr) <- readCreateProcessWithExitCode process ""
+     case exitCode of
+       ExitFailure code ->
+         assertFailure $
+         "Failed to create virtualenv at \"" <> venvDir <> "\" "<>
+         "with code " <> show code <> ": " <>
+          ":\nstdout: " <> stdout <> "\nstderr: " <> stderr
+       ExitSuccess ->
+         let venvPython =
+               TestLang
+                 { testLangName       = "Python in virtualenv"
+                 , testLangExtension  = ".py"
+                 , testLangExecutable = venvDir </> "bin" </> "python"
+                 , testLangArgsFormat = \file -> [file]
+                 }
+             pip args =
+               let pipProc = proc (venvDir </> "bin" </> "pip") args in
+               readCreateProcessWithExitCode pipProc "" >>=
+               \case
+                 (ExitFailure code, pipStdout, pipStderr) ->
+                   assertFailure $
+                   "pip failed in environment \"" <> venvDir <> "\" "<>
+                   "with code " <> show code <> ": " <>
+                   ":\nstdout: " <> pipStdout <> "\nstderr: " <> pipStderr
+                 (ExitSuccess, _, _) ->
+                   pure ()
+         in do traverse (\reqPath -> pip ["install", "-r", reqPath]) requirements
+               todo pip venvPython
+
 
 -- | Given a list of @TestLang@s to use and a list of possible script
 -- filespaths, generate a list of named tests corresponding to the exit-code
@@ -93,14 +143,14 @@ perLanguageTests testLanguages =
 -- the process's @stdout@ and @stderr@.
 scriptTest :: FilePath -> (FilePath -> [String]) -> FilePath -> TestTree
 scriptTest execPath makeArgs scriptPath =
-  testCase (takeFileName scriptPath) $ do
-    let args = makeArgs scriptPath
-        process = proc execPath args
-    (exitCode, stdout, stderr) <- readCreateProcessWithExitCode process ""
-    case exitCode of
-      ExitSuccess -> pure ()
-      ExitFailure code ->
-        assertFailure $
-          "Exit code " <> show code <> ": "
-          <> execPath <> " " <> concat (intersperse " " args)
-          <> ":\nstdout: " <> stdout <> "\nstderr: " <> stderr
+  testCase (takeFileName scriptPath) $
+    do let args = makeArgs scriptPath
+           process = proc execPath args
+       (exitCode, stdout, stderr) <- readCreateProcessWithExitCode process ""
+       case exitCode of
+         ExitSuccess -> pure ()
+         ExitFailure code ->
+           assertFailure $
+             "Exit code " <> show code <> ": "
+             <> execPath <> " " <> concat (intersperse " " args)
+             <> ":\nstdout: " <> stdout <> "\nstderr: " <> stderr

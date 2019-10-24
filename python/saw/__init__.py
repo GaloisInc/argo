@@ -77,3 +77,11 @@ class SAWConnection:
     def llvm_return(self, val : Any) -> argo.interaction.Command:
         self.most_recent_result = LLVMReturn(self, val)
         return self.most_recent_result
+
+    def llvm_fresh(self, llvm_type : Any) -> argo.interaction.Command:
+        self.most_recent_result = LLVMFresh(self, llvm_type)
+        return self.most_recent_result
+
+    def llvm_points_to(self, pointer : Any, target : Any) -> argo.interaction.Command:
+        self.most_recent_result = LLVMPointsTo(self, pointer, target)
+        return self.most_recent_result

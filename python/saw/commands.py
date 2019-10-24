@@ -85,6 +85,20 @@ class LLVMReturn(argo.interaction.Command):
     def process_result(self, _res : Any) -> Any:
         return None
 
+class LLVMFresh(argo.interaction.Command):
+    def __init__(self, connection : HasProtocolState, return_value : Any) -> None:
+        super(LLVMFresh, self).__init__('SAW/LLVM/fresh', return_value, connection)
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
+class LLVMPointsTo(argo.interaction.Command):
+    def __init__(self, connection : HasProtocolState, pointer : Any, target : Any) -> None:
+        super(LLVMPointsTo, self).__init__('SAW/LLVM/points to', {'pointer': pointer, 'target': target})
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
 class LLVMVerify(argo.interaction.Command):
     def __init__(
             self,

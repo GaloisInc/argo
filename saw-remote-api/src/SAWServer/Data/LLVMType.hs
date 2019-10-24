@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module SAWServer.Data.LLVMType where
+module SAWServer.Data.LLVMType (llvmType) where
 
 import Control.Applicative
 import qualified Data.Aeson as JSON

@@ -86,6 +86,8 @@ sawMethods =
   , ("SAW/Cryptol/save term",    Command, method saveTerm)
   , ("SAW/LLVM/start setup",     Command, method startLLVMCrucibleSetup)
   , ("SAW/LLVM/return",          Command, method llvmCrucibleReturn)
+  , ("SAW/LLVM/fresh",           Command, method llvmCrucibleFresh)
+  , ("SAW/LLVM/points to",       Command, method llvmCruciblePointsTo)
   , ("SAW/LLVM/finish setup",    Command, method llvmCrucibleSetupDone)
   , ("SAW/LLVM/load module",     Command, method llvmLoadModule)
   , ("SAW/LLVM/verify",          Command, method llvmVerify)

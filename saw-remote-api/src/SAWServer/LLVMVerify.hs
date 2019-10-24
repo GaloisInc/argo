@@ -4,6 +4,7 @@ module SAWServer.LLVMVerify where
 
 import Control.Lens
 import Data.Aeson (FromJSON(..), ToJSON(..), object, withObject, (.=), (.:))
+import Data.Parameterized.Pair
 import Data.Parameterized.Some
 
 import SAWScript.Builtins (satABC)
@@ -50,7 +51,7 @@ llvmVerify (LLVMVerifyParams modName fun lemmas checkSat setupName tactic lemmaN
             mod <- getLLVMModule modName
             -- TODO lemmas
             -- TODO proof script - currently hard-coding abc
-            setup <- getLLVMSetup setupName
-            res <- tl $ crucible_llvm_verify bic defaultOptions mod fun [] checkSat setup satABC
+            Pair _ setup <- getLLVMSetup setupName
+            res <- tl $ crucible_llvm_verify bic defaultOptions mod fun [] checkSat (setup >> return ()) satABC
             -- TODO anything here?
             ok

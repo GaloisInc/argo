@@ -42,16 +42,16 @@ instance FromJSON LLVMVerifyParams where
                      <*> o .: "lemma name"
 
 llvmVerify :: LLVMVerifyParams -> Method SAWState OK
-llvmVerify (LLVMVerifyParams modName fun lemmas checkSat setupName tactic lemmaName) =
+llvmVerify (LLVMVerifyParams modName fun lemmaNames checkSat setupName tactic lemmaName) =
   do tasks <- view sawTask <$> getState
      case tasks of
        (_:_) -> raise $ notAtTopLevel $ map fst tasks
        [] ->
          do bic <- view sawBIC <$> getState
             mod <- getLLVMModule modName
-            -- TODO lemmas
+            lemmas <- mapM getLLVMMethodSpecIR lemmaNames
             -- TODO proof script - currently hard-coding abc
             Pair _ setup <- getLLVMSetup setupName
-            res <- tl $ crucible_llvm_verify bic defaultOptions mod fun [] checkSat (setup >> return ()) satABC
-            -- TODO anything here?
+            res <- tl $ crucible_llvm_verify bic defaultOptions mod fun lemmas checkSat (setup >> return ()) satABC
+            setServerVal lemmaName res
             ok

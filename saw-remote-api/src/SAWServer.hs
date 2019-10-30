@@ -30,7 +30,8 @@ import Verifier.SAW.Term.Functor (mkModuleName)
 import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
 
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (AllLLVM, LLVMModule(..))
+import qualified SAWScript.Crucible.Common.MethodSpec as CMS (CrucibleMethodSpecIR)
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (AllLLVM, SomeLLVM, LLVMModule(..))
 import SAWScript.Options (defaultOptions)
 import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
@@ -183,6 +184,7 @@ data ServerVal
   | VCryptolEnv CryptolEnv  -- from SAW, includes Term mappings
   | VLLVMCrucibleSetup (Pair LLVMCrucibleSetupTypeRepr LLVMCrucibleSetupM)
   | VLLVMModule (Some CMS.LLVMModule)
+  | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.CrucibleMethodSpecIR)
 
 instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"
@@ -191,6 +193,7 @@ instance Show ServerVal where
   show (VCryptolEnv _) = "VCryptolEnv"
   show (VLLVMCrucibleSetup _) = "VLLVMCrucibleSetup"
   show (VLLVMModule (Some _)) = "VLLVMModule"
+  show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
 
 class IsServerVal a where
   toServerVal :: a -> ServerVal
@@ -206,6 +209,9 @@ instance IsServerVal CryptolModule where
 
 instance IsServerVal CryptolEnv where
   toServerVal = VCryptolEnv
+
+instance IsServerVal (CMS.SomeLLVM CMS.CrucibleMethodSpecIR) where
+  toServerVal = VLLVMMethodSpecIR
 
 class KnownLLVMCrucibleSetupType a where
   knownLLVMCrucibleSetupRepr :: LLVMCrucibleSetupTypeRepr a
@@ -263,6 +269,13 @@ getLLVMSetup n =
      case v of
        VLLVMCrucibleSetup setup -> return setup
        other -> raise (notAnLLVMSetup n)
+
+getLLVMMethodSpecIR :: ServerName -> Method SAWState (CMS.SomeLLVM CMS.CrucibleMethodSpecIR)
+getLLVMMethodSpecIR n =
+  do v <- getServerVal n
+     case v of
+       VLLVMMethodSpecIR ir -> return ir
+       other -> raise (notACryptolEnv n)
 
 data LLVMSetupVal cryptolExpr
   = NullPointer

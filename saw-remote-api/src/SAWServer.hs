@@ -49,12 +49,10 @@ import SAWServer.Exceptions
 type SAWCont = (SAWEnv, SAWTask)
 
 data SAWTask
-  = CryptolSetup ServerName CryptolEnv -- ^ The name to bind and the environment being built
-  | ProofScript
+  = ProofScript
   | LLVMCrucibleSetup ServerName [SetupStep]
 
 instance Show SAWTask where
-  show (CryptolSetup n _) = "(CryptolSetup " ++ show n ++ " _)"
   show ProofScript = "ProofScript"
   show (LLVMCrucibleSetup n steps) = "(LLVMCrucibleSetup" ++ show n ++ " " ++ show steps ++ ")"
 

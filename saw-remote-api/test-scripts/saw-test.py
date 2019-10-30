@@ -11,15 +11,8 @@ print("This is " + dir_path)
 
 c = saw.connect("cabal new-exec --verbose=0 saw-remote-api -- --dynamic4")
 
-c.cryptol_start_setup("x")
-
-d = c.snapshot()
-
-d.cryptol_finish_setup().result()
-
 cry_file = os.path.join(dir_path, 'Foo.cry')
 c.cryptol_load_file(cry_file)
-c.cryptol_finish_setup().result()
 
 
 null_bc = os.path.join(dir_path, 'null.bc')

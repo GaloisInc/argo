@@ -429,7 +429,10 @@ serveHandles hLog hIn hOut app = init >>= loop
       out (JSON.encode exn <> BS.singleton newline)
 
     reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
-    reportOtherException = undefined  -- TODO: convert to JSONRPCException
+    reportOtherException out exn =
+      out $
+        JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
+        <> BS.singleton newline
 
     log = case hLog of
             Just h -> T.hPutStrLn h
@@ -472,11 +475,15 @@ serveHandlesNS hLog hIn hOut app =
              Left  msg -> throwIO (parseError (T.pack msg))
              Right req -> handleRequest log output app req
            `catch` reportError output
-           -- TODO add a catch for other errors that throws a JSON-RPC wrapper
+           `catch` reportOtherException output
 
     reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
     reportError output exn =
       output (JSON.encode exn)
+
+    reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
+    reportOtherException out exn =
+      out $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
 
     log :: Text -> IO ()
     log msg = case hLog of
@@ -495,10 +502,16 @@ serveHTTP app port =
        -- NOTE: Making the assumption that WAI forks a thread - TODO: verify this
        stream $ \put flush ->
          do output <- synchronized (\ str -> put (fromByteString (BS.toStrict str)) *> flush)
-            let reportError = \ (exn :: JSONRPCException) ->
-                                output (JSON.encode exn <> BS.singleton newline)
+            let reportError =
+                  \ (exn :: JSONRPCException) ->
+                    output (JSON.encode exn <> BS.singleton newline)
+                reportOtherException =
+                  \ (exn :: SomeException) ->
+                    output $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
+                             <> BS.singleton newline
             (case JSON.eitherDecode body of
                Left msg -> throw (parseError (T.pack msg))
                Right req -> handleRequest (T.hPutStrLn stderr) output app req)
              `catch` reportError
+             `catch` reportOtherException
  where newline = 0x0a -- ASCII/UTF8

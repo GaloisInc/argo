@@ -44,7 +44,7 @@ call (CallParams fun rawArgs) =
      let cfg = meSolverConfig me
      perhapsDef <- liftIO $ SMT.withSolver cfg (\s -> defaultReplExpr s ty schema)
      case perhapsDef of
-       Nothing -> error "TODO"
+       Nothing -> error "TODO" -- TODO: What should happen here?
        Just (tys, checked) ->
          do noDefaults tys
             let su = listParamSubst tys

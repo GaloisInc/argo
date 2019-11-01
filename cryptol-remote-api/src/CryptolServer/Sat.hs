@@ -52,7 +52,7 @@ sat (ProveSatParams (Prover name) jsonExpr num) =
                   , pcSmtFile      = Nothing -- mfile
                   , pcExpr         = checked
                   , pcSchema       = schema
-                  , pcValidate     = error "TODO: set value of pcValidate for SAT"
+                  , pcValidate     = False
                   }
             (_firstProver, res) <- runModuleCmd $ satProve cmd
             _stats <- liftIO (readIORef timing)

@@ -32,7 +32,6 @@ serverValNotFound name =
   makeJSONRPCException 10000 ("No server value with name " <> T.pack (show name))
     (Just $ object ["name" .= name])
 
--- TODO: make error say what kind of thing it was
 notACryptolEnv ::
   (ToJSON name, Show name) =>
   name {- ^ the name that should have been mapped to a Cryptol environment -}->

@@ -94,7 +94,7 @@ class LLVMFresh(argo.interaction.Command):
 
 class LLVMPointsTo(argo.interaction.Command):
     def __init__(self, connection : HasProtocolState, pointer : Any, target : Any) -> None:
-        super(LLVMPointsTo, self).__init__('SAW/LLVM/points to', {'pointer': pointer, 'target': target})
+        super(LLVMPointsTo, self).__init__('SAW/LLVM/points to', {'pointer': pointer, 'target': target}, connection)
 
     def process_result(self, _res : Any) -> Any:
         return None

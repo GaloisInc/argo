@@ -36,8 +36,6 @@ data BadNetstring
 
 instance Exception BadNetstring
 
--- TODO: Let's make a newtype wrapper for encoded netstrings
-
 newtype Netstring
   = Netstring ByteString
   deriving (Eq, Ord)

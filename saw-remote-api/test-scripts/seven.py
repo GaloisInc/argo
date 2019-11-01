@@ -10,8 +10,17 @@ seven_bc = os.path.join(dir_path, 'seven.bc')
 
 c.llvm_load_module('m', seven_bc).result()
 
-c.llvm_start_setup('setup').result()
-c.llvm_return({"setup value": "Cryptol", "expression": "7 : [32]"}).result()
-c.llvm_finish_setup().result()
+contract = {
+    "pre vars": [],
+    "pre conds": [],
+    "pre allocated": [],
+    "pre points tos": [],
+    "argument vals": [],
+    "post vars": [],
+    "post conds": [],
+    "post allocated": [],
+    "post points tos": [],
+    "return val": {"setup value": "Cryptol", "expression": "7 : [32]"}
+}
 
-print(c.llvm_verify('m', 'seven', [], False, 'setup', 'abc', 'ok').result())
+print(c.llvm_verify('m', 'seven', [], False, contract, 'abc', 'ok').result())

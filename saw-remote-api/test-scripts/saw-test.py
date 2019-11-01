@@ -19,8 +19,17 @@ null_bc = os.path.join(dir_path, 'null.bc')
 
 c.llvm_load_module('m', null_bc).result()
 
-c.llvm_start_setup('setup').result()
-c.llvm_return('null').result()
-c.llvm_finish_setup().result()
+contract = {
+    "pre vars": [],
+    "pre conds": [],
+    "pre allocated": [],
+    "pre points tos": [],
+    "argument vals": [],
+    "post vars": [],
+    "post conds": [],
+    "post allocated": [],
+    "post points tos": [],
+    "return val": "null"
+}
 
-print(c.llvm_verify('m', 'always_null', [], False, 'setup', 'abc', 'ok').result())
+print(c.llvm_verify('m', 'always_null', [], False, contract, 'abc', 'ok').result())

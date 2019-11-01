@@ -12,10 +12,33 @@ c.llvm_load_module('m', swap_bc).result()
 
 uint32_t = {"type": "primitive type", "primitive": "integer", "size": 32}
 
-c.llvm_start_setup('setup').result()
-print(c.llvm_fresh({"name": "x", "type": uint32_t}).result())
-print(c.llvm_fresh({"name": "y", "type": uint32_t}).result())
-c.llvm_points_to("x", "y").result()
-c.llvm_finish_setup().result()
+# ServerNames
+xp_name = {"name": "xp"}
+yp_name = {"name": "yp"}
 
-print(c.llvm_verify('m', 'swap', [], False, 'setup', 'abc', 'ok').result())
+# SetupVals
+xp = {"setup value": "saved", "name": "xp"}
+yp = {"setup value": "saved", "name": "yp"}
+x = {"setup value": "Cryptol", "expression": "x" }
+y = {"setup value": "Cryptol", "expression": "x" }
+
+contract = {
+    "pre vars": [
+        ["x", "x", uint32_t],
+        ["y", "y", uint32_t]
+    ],
+    "pre conds": [],
+    "pre allocated": [
+        ["xp", uint32_t],
+        ["yp", uint32_t]
+    ],
+    "pre points tos": [[xp, x], [yp, y]],
+    "argument vals": [xp, yp],
+    "post vars": [],
+    "post conds": [],
+    "post allocated": [],
+    "post points tos": [[xp, y], [yp, x]],
+    "return val": None
+}
+
+print(c.llvm_verify('m', 'swap', [], False, contract, 'abc', 'ok').result())

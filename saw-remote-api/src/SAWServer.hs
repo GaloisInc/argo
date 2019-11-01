@@ -8,7 +8,7 @@ module SAWServer where
 
 import Control.Lens
 import Control.Monad.ST
-import Data.Aeson (FromJSON(..), ToJSON(..), fromJSON, withText)
+import Data.Aeson (FromJSON(..), ToJSON(..), fromJSON, withText, (.:), withObject)
 import qualified Data.Aeson as JSON
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
@@ -17,6 +17,7 @@ import Data.Parameterized.Some
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import qualified Data.ABC.GIA as GIA
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
@@ -37,9 +38,10 @@ import SAWScript.Position (Pos(..))
 import SAWScript.Prover.Rewrite (basic_ss)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
-import Verifier.SAW.CryptolEnv (initCryptolEnv)
+import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import qualified Verifier.Java.SAWBackend as JavaSAW
 import qualified Verifier.LLVM.Backend.SAW as LLVMSAW
+import qualified Cryptol.Utils.Ident as Cryptol
 
 
 import Argo
@@ -57,14 +59,15 @@ instance Show SAWTask where
   show (LLVMCrucibleSetup n steps) = "(LLVMCrucibleSetup" ++ show n ++ " " ++ show steps ++ ")"
 
 data SetupStep
-  = SetupReturn (LLVMSetupVal TypedTerm) -- ^ The return value
+  = SetupReturn (LLVMSetupVal (P.Expr P.PName)) -- ^ The return value
   | SetupFresh ServerName Text Type -- ^ Server name to save in, debug name, fresh variable type
   | SetupAlloc ServerName Type -- ^ Server name to save in, type of allocation
-  | SetupPointsTo (LLVMSetupVal TypedTerm) (LLVMSetupVal TypedTerm) -- ^ Source, target
-  | SetupExecuteFunction [LLVMSetupVal TypedTerm] -- ^ Function's arguments
+  | SetupPointsTo (LLVMSetupVal (P.Expr P.PName)) (LLVMSetupVal (P.Expr P.PName)) -- ^ Source, target
+  | SetupExecuteFunction [LLVMSetupVal (P.Expr P.PName)] -- ^ Function's arguments
 
 instance Show SetupStep where
   show _ = "⟨SetupStep⟩" -- TODO
+
 
 instance ToJSON SAWTask where
   toJSON = toJSON . show
@@ -179,7 +182,6 @@ data ServerVal
   = VTerm TypedTerm
   | VType Cryptol.Schema
   | VCryptolModule CryptolModule -- from SAW, includes Term mappings
-  | VCryptolEnv CryptolEnv  -- from SAW, includes Term mappings
   | VLLVMCrucibleSetup (Pair LLVMCrucibleSetupTypeRepr LLVMCrucibleSetupM)
   | VLLVMModule (Some CMS.LLVMModule)
   | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.CrucibleMethodSpecIR)
@@ -188,7 +190,6 @@ instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"
   show (VType t) = "(VType " ++ show t ++ ")"
   show (VCryptolModule _) = "VCryptolModule"
-  show (VCryptolEnv _) = "VCryptolEnv"
   show (VLLVMCrucibleSetup _) = "VLLVMCrucibleSetup"
   show (VLLVMModule (Some _)) = "VLLVMModule"
   show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
@@ -204,9 +205,6 @@ instance IsServerVal Cryptol.Schema where
 
 instance IsServerVal CryptolModule where
   toServerVal = VCryptolModule
-
-instance IsServerVal CryptolEnv where
-  toServerVal = VCryptolEnv
 
 instance IsServerVal (CMS.SomeLLVM CMS.CrucibleMethodSpecIR) where
   toServerVal = VLLVMMethodSpecIR
@@ -247,12 +245,10 @@ getServerVal n =
        Nothing -> raise (serverValNotFound n)
        Just val -> return val
 
-getCryptolEnv :: ServerName -> Method SAWState CryptolEnv
-getCryptolEnv n =
-  do v <- getServerVal n
-     case v of
-       VCryptolEnv env -> return env
-       other -> raise (notACryptolEnv n)
+bindCryptolVar :: Text -> TypedTerm -> Method SAWState ()
+bindCryptolVar x t =
+  do modifyState $ over sawTopLevelRW $ \rw ->
+       rw { rwCryptol = bindTypedTerm (Cryptol.mkIdent x, t) (rwCryptol rw) }
 
 getLLVMModule :: ServerName -> Method SAWState (Some CMS.LLVMModule)
 getLLVMModule n =
@@ -273,7 +269,7 @@ getLLVMMethodSpecIR n =
   do v <- getServerVal n
      case v of
        VLLVMMethodSpecIR ir -> return ir
-       other -> raise (notACryptolEnv n)
+       other -> raise (notAnLLVMMethodSpecIR n)
 
 data LLVMSetupVal cryptolExpr
   = NullPointer

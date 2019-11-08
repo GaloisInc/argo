@@ -14,6 +14,7 @@ import Cryptol.ModuleSystem.Env (ModuleEnv)
 import Cryptol.ModuleSystem.Interface (noIfaceParams)
 import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
 import qualified Cryptol.ModuleSystem.Renamer as MR
+import Cryptol.Parser.AST
 import Cryptol.Parser.Position (emptyRange, getLoc)
 import Cryptol.TypeCheck (tcExpr)
 import Cryptol.TypeCheck.Monad (InferOutput(..), inpVars, inpTSyns)
@@ -22,6 +23,7 @@ import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP
 import SAWScript.Value (biSharedContext, TopLevelRW(..))
 import Verifier.SAW.CryptolEnv
+import Verifier.SAW.SharedTerm (SharedContext)
 import Verifier.SAW.TypedTerm(TypedTerm(..))
 
 import Argo
@@ -37,7 +39,7 @@ getTypedTerm inputExpr =
      (t, _) <- moduleCmdResult =<< (liftIO $ getTypedTermOfCExp sc cenv expr)
      return t
 
-getTypedTermOfCExp :: _ -> _ -> _ -> IO (ModuleRes TypedTerm)
+getTypedTermOfCExp :: SharedContext -> CryptolEnv -> Expr PName -> IO (ModuleRes TypedTerm)
 getTypedTermOfCExp sc cenv expr =
   do let env = eModuleEnv cenv
      mres <- runModuleM (defaultEvalOpts, env) $

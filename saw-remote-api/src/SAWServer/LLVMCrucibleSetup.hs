@@ -28,7 +28,14 @@ import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (textToModName, mkIdent)
 import qualified Data.LLVM.BitCode as LLVM
 import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..), PointsTo)
-import SAWScript.Crucible.LLVM.Builtins (crucible_alloc, crucible_execute_func, crucible_fresh_var, crucible_points_to, crucible_return)
+import SAWScript.Crucible.LLVM.Builtins
+    ( crucible_alloc
+    , crucible_execute_func
+    , crucible_fresh_var
+    , crucible_points_to
+    , crucible_return
+    , crucible_precond
+    , crucible_postcond )
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible (translateModule)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (AllLLVM, LLVMModule(..), anySetupTerm, anySetupNull)
 import SAWScript.Options (defaultOptions)
@@ -52,12 +59,12 @@ import SAWServer.SetupValue
 data Contract cryptolExpr =
   Contract
     { preVars :: [(ServerName, Text, JSONLLVMType)]
-    , preConds :: [(LLVMSetupVal cryptolExpr)]
+    , preConds :: [cryptolExpr]
     , preAllocated :: [(ServerName, JSONLLVMType)]
     , prePointsTos :: [(LLVMSetupVal cryptolExpr, LLVMSetupVal cryptolExpr)]
     , argumentVals :: [LLVMSetupVal cryptolExpr]
     , postVars :: [(ServerName, Text, JSONLLVMType)]
-    , postConds :: [LLVMSetupVal cryptolExpr]
+    , postConds :: [cryptolExpr]
     , postAllocated :: [(ServerName, JSONLLVMType)]
     , postPointsTos :: [(LLVMSetupVal cryptolExpr, LLVMSetupVal cryptolExpr)]
     , returnVal :: Maybe (LLVMSetupVal cryptolExpr)
@@ -101,12 +108,12 @@ compileContract bic cenv c = interpretSetup bic cenv (reverse steps)
     setupAlloc (n, ty) = SetupAlloc n (llvmType ty)
     steps =
       map setupFresh (preVars c) ++
-      -- map (uncurry SetupPrecond) (preConds c) ++
+      map SetupPrecond (preConds c) ++
       map setupAlloc (preAllocated c) ++
       map (uncurry SetupPointsTo) (prePointsTos c) ++
       [ SetupExecuteFunction (argumentVals c) ] ++
       map setupFresh (postVars c) ++
-      -- map (uncurry SetupPostcond) (postConds c) ++
+      map SetupPostcond (postConds c) ++
       map setupAlloc (postAllocated c) ++
       map (uncurry SetupPointsTo) (postPointsTos c) ++
       [ SetupReturn v | v <- maybeToList (returnVal c) ]
@@ -131,6 +138,10 @@ interpretSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty, cen
     go (SetupExecuteFunction args) =
       get >>= \env ->
       lift $ traverse (getSetupVal env) args >>= crucible_execute_func bic defaultOptions
+    go (SetupPrecond p) = get >>= \env -> lift $
+      getTypedTerm env p >>= crucible_precond
+    go (SetupPostcond p) = get >>= \env -> lift $
+      getTypedTerm env p >>= crucible_postcond
 
     save name val = modify' (\(env, cenv) -> (Map.insert name val env, cenv))
 
@@ -150,6 +161,17 @@ interpretSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty, cen
          -- TODO: add warnings (snd res)
          case fst res of
            Right (t, _) -> return (CMS.anySetupTerm t)
+           Left err -> error $ "Cryptol error: " ++ show err -- TODO: report properly
+
+    getTypedTerm ::
+      (Map ServerName ServerSetupVal, CryptolEnv) ->
+      P.Expr P.PName ->
+      LLVMCrucibleSetupM TypedTerm
+    getTypedTerm (_, cenv) expr = LLVMCrucibleSetupM $
+      do res <- liftIO $ getTypedTermOfCExp (biSharedContext bic) cenv expr
+         -- TODO: add warnings (snd res)
+         case fst res of
+           Right (t, _) -> return t
            Left err -> error $ "Cryptol error: " ++ show err -- TODO: report properly
 
     resolve env name =

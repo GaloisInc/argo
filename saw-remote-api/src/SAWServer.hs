@@ -64,6 +64,8 @@ data SetupStep
   | SetupAlloc ServerName Type -- ^ Server name to save in, type of allocation
   | SetupPointsTo (LLVMSetupVal (P.Expr P.PName)) (LLVMSetupVal (P.Expr P.PName)) -- ^ Source, target
   | SetupExecuteFunction [LLVMSetupVal (P.Expr P.PName)] -- ^ Function's arguments
+  | SetupPrecond (P.Expr P.PName)
+  | SetupPostcond (P.Expr P.PName)
 
 instance Show SetupStep where
   show _ = "⟨SetupStep⟩" -- TODO

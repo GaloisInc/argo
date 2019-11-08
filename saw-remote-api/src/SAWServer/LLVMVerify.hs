@@ -52,7 +52,7 @@ llvmVerify (LLVMVerifyParams modName fun lemmaNames checkSat contract tactic lem
      case tasks of
        (_:_) -> raise $ notAtTopLevel $ map fst tasks
        [] ->
-         do pushTask (LLVMCrucibleSetup n [])
+         do pushTask (LLVMCrucibleSetup lemmaName [])
             state <- getState
             mod <- getLLVMModule modName
             lemmas <- mapM getLLVMMethodSpecIR lemmaNames
@@ -62,5 +62,5 @@ llvmVerify (LLVMVerifyParams modName fun lemmaNames checkSat contract tactic lem
             -- TODO proof script - currently hard-coding abc
             res <- tl $ crucible_llvm_verify bic defaultOptions mod fun lemmas checkSat setup satABC
             dropTask
-            setServerVal lemmaName res
+            setServerVal lemmaName res -- TODO: is this necessary?
             ok

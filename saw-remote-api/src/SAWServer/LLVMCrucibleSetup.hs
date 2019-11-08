@@ -2,6 +2,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 module SAWServer.LLVMCrucibleSetup where
 
 import Control.Applicative
@@ -13,6 +17,7 @@ import Data.Aeson (FromJSON(..), withObject, withText, (.:))
 import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe
 import Data.Parameterized.Pair
 import Data.Parameterized.Some
 import Data.Text (Text)
@@ -20,14 +25,14 @@ import qualified Data.Text as T
 
 
 import qualified Cryptol.Parser.AST as P
-import Cryptol.Utils.Ident (textToModName)
+import Cryptol.Utils.Ident (textToModName, mkIdent)
 import qualified Data.LLVM.BitCode as LLVM
-import SAWScript.Crucible.Common.MethodSpec (SetupValue(..), PointsTo)
+import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..), PointsTo)
 import SAWScript.Crucible.LLVM.Builtins (crucible_alloc, crucible_execute_func, crucible_fresh_var, crucible_points_to, crucible_return)
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible (translateModule)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (AllLLVM, LLVMModule(..), anySetupTerm, anySetupNull)
 import SAWScript.Options (defaultOptions)
-import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM)
+import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), putTopLevelRW, getTopLevelRW, rwCryptol, biSharedContext)
 import Text.LLVM.AST (Type)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
@@ -36,13 +41,42 @@ import Verifier.SAW.TypedTerm (TypedTerm)
 import Argo
 import CryptolServer.Data.Expression
 import SAWServer
-import SAWServer.Data.LLVMType (llvmType)
-import SAWServer.CryptolExpression (getTypedTerm)
+import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
+import SAWServer.CryptolExpression (getTypedTermOfCExp)
 import SAWServer.Exceptions
 import SAWServer.NoParams
 import SAWServer.OK
 import SAWServer.SetupValue
 
+
+data Contract cryptolExpr =
+  Contract
+    { preVars :: [(ServerName, Text, JSONLLVMType)]
+    , preConds :: [(LLVMSetupVal cryptolExpr)]
+    , preAllocated :: [(ServerName, JSONLLVMType)]
+    , prePointsTos :: [(LLVMSetupVal cryptolExpr, LLVMSetupVal cryptolExpr)]
+    , argumentVals :: [LLVMSetupVal cryptolExpr]
+    , postVars :: [(ServerName, Text, JSONLLVMType)]
+    , postConds :: [LLVMSetupVal cryptolExpr]
+    , postAllocated :: [(ServerName, JSONLLVMType)]
+    , postPointsTos :: [(LLVMSetupVal cryptolExpr, LLVMSetupVal cryptolExpr)]
+    , returnVal :: Maybe (LLVMSetupVal cryptolExpr)
+    }
+    deriving (Functor, Foldable, Traversable)
+
+instance FromJSON e => FromJSON (Contract e) where
+  parseJSON =
+    withObject "LLVM contract" $ \o ->
+    Contract <$> o .: "pre vars"
+             <*> o .: "pre conds"
+             <*> o .: "pre allocated"
+             <*> o .: "pre points tos"
+             <*> o .: "argument vals"
+             <*> o .: "post vars"
+             <*> o .: "post conds"
+             <*> o .: "post allocated"
+             <*> o .: "post points tos"
+             <*> o .: "return val"
 
 startLLVMCrucibleSetup :: StartLLVMCrucibleSetupParams -> Method SAWState OK
 startLLVMCrucibleSetup (StartLLVMCrucibleSetupParams n) =
@@ -59,117 +93,69 @@ instance FromJSON StartLLVMCrucibleSetupParams where
 
 data ServerSetupVal = Val (CMS.AllLLVM SetupValue)
 
-interpretSetup :: BuiltinContext -> [SetupStep] -> LLVMCrucibleSetupM ()
-interpretSetup bic ss = runStateT (traverse_ go (reverse ss)) mempty *> pure ()
+-- TODO: this is an extra layer of indirection that could be collapsed, but is easy to implement for now.
+compileContract :: BuiltinContext -> CryptolEnv -> Contract (P.Expr P.PName) ->  LLVMCrucibleSetupM ()
+compileContract bic cenv c = interpretSetup bic cenv (reverse steps)
   where
-    go (SetupReturn v) = getSetupVal v >>= lift . crucible_return bic defaultOptions
-    go (SetupFresh name debugName ty) =
-      lift (crucible_fresh_var bic defaultOptions (T.unpack debugName) ty) >>=
-      save name . Val . CMS.anySetupTerm
+    setupFresh (n, dn, ty) = SetupFresh n dn (llvmType ty)
+    setupAlloc (n, ty) = SetupAlloc n (llvmType ty)
+    steps =
+      map setupFresh (preVars c) ++
+      -- map (uncurry SetupPrecond) (preConds c) ++
+      map setupAlloc (preAllocated c) ++
+      map (uncurry SetupPointsTo) (prePointsTos c) ++
+      [ SetupExecuteFunction (argumentVals c) ] ++
+      map setupFresh (postVars c) ++
+      -- map (uncurry SetupPostcond) (postConds c) ++
+      map setupAlloc (postAllocated c) ++
+      map (uncurry SetupPointsTo) (postPointsTos c) ++
+      [ SetupReturn v | v <- maybeToList (returnVal c) ]
+
+interpretSetup :: BuiltinContext -> CryptolEnv -> [SetupStep] -> LLVMCrucibleSetupM ()
+interpretSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty, cenv0) *> pure ()
+  where
+    go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= crucible_return bic defaultOptions
+    -- TODO: do we really want two names here?
+    go (SetupFresh name@(ServerName n) debugName ty) =
+      do t <- lift $ crucible_fresh_var bic defaultOptions (T.unpack debugName) ty
+         (env, cenv) <- get
+         put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
+         save name (Val (CMS.anySetupTerm t))
     go (SetupAlloc name ty) =
       lift (crucible_alloc bic defaultOptions ty) >>=
       save name . Val
-    go (SetupPointsTo src tgt) =
-      do ptr <- getSetupVal src
-         tgt' <- getSetupVal tgt
-         lift (crucible_points_to True bic defaultOptions ptr tgt')
+    go (SetupPointsTo src tgt) = get >>= \env -> lift $
+      do ptr <- getSetupVal env src
+         tgt' <- getSetupVal env tgt
+         crucible_points_to True bic defaultOptions ptr tgt'
     go (SetupExecuteFunction args) =
-      traverse getSetupVal args >>= lift . crucible_execute_func bic defaultOptions
+      get >>= \env ->
+      lift $ traverse (getSetupVal env) args >>= crucible_execute_func bic defaultOptions
 
-    save name val = modify' (Map.insert name val)
+    save name val = modify' (\(env, cenv) -> (Map.insert name val env, cenv))
 
-    getSetupVal NullPointer = return CMS.anySetupNull
-    getSetupVal (ServerVal n) =
-      resolve n >>=
+    getSetupVal ::
+      (Map ServerName ServerSetupVal, CryptolEnv) ->
+      LLVMSetupVal (P.Expr P.PName) ->
+      LLVMCrucibleSetupM (CMS.AllLLVM MS.SetupValue)
+    getSetupVal _ NullPointer = LLVMCrucibleSetupM $ return CMS.anySetupNull
+    getSetupVal (env, _) (ServerVal n) = LLVMCrucibleSetupM $
+      resolve env n >>=
       \case
         Val x -> return x -- TODO add cases for the server values that
                           -- are not coming from the setup monad
                           -- (e.g. surrounding context)
-    getSetupVal (CryptolExpr expr) = return (CMS.anySetupTerm expr)
+    getSetupVal (_, cenv) (CryptolExpr expr) = LLVMCrucibleSetupM $
+      do res <- liftIO $ getTypedTermOfCExp (biSharedContext bic) cenv expr
+         -- TODO: add warnings (snd res)
+         case fst res of
+           Right (t, _) -> return (CMS.anySetupTerm t)
+           Left err -> error $ "Cryptol error: " ++ show err -- TODO: report properly
 
-    resolve name =
-      do env <- get
-         case Map.lookup name env of
-           Just v -> return v
-           Nothing -> error "Server value not found - impossible!" -- rule out elsewhere
-
-llvmCrucibleSetupDone :: NoParams -> Method SAWState OK
-llvmCrucibleSetupDone NoParams =
-  do tasks <- view sawTask <$> getState
-     case tasks of
-       ((LLVMCrucibleSetup n setup, _) : _) ->
-         do dropTask
-            bic <- view sawBIC <$> getState
-            setServerVal n (interpretSetup bic setup)
-            ok
-       _ -> raise notSettingUpLLVMCrucible
-
-
-data LLVMCrucibleReturnParams =
-  LLVMCrucibleReturnParams { llvmReturnVal :: LLVMSetupVal Expression }
-
-instance FromJSON LLVMCrucibleReturnParams where
-  parseJSON =
-    withObject "params for \"SAW/LLVM/return\"" $ \o ->
-    LLVMCrucibleReturnParams <$> o .: "value"
-
-llvmCrucibleReturn :: LLVMCrucibleReturnParams -> Method SAWState OK
-llvmCrucibleReturn v =
-  do tasks <- view sawTask <$> getState
-     case tasks of
-       ((LLVMCrucibleSetup n setup, env) : more) ->
-         do bic <- view sawBIC <$> getState
-            val <- traverse getTypedTerm (llvmReturnVal v)
-            modifyState $
-              set sawTask ((LLVMCrucibleSetup n (SetupReturn val : setup), env) :
-                           more)
-            ok
-       _ -> raise notSettingUpLLVMCrucible
-
-data LLVMCrucibleFreshParams =
-  LLVMCrucibleFreshParams { llvmFreshName :: ServerName, llvmFreshType :: Type }
-
-instance FromJSON LLVMCrucibleFreshParams where
-  parseJSON =
-    withObject "params for \"SAW/LLVM/fresh\"" $ \o ->
-    LLVMCrucibleFreshParams <$> o .: "name" <*> (llvmType <$> o .: "type")
-
-llvmCrucibleFresh :: LLVMCrucibleFreshParams -> Method SAWState OK
-llvmCrucibleFresh (LLVMCrucibleFreshParams serverName@(ServerName x) llvmType) =
-  do tasks <- view sawTask <$> getState
-     case tasks of
-       ((LLVMCrucibleSetup n setup, env) : more) ->
-         do bic <- view sawBIC <$> getState
-            setServerVal serverName (crucible_fresh_var bic defaultOptions (T.unpack x) llvmType)
-            ok
-       _ -> raise notSettingUpLLVMCrucible
-
-data LLVMCruciblePointsToParams =
-  LLVMCruciblePointsToParams
-    { llvmPointsToPointer :: LLVMSetupVal Expression
-    , llvmPointsToTarget :: LLVMSetupVal Expression
-    }
-
-instance FromJSON LLVMCruciblePointsToParams where
-  parseJSON =
-    withObject "params for \"SAW/LLVM/points to\"" $ \o ->
-    LLVMCruciblePointsToParams <$> o .: "pointer" <*> o .: "target"
-
-
-llvmCruciblePointsTo :: LLVMCruciblePointsToParams -> Method SAWState OK
-llvmCruciblePointsTo (LLVMCruciblePointsToParams ptr tgt) =
-  do tasks <- view sawTask <$> getState
-     case tasks of
-       ((LLVMCrucibleSetup n setup, env) : more) ->
-         do bic <- view sawBIC <$> getState
-            ptr' <- traverse getTypedTerm ptr
-            tgt' <- traverse getTypedTerm tgt
-            modifyState $
-              set sawTask ((LLVMCrucibleSetup n (SetupPointsTo ptr' tgt' : setup), env) :
-                           more)
-            ok
-       _ -> raise notSettingUpLLVMCrucible
-
+    resolve env name =
+       case Map.lookup name env of
+         Just v -> return v
+         Nothing -> error "Server value not found - impossible!" -- rule out elsewhere
 
 data LLVMLoadModuleParams =
   LLVMLoadModuleParams

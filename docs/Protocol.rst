@@ -86,6 +86,9 @@ Cryptol
 All methods in this section additionally propagate server state in the
 manner described in the prior section.
 
+These methods may return :ref:`a variety of Cryptol errors
+<cryptol-server-errors>`, with codes in the range of ``20000``-``29999``.
+
 Changing Directories
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -394,6 +397,12 @@ following tags:
   The conjuncts are in the ``left`` and ``right`` fields.
 
 
-SAW Messages
-============
-The SAW API is in flux and is thus not yet documented.
+SAW Verification
+================
+
+The SAW API is still in flux and is not yet fully documented.
+
+Methods implemented against the SAW API may throw :ref:`a variety of SAW-related
+errors <saw-server-errors>`, with codes in the range of ``10000``-``19999``.
+Additionally, SAW verification relies on Cryptol, and some SAW methods may throw
+:ref:`Cryptol server errors <cryptol-server-errors>` when appropriate.

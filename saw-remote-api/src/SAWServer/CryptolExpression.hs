@@ -1,4 +1,5 @@
-module SAWServer.CryptolExpression (getTypedTerm) where
+{-# LANGUAGE PartialTypeSignatures #-}
+module SAWServer.CryptolExpression (getTypedTerm, getTypedTermOfCExp) where
 
 import Control.Lens hiding (re)
 import Control.Monad.IO.Class
@@ -12,6 +13,7 @@ import Cryptol.ModuleSystem.Env (ModuleEnv)
 import Cryptol.ModuleSystem.Interface (noIfaceParams)
 import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
 import qualified Cryptol.ModuleSystem.Renamer as MR
+import Cryptol.Parser.AST
 import Cryptol.Parser.Position (emptyRange, getLoc)
 import Cryptol.TypeCheck (tcExpr)
 import Cryptol.TypeCheck.Monad (InferOutput(..), inpVars, inpTSyns)
@@ -20,6 +22,7 @@ import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP
 import SAWScript.Value (biSharedContext, TopLevelRW(..))
 import Verifier.SAW.CryptolEnv
+import Verifier.SAW.SharedTerm (SharedContext)
 import Verifier.SAW.TypedTerm(TypedTerm(..))
 
 import Argo
@@ -30,12 +33,15 @@ import CryptolServer.Exceptions (cryptolError)
 getTypedTerm :: Expression -> Method SAWState TypedTerm
 getTypedTerm inputExpr =
   do cenv <- rwCryptol . view sawTopLevelRW <$> getState
-
      expr <- getExpr inputExpr
      sc <- biSharedContext . view sawBIC <$> getState
-     let env = eModuleEnv cenv
+     (t, _) <- moduleCmdResult =<< (liftIO $ getTypedTermOfCExp sc cenv expr)
+     return t
 
-     ((checkedExpr, schema), modEnv') <- liftModuleM env $
+getTypedTermOfCExp :: SharedContext -> CryptolEnv -> Expr PName -> IO (ModuleRes TypedTerm)
+getTypedTermOfCExp sc cenv expr =
+  do let env = eModuleEnv cenv
+     mres <- runModuleM (defaultEvalOpts, env) $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names
@@ -53,11 +59,12 @@ getTypedTerm inputExpr =
 
           out <- liftIO (tcExpr re tcEnv')
           interactive (runInferOutput out)
-
-     let env' = cenv { eModuleEnv = modEnv' }
-     trm <- liftIO $ translateExpr sc env' checkedExpr
-
-     return (TypedTerm schema trm)
+     case mres of
+       (Right ((checkedExpr, schema), modEnv'), ws) ->
+         do let env' = cenv { eModuleEnv = modEnv' }
+            trm <- liftIO $ translateExpr sc env' checkedExpr
+            return (Right (TypedTerm schema trm, modEnv'), ws)
+       (Left err, ws) -> return (Left err, ws)
 
 liftModuleM :: ModuleEnv -> ModuleM a -> Method SAWState (a, ModuleEnv)
 liftModuleM env m = liftIO (runModuleM (defaultEvalOpts, env) m) >>= moduleCmdResult

@@ -72,14 +72,9 @@ realMain opts =
 
 sawMethods :: [(Text, MethodType, JSON.Value -> Method SAWState JSON.Value)]
 sawMethods =
-  [ ("SAW/Cryptol/start setup",  Command, method startCryptolSetup)
-  , ("SAW/Cryptol/load module",  Command, method cryptolSetupLoadModule)
-  , ("SAW/Cryptol/load file",    Command, method cryptolSetupLoadFile)
-  , ("SAW/Cryptol/finish setup", Command, method cryptolSetupDone)
+  [ ("SAW/Cryptol/load module",  Command, method cryptolLoadModule)
+  , ("SAW/Cryptol/load file",    Command, method cryptolLoadFile)
   , ("SAW/Cryptol/save term",    Command, method saveTerm)
-  , ("SAW/LLVM/start setup",     Command, method startLLVMCrucibleSetup)
-  , ("SAW/LLVM/return",          Command, method llvmCrucibleReturn)
-  , ("SAW/LLVM/finish setup",    Command, method llvmCrucibleSetupDone)
   , ("SAW/LLVM/load module",     Command, method llvmLoadModule)
   , ("SAW/LLVM/verify",          Command, method llvmVerify)
   ]

@@ -5,6 +5,8 @@ module SAWServer.Exceptions (
   , notACryptolEnv
   , notAnLLVMModule
   , notAnLLVMSetup
+  , notAnLLVMSetupVal
+  , notAnLLVMMethodSpecIR
   -- * Wrong monad errors
   , notSettingUpCryptol
   , notSettingUpLLVMCrucible
@@ -63,6 +65,28 @@ notAnLLVMSetup name =
     ("The server value with name " <>
      T.pack (show name) <>
      " is not an LLVM setup script")
+    (Just $ object ["name" .= name])
+
+notAnLLVMSetupVal ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to an LLVM setup value -}->
+  JSONRPCException
+notAnLLVMSetupVal name =
+  makeJSONRPCException 1005
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not an LLVM setup value")
+    (Just $ object ["name" .= name])
+
+notAnLLVMMethodSpecIR ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a method specification IR -}->
+  JSONRPCException
+notAnLLVMMethodSpecIR name =
+  makeJSONRPCException 1006
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not an LLVM method specification")
     (Just $ object ["name" .= name])
 
 

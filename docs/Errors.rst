@@ -51,13 +51,18 @@ are indicative that the client is doing something wrong.
 Server value errors (``10000``–``10099``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
--  ``10000``: “No server value with name \____\_” ``{ name: String }``
--  ``10010``: “The server value with name \____\_ is not a Cryptol
-   environment” ``{ name: String }``
--  ``10020``: “The server value with name \____\_ is not an LLVM module”
+- ``10000``: “No server value with name \____\_” ``{ name: String }``
+- ``10010``: “The server value with name \____\_ is not a Cryptol environment”
    ``{ name: String }``
--  ``10030``: “The server value with name \____\_ is not an LLVM setup
-   script” ``{ name: String }``
+- ``10020``: “The server value with name \____\_ is not an LLVM module”
+  ``{name: String }``
+- ``10030``: “The server value with name \____\_ is not an LLVM setup script”
+   ``{ name: String }``
+- ``10040``: “The server value with name \____\_ is not an LLVM setup value”
+   ``{ name: String }``
+- ``10050``: “The server value with name \____\_ is not an LLVM method
+   specification”
+   ``{ name: String }``
 
 Setup errors (``10100``–``10199``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

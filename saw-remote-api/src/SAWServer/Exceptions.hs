@@ -72,7 +72,7 @@ notAnLLVMSetupVal ::
   name {- ^ the name that should have been mapped to an LLVM setup value -}->
   JSONRPCException
 notAnLLVMSetupVal name =
-  makeJSONRPCException 1005
+  makeJSONRPCException 10040
     ("The server value with name " <>
      T.pack (show name) <>
      " is not an LLVM setup value")
@@ -83,15 +83,11 @@ notAnLLVMMethodSpecIR ::
   name {- ^ the name that should have been mapped to a method specification IR -}->
   JSONRPCException
 notAnLLVMMethodSpecIR name =
-  makeJSONRPCException 1006
+  makeJSONRPCException 10050
     ("The server value with name " <>
      T.pack (show name) <>
      " is not an LLVM method specification")
     (Just $ object ["name" .= name])
-
-
-cryptolError :: Text -> JSONRPCException
-cryptolError why = makeJSONRPCException 5001 why noData
 
 notSettingUpCryptol :: JSONRPCException
 notSettingUpCryptol =

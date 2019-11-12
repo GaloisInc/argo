@@ -33,6 +33,7 @@ script:
   - git submodule update
   - (cd deps/abcBridge && git submodule init && git submodule update)
   - cabal v2-update
-  - cabal v2-build -j --disable-optimization
+  - cabal v2-build -j --disable-optimization cryptol-remote-api
+  - cabal v2-build -j --disable-optimization saw-remote-api
   - cabal v2-test cryptol-remote-api
   - cabal v2-test saw-remote-api

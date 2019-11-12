@@ -3,17 +3,6 @@ from argo.interaction import HasProtocolState
 
 from typing import Any, List
 
-class CryptolStartSetup(argo.interaction.Command):
-    def __init__(self, connection : HasProtocolState, name : str) -> None:
-        super(CryptolStartSetup, self).__init__(
-            'SAW/Cryptol/start setup',
-            {'name': name},
-            connection
-        )
-
-    def process_result(self, _res : Any) -> Any:
-        return None
-
 class CryptolLoadFile(argo.interaction.Command):
     def __init__(self, connection : HasProtocolState, filename : str) -> None:
         super(CryptolLoadFile, self).__init__(
@@ -36,35 +25,6 @@ class CryptolLoadModule(argo.interaction.Command):
     def process_result(self, _res : Any) -> Any:
         return None
 
-class CryptolFinishSetup(argo.interaction.Command):
-    def __init__(self, connection : HasProtocolState) -> None:
-        super(CryptolFinishSetup, self).__init__(
-            'SAW/Cryptol/finish setup',
-            {},
-            connection
-        )
-
-    def process_result(self, _res : Any) -> Any:
-        return None
-
-class LLVMStartSetup(argo.interaction.Command):
-    def __init__(self, connection : HasProtocolState, name : str) -> None:
-        super(LLVMStartSetup, self).__init__(
-            'SAW/LLVM/start setup',
-            {'name': name},
-            connection
-        )
-
-    def process_result(self, _res : Any) -> Any:
-        return None
-
-class LLVMFinishSetup(argo.interaction.Command):
-    def __init__(self, connection : HasProtocolState) -> None:
-        super(LLVMFinishSetup, self).__init__('SAW/LLVM/finish setup', {}, connection)
-
-    def process_result(self, _res : Any) -> Any:
-        return None
-
 class LLVMLoadModule(argo.interaction.Command):
     def __init__(self, connection : HasProtocolState,
                  name : str,
@@ -78,13 +38,6 @@ class LLVMLoadModule(argo.interaction.Command):
     def process_result(self, _res : Any) -> Any:
         return None
 
-class LLVMReturn(argo.interaction.Command):
-    def __init__(self, connection : HasProtocolState, return_value : Any) -> None:
-        super(LLVMReturn, self).__init__('SAW/LLVM/return', {'value': return_value}, connection)
-
-    def process_result(self, _res : Any) -> Any:
-        return None
-
 class LLVMVerify(argo.interaction.Command):
     def __init__(
             self,
@@ -93,14 +46,14 @@ class LLVMVerify(argo.interaction.Command):
             function : str,
             lemmas : List[str],
             check_sat : bool,
-            setup : str,
+            setup : Any,
             tactic : str,
             lemma_name : str) -> None:
         params = {'module': module,
                   'function': function,
                   'lemmas': lemmas,
                   'check sat': check_sat,
-                  'setup': setup,
+                  'contract': setup,
                   'tactic': tactic,
                   'lemma name': lemma_name}
         super(LLVMVerify, self).__init__('SAW/LLVM/verify', params, connection)

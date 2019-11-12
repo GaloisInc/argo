@@ -40,7 +40,7 @@ instance JSON.FromJSON LLVMTypeTag where
     \case
       "primitive type" -> pure TagPrimType
       "type alias" -> pure TagAlias
-      "array "-> pure TagArray
+      "array"-> pure TagArray
       "function" -> pure TagFunTy
       "pointer" -> pure TagPtrTo
       "struct" -> pure TagStruct

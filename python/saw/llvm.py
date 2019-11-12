@@ -17,6 +17,16 @@ class LLVMIntType(LLVMType):
     def to_json(self) -> Any:
         return {'type': 'primitive type', 'primitive': 'integer', 'size': self.width}
 
+class LLVMArrayType(LLVMType):
+    def __init__(self, elemtype : LLVMType, size : int) -> None:
+        self.size = size
+        self.elemtype = elemtype
+
+    def to_json(self) -> Any:
+        return { 'type': 'array',
+                 'element type': self.elemtype.to_json(),
+                 'size': self.size }
+
 class LLVMPointerType(LLVMType):
     def __init__(self, points_to : LLVMType) -> None:
         self.points_to = points_to
@@ -25,6 +35,7 @@ class LLVMPointerType(LLVMType):
         return {'type': 'pointer', 'points to': self.points_to.to_json()}
 
 
+uint8_t = LLVMIntType(8)
 uint32_t = LLVMIntType(32)
 
 class SetupVal(metaclass=ABCMeta):

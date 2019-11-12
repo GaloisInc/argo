@@ -39,16 +39,8 @@ class SAWConnection:
             return self.most_recent_result.state()
 
     # Protocol messages
-    def cryptol_start_setup(self, name : str) -> argo.interaction.Command:
-        self.most_recent_result = CryptolStartSetup(self, name)
-        return self.most_recent_result
-
     def cryptol_load_file(self, filename : str) -> argo.interaction.Command:
         self.most_recent_result = CryptolLoadFile(self, filename)
-        return self.most_recent_result
-
-    def cryptol_finish_setup(self) -> argo.interaction.Command:
-        self.most_recent_result = CryptolFinishSetup(self)
         return self.most_recent_result
 
     def llvm_load_module(self, name : str, bitcode_file : str)  -> argo.interaction.Command:
@@ -60,20 +52,8 @@ class SAWConnection:
                     function : str,
                     lemmas : List[str],
                     check_sat : bool,
-                    setup : str,
+                    contract : Any,
                     tactic : str,
                     lemma_name : str) -> argo.interaction.Command:
-        self.most_recent_result = LLVMVerify(self, module, function, lemmas, check_sat, setup, tactic, lemma_name)
-        return self.most_recent_result
-
-    def llvm_start_setup(self, name : str) -> argo.interaction.Command:
-        self.most_recent_result = LLVMStartSetup(self, name)
-        return self.most_recent_result
-
-    def llvm_finish_setup(self) -> argo.interaction.Command:
-        self.most_recent_result = LLVMFinishSetup(self)
-        return self.most_recent_result
-
-    def llvm_return(self, val : Any) -> argo.interaction.Command:
-        self.most_recent_result = LLVMReturn(self, val)
+        self.most_recent_result = LLVMVerify(self, module, function, lemmas, check_sat, contract, tactic, lemma_name)
         return self.most_recent_result

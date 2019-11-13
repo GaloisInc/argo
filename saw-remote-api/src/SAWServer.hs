@@ -22,6 +22,8 @@ import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
+import qualified Verifier.SAW.CryptolEnv as CEnv
+import Cryptol.ModuleSystem (loadModuleByPath, loadModuleByName, ModuleEnv, ModuleCmd)
 import qualified Data.ABC.GIA as GIA
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
@@ -48,6 +50,7 @@ import qualified Cryptol.Utils.Ident as Cryptol
 
 
 import Argo
+import CryptolServer
 import CryptolServer.Data.Expression
 import SAWServer.Exceptions
 
@@ -104,6 +107,14 @@ sawTopLevelRO = lens _sawTopLevelRO (\v ro -> v { _sawTopLevelRO = ro })
 sawTopLevelRW :: Simple Lens SAWState TopLevelRW
 sawTopLevelRW = lens _sawTopLevelRW (\v rw -> v { _sawTopLevelRW = rw })
 
+sawCryptolModuleEnv :: Simple Lens SAWState ModuleEnv
+sawCryptolModuleEnv =
+  sawTopLevelRW
+  . lens rwCryptol (\v e -> v { rwCryptol = e })
+  . lens CEnv.eModuleEnv (\v e -> v { CEnv.eModuleEnv = e })
+
+runCryptolCmd :: ModuleCmd a -> Method SAWState a
+runCryptolCmd = zoomMethod sawCryptolModuleEnv . runCEnvCmd
 
 pushTask :: SAWTask -> Method SAWState ()
 pushTask t = modifyState mod

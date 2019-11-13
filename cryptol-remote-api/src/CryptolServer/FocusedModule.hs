@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.FocusedModule (focusedModule) where
+module CryptolServer.FocusedModule (focusedModule, FocusedModParams(..)) where
 
 import Control.Lens hiding ((.=))
 import Data.Aeson as JSON

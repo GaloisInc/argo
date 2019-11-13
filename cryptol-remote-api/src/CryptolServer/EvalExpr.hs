@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.EvalExpr (evalExpression) where
+module CryptolServer.EvalExpr (evalExpression, EvalExprParams(..)) where
 
 import Control.Lens hiding ((.=))
 import Control.Monad.IO.Class

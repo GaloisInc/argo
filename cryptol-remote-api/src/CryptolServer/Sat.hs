@@ -1,7 +1,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.Sat (sat) where
+module CryptolServer.Sat (sat, ProveSatParams(..)) where
 
 import Control.Applicative
 import Control.Lens hiding ((.=))

@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.TypeCheck (checkType) where
+module CryptolServer.TypeCheck (checkType, TypeCheckParams(..)) where
 
 import Control.Lens hiding ((.=))
 import Data.Aeson as JSON

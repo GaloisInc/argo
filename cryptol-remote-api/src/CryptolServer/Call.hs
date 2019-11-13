@@ -4,7 +4,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
-module CryptolServer.Call (Expression(..), Encoding(..), LetBinding(..), call) where
+module CryptolServer.Call
+  ( Expression(..)
+  , Encoding(..)
+  , LetBinding(..)
+  , call
+  , CallParams(..)
+  ) where
 
 import Control.Lens hiding ((.=))
 import Control.Monad (unless)

@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.ChangeDir (cd) where
+module CryptolServer.ChangeDir (cd, ChangeDirectoryParams(..)) where
 
 import Control.Monad.IO.Class
 import Data.Aeson as JSON

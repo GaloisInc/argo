@@ -1,5 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.LoadModule (loadFile, loadModule) where
+module CryptolServer.LoadModule
+  ( loadFile
+  , loadModule
+  , LoadFileParams(..)
+  , LoadModuleParams(..)
+  ) where
 
 import Control.Applicative
 import Data.Aeson as JSON

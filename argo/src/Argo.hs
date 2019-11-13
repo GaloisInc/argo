@@ -9,6 +9,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RankNTypes #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints -Wno-name-shadowing #-}
 
 -- | An implementation of the basic primitives of JSON-RPC 2.0.
@@ -21,6 +23,7 @@ module Argo
   , Method(..)
   , runMethod
   , method
+  , zoomMethod
   -- * Manipulating state in methods
   , getState
   , modifyState
@@ -54,6 +57,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Exception hiding (TypeError)
 import Control.Lens hiding ((.=))
+import Control.Lens.Zoom (zoom)
 import qualified Data.Aeson as JSON
 import Data.Aeson ((.:), (.:!), (.=))
 import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
@@ -83,7 +87,12 @@ jsonRPCVersion = "2.0"
 -- to a JSON value representing its response.
 newtype Method state result
   = Method (ReaderT (Text -> IO ()) (StateT state IO) result)
-  deriving (Functor, Applicative, Monad, MonadIO)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadState state)
+
+-- | Given a lens between a smaller and larger state, run a method in the
+-- smaller state within the context of the larger state.
+zoomMethod :: Lens' s t -> Method t a -> Method s a
+zoomMethod l (Method m) = Method (zoom l m)
 
 runMethod :: Method state result -> (Text -> IO ()) -> state -> IO (state, result)
 runMethod (Method m) log s = swap <$> runStateT (runReaderT m log) s

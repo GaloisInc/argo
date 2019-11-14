@@ -1,15 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.LoadModule (loadFile, loadModule) where
+module CryptolServer.LoadModule
+  ( loadFile
+  , loadModule
+  , LoadFileParams(..)
+  , LoadModuleParams(..)
+  ) where
 
 import Control.Applicative
-import Control.Exception
-import Control.Monad.IO.Class
 import Data.Aeson as JSON
 import qualified Data.Text as T
-import System.Directory
 import Data.Functor
 
-import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, loadModuleByPath, loadModuleByName)
+import Cryptol.ModuleSystem (loadModuleByPath, loadModuleByName)
 import Cryptol.Parser (parseModName)
 import Cryptol.Parser.AST (ModName)
 
@@ -21,8 +23,8 @@ loadFile :: LoadFileParams -> Method ServerState ()
 loadFile (LoadFileParams fn) =
   void $ runModuleCmd (loadModuleByPath fn)
 
-data LoadFileParams =
-  LoadFileParams { loadFileMod :: FilePath }
+newtype LoadFileParams
+  = LoadFileParams FilePath
 
 instance JSON.FromJSON LoadFileParams where
   parseJSON =
@@ -33,7 +35,8 @@ loadModule :: LoadModuleParams -> Method ServerState ()
 loadModule (LoadModuleParams mn) =
   void $ runModuleCmd (loadModuleByName mn)
 
-newtype JSONModuleName = JSONModuleName { unJSONModName :: ModName }
+newtype JSONModuleName
+  = JSONModuleName { unJSONModName :: ModName }
 
 instance JSON.FromJSON JSONModuleName where
   parseJSON =
@@ -43,8 +46,8 @@ instance JSON.FromJSON JSONModuleName where
         Nothing -> empty
         Just n -> return (JSONModuleName n)
 
-data LoadModuleParams =
-  LoadModuleParams { loadModuleMod :: ModName }
+newtype LoadModuleParams
+  = LoadModuleParams ModName
 
 instance JSON.FromJSON LoadModuleParams where
   parseJSON =

@@ -1,11 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module SAWServer.TopLevel where
+module SAWServer.TopLevel (tl) where
 
 import Control.Exception
 import Control.Lens
 import Control.Monad.State
-import Control.Monad.Reader
 
 import SAWScript.Value
 

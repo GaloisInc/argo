@@ -8,10 +8,9 @@ module Argo.HistoryWrapper
 import Argo
 import Argo.CacheTree
 
-import Control.Monad
 import Control.Monad.IO.Class
-import Control.Lens
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Aeson (Result(..), Value(..), fromJSON, toJSON, object)
 import qualified Data.HashMap.Strict as HashMap
 
@@ -63,7 +62,8 @@ wrapMethod ::
   (Value -> Method s Value)      {- ^ method implementation     -} ->
   (Value -> Method (HistoryWrapper s) Value)
 
-wrapMethod commands validate name Query q =
+-- TODO: should we be using the name of the method somewhere?
+wrapMethod commands validate _name Query q =
   withState $ \logger hs steps params ->
   do cache            <- cacheLookup
                            (runHistoryCommand commands)
@@ -114,13 +114,7 @@ withState k params =
 extractStepsM ::
   Value                             {- ^ raw parameters object       -} ->
   Method s ([(Text, Value)], Value) {- ^ steps, remaining parameters -}
-extractStepsM v =
-  case extractSteps v of
-    Just x  -> return x
-    Nothing -> raise (makeJSONRPCException
-                        32000
-                        "Missing state field"
-                        (Nothing :: Maybe ()))
+extractStepsM = either raise pure . extractSteps
 
 ------------------------------------------------------------------------
 
@@ -130,13 +124,34 @@ stateKey = "state"
 answerKey :: Text
 answerKey = "answer"
 
-extractSteps :: Value -> Maybe ([(Text, Value)], Value)
+invalidStateField :: String -> Value -> JSONRPCException
+invalidStateField message field =
+  makeJSONRPCException 20
+    ("Invalid state field: this indicates a protocol error, " <>
+     "caused by an incorrectly implemented client or server. "  <>
+     "Please report this as a bug.")
+    (Just (Object (HashMap.fromList [("state", field),
+                                     ("error", String (Text.pack message))])))
+
+missingStateField :: JSONRPCException
+missingStateField =
+  makeJSONRPCException 10
+    ("Missing state field: this indicates a protocol error, " <>
+     "caused by an incorrectly implemented client or server. " <>
+     "Please report this as a bug.")
+    (Nothing :: Maybe ())
+
+extractSteps :: Value -> Either JSONRPCException ([(Text, Value)], Value)
 extractSteps v
   | Object o      <- v
   , Just history  <- HashMap.lookup stateKey o
-  , Success steps <- fromJSON history
-  , let v' = Object (HashMap.delete stateKey o) = Just (steps, v')
-extractSteps _ = Nothing
+  = case fromJSON history of
+      Success steps ->
+        let v' = Object (HashMap.delete stateKey o)
+        in Right (steps, v')
+      Error message -> Left (invalidStateField message history)
+extractSteps _ =
+  Left missingStateField
 
 -- | Combine a command result and the current sequence of steps
 -- together into a single JSON value.

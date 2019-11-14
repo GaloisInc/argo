@@ -28,13 +28,13 @@ import qualified Data.ByteString.Builder as BS
 import Data.Word
 import System.IO
 
-import Debug.Trace
-
-data BadNetstring = BadLength | MissingColon (Maybe Word8) | MissingComma (Maybe Word8) deriving Show
+data BadNetstring
+  = BadLength
+  | MissingColon (Maybe Word8)
+  | MissingComma (Maybe Word8)
+  deriving Show
 
 instance Exception BadNetstring
-
--- TODO: Let's make a newtype wrapper for encoded netstrings
 
 newtype Netstring
   = Netstring ByteString

@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWServer.LLVMVerify where
+module SAWServer.LLVMVerify (llvmVerify) where
 
+import Prelude hiding (mod)
 import Control.Lens
 import Data.Aeson (FromJSON(..), ToJSON(..), object, withObject, (.=), (.:))
 import Data.Parameterized.Pair
@@ -9,8 +10,6 @@ import Data.Parameterized.Some
 
 import SAWScript.Builtins (satABC)
 import SAWScript.Crucible.LLVM.Builtins (crucible_llvm_verify)
-import SAWScript.Crucible.LLVM.MethodSpecIR (SomeLLVM)
-import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import SAWScript.Options (defaultOptions)
 import SAWScript.Value (rwCryptol)
 

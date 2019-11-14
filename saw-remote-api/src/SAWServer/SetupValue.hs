@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-module SAWServer.SetupValue where
+module SAWServer.SetupValue (getSetupVal, LLVMSetupVal) where
 
 import Control.Applicative
 import Data.Aeson (FromJSON(..), withObject, withText, (.:))

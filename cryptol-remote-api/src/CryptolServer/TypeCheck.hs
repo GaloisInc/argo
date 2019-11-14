@@ -1,44 +1,34 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.TypeCheck where
+module CryptolServer.TypeCheck (checkType, TypeCheckParams(..)) where
 
-import Control.Lens hiding ((.:), (.=))
+import Control.Lens hiding ((.=))
 import Data.Aeson as JSON
-import Control.Monad.IO.Class
 
 
-import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, getPrimMap, loadModuleByPath, loadModuleByName, meLoadedModules)
-import Cryptol.ModuleSystem.Env (initialModuleEnv, isLoadedParamMod, meSolverConfig)
-import Cryptol.TypeCheck.AST (PrimMap, sType)
-import Cryptol.TypeCheck.Solve (defaultReplExpr)
-import Cryptol.TypeCheck.Subst (apSubst, listParamSubst)
-import qualified Cryptol.TypeCheck.Solver.SMT as SMT
-import Cryptol.Utils.PP
+import Cryptol.ModuleSystem (checkExpr)
+import Cryptol.ModuleSystem.Env (meSolverConfig)
 
 import Argo
 
 import CryptolServer
+import CryptolServer.Exceptions
 import CryptolServer.Data.Expression
 import CryptolServer.Data.Type
-
-import Debug.Trace
 
 checkType :: TypeCheckParams -> Method ServerState JSON.Value
 checkType (TypeCheckParams e) =
   do e' <- getExpr e
-     (expr, ty, schema) <- runModuleCmd (checkExpr e')
-     cfg <- meSolverConfig . view moduleEnv <$> getState
+     (_expr, _ty, schema) <- runModuleCmd (checkExpr e')
+     -- FIXME: why are we running this command if the result isn't used?
+     _cfg <- meSolverConfig . view moduleEnv <$> getState
      return (JSON.object [ "type schema" .= JSONSchema schema ])
-
-
   where
-    noDefaults [] = return ()
-    noDefaults xs@(_:_) = raise (unwantedDefaults xs)
+    -- FIXME: Why is this check not being used?
+    _noDefaults [] = return ()
+    _noDefaults xs@(_:_) = raise (unwantedDefaults xs)
 
-
-
-data TypeCheckParams =
-  TypeCheckParams
-    { typeCheckExpr :: Expression }
+newtype TypeCheckParams =
+  TypeCheckParams Expression
 
 instance JSON.FromJSON TypeCheckParams where
   parseJSON =

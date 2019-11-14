@@ -40,9 +40,10 @@ State field (``1``–``99``)
 SAW Server Errors (``10000``–``19999``)
 ---------------------------------------
 
-The SAW server uses the same errors as the Cryptol server for Cryptol errors
-(that is, when a Cryptol error occurs it should be directly returned as such,
-which will have a code outside this range).
+..
+  The SAW server uses the same errors as the Cryptol server for Cryptol errors
+  (that is, when a Cryptol error occurs it should be directly returned as such,
+  which will have a code outside this range).
 
 An error in this range should be considered a bug in a client: a client
 correctly interacting with the Argo API should never see these errors, and they
@@ -82,6 +83,13 @@ Verification errors (``10300``–``19999``)
 - ``10300``: Verification exception ``{ error: String }``. This error will be
    likely split into several specific separate errors in the future and possibly
    deprecated.
+
+Cryptol errors (``11000``, to be deprecated)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``11000``: Cryptol exception ``{ error: String }``. This error will be
+  deprecated in a future release and Cryptol errors will instead be reported
+  identically to the manner described below for the Cryptol-only server.
 
 .. _cryptol-server-errors:
 

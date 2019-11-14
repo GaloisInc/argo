@@ -116,5 +116,11 @@ verificationException e =
     10300 "Verification exception"
     (Just (JSON.object ["error" .= displayException e]))
 
+cryptolError :: String -> JSONRPCException
+cryptolError message =
+  makeJSONRPCException
+    11000 "Cryptol exception"
+    (Just (JSON.object ["error" .= message]))
+
 noData :: Maybe ()
 noData = Nothing

@@ -30,10 +30,12 @@ cryptolLoadModule (CryptolLoadModuleParams modName) =
      cenv <- rwCryptol . view sawTopLevelRW <$> getState
      let qual = Nothing -- TODO add field to params
      let importSpec = Nothing -- TODO add field to params
-     cenv' <- liftIO $ CEnv.importModule sc cenv (Right modName) qual importSpec
-     debugLog "loaded"
-     modifyState $ over sawTopLevelRW $ \rw -> rw { rwCryptol = cenv' }
-     ok
+     cenv' <- liftIO $ try $ CEnv.importModule sc cenv (Right modName) qual importSpec
+     case cenv' of
+       Left (ex :: SomeException) -> raise $ cryptolError (show ex)
+       Right cenv'' ->
+         do modifyState $ over sawTopLevelRW $ \rw -> rw { rwCryptol = cenv'' }
+            ok
 
 data CryptolLoadModuleParams =
   CryptolLoadModuleParams P.ModName
@@ -51,7 +53,7 @@ cryptolLoadFile (CryptolLoadFileParams fileName) =
      let importSpec = Nothing -- TODO add field to params
      cenv' <- liftIO $ try $ CEnv.importModule sc cenv (Left fileName) qual importSpec
      case cenv' of
-       Left (ex :: SomeException) -> raise $ cryptolError (T.pack (show ex))
+       Left (ex :: SomeException) -> raise $ cryptolError (show ex)
        Right cenv'' ->
          do modifyState $ over sawTopLevelRW $ \rw -> rw { rwCryptol = cenv'' }
             ok

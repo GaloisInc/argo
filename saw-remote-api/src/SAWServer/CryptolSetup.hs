@@ -14,28 +14,28 @@ import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (textToModName)
-import SAWScript.Value (biSharedContext, TopLevelRW(..))
+import SAWScript.Value (biSharedContext, rwCryptol)
 import qualified Verifier.SAW.CryptolEnv as CEnv
-import Cryptol.ModuleSystem (loadModuleByPath, loadModuleByName, ModuleEnv, ModuleCmd)
-import qualified Cryptol.ModuleSystem.Base as MB
+import Verifier.SAW.CryptolEnv (CryptolEnv)
 
 import Argo
 import SAWServer
 import SAWServer.Exceptions
 import SAWServer.NoParams
 import SAWServer.OK
-import CryptolServer (runCEnvCmd)
-import CryptolServer.LoadModule as CryptolServer
-
-cryptolLoadFile :: CryptolLoadFileParams -> Method SAWState OK
-cryptolLoadFile (CryptolLoadFileParams file) =
-  runCryptolCmd (loadModuleByPath file) >> ok
 
 cryptolLoadModule :: CryptolLoadModuleParams -> Method SAWState OK
-cryptolLoadModule (CryptolLoadModuleParams mod) =
-  runCryptolCmd (loadModuleByName mod) >> ok
+cryptolLoadModule (CryptolLoadModuleParams modName) =
+  do sc <- biSharedContext . view sawBIC <$> getState
+     cenv <- rwCryptol . view sawTopLevelRW <$> getState
+     let qual = Nothing -- TODO add field to params
+     let importSpec = Nothing -- TODO add field to params
+     cenv' <- liftIO $ CEnv.importModule sc cenv (Right modName) qual importSpec
+     debugLog "loaded"
+     modifyState $ over sawTopLevelRW $ \rw -> rw { rwCryptol = cenv' }
+     ok
 
-newtype CryptolLoadModuleParams =
+data CryptolLoadModuleParams =
   CryptolLoadModuleParams P.ModName
 
 instance FromJSON CryptolLoadModuleParams where
@@ -43,7 +43,20 @@ instance FromJSON CryptolLoadModuleParams where
     withObject "params for \"SAW/Cryptol setup/load module\"" $ \o ->
     CryptolLoadModuleParams . textToModName <$> o .: "module name"
 
-newtype CryptolLoadFileParams =
+cryptolLoadFile :: CryptolLoadFileParams -> Method SAWState OK
+cryptolLoadFile (CryptolLoadFileParams fileName) =
+  do sc <- biSharedContext . view sawBIC <$> getState
+     cenv <- rwCryptol . view sawTopLevelRW <$> getState
+     let qual = Nothing -- TODO add field to params
+     let importSpec = Nothing -- TODO add field to params
+     cenv' <- liftIO $ try $ CEnv.importModule sc cenv (Left fileName) qual importSpec
+     case cenv' of
+       Left (ex :: SomeException) -> raise $ cryptolError (T.pack (show ex))
+       Right cenv'' ->
+         do modifyState $ over sawTopLevelRW $ \rw -> rw { rwCryptol = cenv'' }
+            ok
+
+data CryptolLoadFileParams =
   CryptolLoadFileParams FilePath
 
 instance FromJSON CryptolLoadFileParams where

@@ -23,7 +23,6 @@ import Control.Exception
 import Data.Aeson as JSON
 import Data.Text (Text)
 import qualified Data.Text as T
-import CryptolServer.Exceptions (cryptolError)
 
 import Argo
 

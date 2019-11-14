@@ -19,19 +19,16 @@ import Argo
 import CryptolServer.Exceptions
 
 runModuleCmd :: ModuleCmd a -> Method ServerState a
-runModuleCmd cmd = zoomMethod moduleEnv (runCEnvCmd cmd)
-
-runCEnvCmd :: ModuleCmd a -> Method ModuleEnv a
-runCEnvCmd cmd =
-    do oldEnv <- getState
-       out <- liftIO $ cmd (theEvalOpts, oldEnv)
+runModuleCmd cmd =
+    do s   <- getState
+       out <- liftIO $ cmd (theEvalOpts, view moduleEnv s)
        case out of
          (Left x, warns) ->
            raise (cryptolError x warns)
          (Right (x, newEnv), _warns) ->
            -- TODO: What to do about warnings when a command completes
            -- successfully?
-           do setState newEnv
+           do setState (set moduleEnv newEnv s)
               return x
 
 data LoadedModule = LoadedModule

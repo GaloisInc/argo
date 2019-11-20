@@ -77,4 +77,5 @@ sawMethods =
   , ("SAW/Cryptol/save term",    Command, method saveTerm)
   , ("SAW/LLVM/load module",     Command, method llvmLoadModule)
   , ("SAW/LLVM/verify",          Command, method llvmVerify)
+  , ("SAW/LLVM/assume",          Command, method llvmAssume)
   ]

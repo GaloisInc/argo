@@ -38,6 +38,23 @@ class LLVMLoadModule(argo.interaction.Command):
     def process_result(self, _res : Any) -> Any:
         return None
 
+class LLVMAssume(argo.interaction.Command):
+    def __init__(
+            self,
+            connection : HasProtocolState,
+            module : str,
+            function : str,
+            setup : Any,
+            lemma_name : str) -> None:
+        params = {'module': module,
+                  'function': function,
+                  'contract': setup,
+                  'lemma name': lemma_name}
+        super(LLVMAssume, self).__init__('SAW/LLVM/assume', params, connection)
+
+    def process_result(self, _res : Any) -> Any:
+        return None
+
 class LLVMVerify(argo.interaction.Command):
     def __init__(
             self,

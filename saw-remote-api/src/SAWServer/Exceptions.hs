@@ -17,12 +17,10 @@ module SAWServer.Exceptions (
   , cantLoadLLVMModule
   -- * Verification
   , verificationException
-  -- * To be eventually eliminated
-  , genericError
   ) where
 
 import Control.Exception
-import Data.Aeson
+import Data.Aeson as JSON
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -33,16 +31,15 @@ serverValNotFound ::
   name {- ^ the name that was not found -}->
   JSONRPCException
 serverValNotFound name =
-  makeJSONRPCException 1001 ("No server value with name " <> T.pack (show name))
+  makeJSONRPCException 10000 ("No server value with name " <> T.pack (show name))
     (Just $ object ["name" .= name])
 
--- TODO: make error say what kind of thing it was
 notACryptolEnv ::
   (ToJSON name, Show name) =>
   name {- ^ the name that should have been mapped to a Cryptol environment -}->
   JSONRPCException
 notACryptolEnv name =
-  makeJSONRPCException 1002
+  makeJSONRPCException 10010
     ("The server value with name " <>
      T.pack (show name) <>
      " is not a Cryptol environment")
@@ -53,7 +50,7 @@ notAnLLVMModule ::
   name {- ^ the name that should have been mapped to an LLVM module -}->
   JSONRPCException
 notAnLLVMModule name =
-  makeJSONRPCException 1003
+  makeJSONRPCException 10020
     ("The server value with name " <>
      T.pack (show name) <>
      " is not an LLVM module")
@@ -64,7 +61,7 @@ notAnLLVMSetup ::
   name {- ^ the name that should have been mapped to an LLVM setup script -}->
   JSONRPCException
 notAnLLVMSetup name =
-  makeJSONRPCException 1004
+  makeJSONRPCException 10030
     ("The server value with name " <>
      T.pack (show name) <>
      " is not an LLVM setup script")
@@ -75,7 +72,7 @@ notAnLLVMSetupVal ::
   name {- ^ the name that should have been mapped to an LLVM setup value -}->
   JSONRPCException
 notAnLLVMSetupVal name =
-  makeJSONRPCException 1005
+  makeJSONRPCException 10040
     ("The server value with name " <>
      T.pack (show name) <>
      " is not an LLVM setup value")
@@ -86,36 +83,44 @@ notAnLLVMMethodSpecIR ::
   name {- ^ the name that should have been mapped to a method specification IR -}->
   JSONRPCException
 notAnLLVMMethodSpecIR name =
-  makeJSONRPCException 1006
+  makeJSONRPCException 10050
     ("The server value with name " <>
      T.pack (show name) <>
      " is not an LLVM method specification")
     (Just $ object ["name" .= name])
 
-
-cryptolError :: Text -> JSONRPCException
-cryptolError why = makeJSONRPCException 5001 why noData
-
 notSettingUpCryptol :: JSONRPCException
-notSettingUpCryptol = makeJSONRPCException 1003 "Not currently setting up Cryptol" noData
+notSettingUpCryptol =
+  makeJSONRPCException 10100 "Not currently setting up Cryptol" noData
 
 notSettingUpLLVMCrucible :: JSONRPCException
-notSettingUpLLVMCrucible = makeJSONRPCException 1004 "Not currently setting up Crucible/LLVM" noData
+notSettingUpLLVMCrucible =
+  makeJSONRPCException
+    10110 "Not currently setting up Crucible/LLVM" noData
 
-notAtTopLevel :: ToJSON a => a -> JSONRPCException
-notAtTopLevel tasks = makeJSONRPCException 1005 "Not at top level" (Just tasks)
+notAtTopLevel :: ToJSON a => [a] -> JSONRPCException
+notAtTopLevel tasks =
+  makeJSONRPCException
+    10120 "Not at top level"
+    (Just (JSON.object ["tasks" .= tasks]))
 
 cantLoadLLVMModule :: String -> JSONRPCException
-cantLoadLLVMModule err = makeJSONRPCException 5000 "Can't load LLVM module" (Just err)
+cantLoadLLVMModule err =
+  makeJSONRPCException
+    10200 "Can't load LLVM module"
+    (Just (JSON.object ["error" .= err]))
 
 verificationException :: Exception e => e -> JSONRPCException
-verificationException e = makeJSONRPCException 6000 "Verification exception" (Just (displayException e))
+verificationException e =
+  makeJSONRPCException
+    10300 "Verification exception"
+    (Just (JSON.object ["error" .= displayException e]))
+
+cryptolError :: String -> JSONRPCException
+cryptolError message =
+  makeJSONRPCException
+    11000 "Cryptol exception"
+    (Just (JSON.object ["error" .= message]))
 
 noData :: Maybe ()
 noData = Nothing
-
-
--- TODO: Get rid of these and make them specific
-genericError :: Text -> JSONRPCException
-genericError msg =
-  makeJSONRPCException 100000 msg (Nothing :: Maybe ())

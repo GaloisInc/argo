@@ -1,11 +1,10 @@
 {-# LANGUAGE PartialTypeSignatures #-}
-module SAWServer.CryptolExpression where
+module SAWServer.CryptolExpression (getTypedTerm, getTypedTermOfCExp) where
 
-import Control.Lens
+import Control.Lens hiding (re)
 import Control.Monad.IO.Class
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
-import qualified Data.Text as T
 
 import Cryptol.Eval (EvalOpts(..), defaultPPOpts)
 import Cryptol.ModuleSystem (ModuleRes)
@@ -29,7 +28,7 @@ import Verifier.SAW.TypedTerm(TypedTerm(..))
 import Argo
 import CryptolServer.Data.Expression
 import SAWServer
-import SAWServer.Exceptions
+import CryptolServer.Exceptions (cryptolError)
 
 getTypedTerm :: Expression -> Method SAWState TypedTerm
 getTypedTerm inputExpr =
@@ -71,11 +70,11 @@ liftModuleM :: ModuleEnv -> ModuleM a -> Method SAWState (a, ModuleEnv)
 liftModuleM env m = liftIO (runModuleM (defaultEvalOpts, env) m) >>= moduleCmdResult
 
 moduleCmdResult :: ModuleRes a -> Method SAWState (a, ModuleEnv)
-moduleCmdResult (res, ws) =
-  do mapM_ (liftIO . print . pp) ws
-     case res of
+moduleCmdResult (result, warnings) =
+  do mapM_ (liftIO . print . pp) warnings
+     case result of
        Right (a, me) -> return (a, me)
-       Left err      -> raise $ genericError $ T.pack $ "Cryptol error:\n" ++ show (pp err) -- X.throwIO (ModuleSystemError err)
+       Left err      -> raise $ cryptolError err warnings
 
 defaultEvalOpts :: EvalOpts
 defaultEvalOpts = EvalOpts quietLogger defaultPPOpts

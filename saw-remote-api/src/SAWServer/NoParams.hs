@@ -1,4 +1,4 @@
-module SAWServer.NoParams where
+module SAWServer.NoParams (NoParams(..)) where
 
 import Data.Aeson
 

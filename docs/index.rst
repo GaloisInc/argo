@@ -12,6 +12,7 @@ Argo, a JSON-RPC Interface to Cryptol and SAW
 
    Python Bindings <Python>
    Protocol
+   Errors
 
 
 Indices and tables

@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module SAWServer.OK where
+module SAWServer.OK (OK(..), ok) where
 
 import Data.Aeson
 

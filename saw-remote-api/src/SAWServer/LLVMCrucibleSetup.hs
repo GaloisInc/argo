@@ -6,28 +6,29 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE PartialTypeSignatures #-}
-module SAWServer.LLVMCrucibleSetup where
+module SAWServer.LLVMCrucibleSetup
+  ( startLLVMCrucibleSetup
+  , llvmLoadModule
+  , Contract(..)
+  , compileContract
+  ) where
 
-import Control.Applicative
-import Control.Lens hiding ((.:))
+import Control.Lens
 import Control.Monad.IO.Class
 import Control.Monad.State
-import Control.Monad.ST
-import Data.Aeson (FromJSON(..), withObject, withText, (.:))
+import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Parameterized.Pair
 import Data.Parameterized.Some
 import Data.Text (Text)
 import qualified Data.Text as T
 
-
 import qualified Cryptol.Parser.AST as P
-import Cryptol.Utils.Ident (textToModName, mkIdent)
+import Cryptol.Utils.Ident (mkIdent)
 import qualified Data.LLVM.BitCode as LLVM
-import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..), PointsTo)
+import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
 import SAWScript.Crucible.LLVM.Builtins
     ( crucible_alloc
     , crucible_execute_func
@@ -39,22 +40,18 @@ import SAWScript.Crucible.LLVM.Builtins
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible (translateModule)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (AllLLVM, LLVMModule(..), anySetupTerm, anySetupNull)
 import SAWScript.Options (defaultOptions)
-import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), putTopLevelRW, getTopLevelRW, rwCryptol, biSharedContext)
-import Text.LLVM.AST (Type)
+import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)
 
 import Argo
-import CryptolServer.Data.Expression
 import SAWServer
 import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
 import SAWServer.CryptolExpression (getTypedTermOfCExp)
 import SAWServer.Exceptions
-import SAWServer.NoParams
 import SAWServer.OK
-import SAWServer.SetupValue
-
+import SAWServer.SetupValue ()
 
 data Contract cryptolExpr =
   Contract
@@ -90,8 +87,8 @@ startLLVMCrucibleSetup (StartLLVMCrucibleSetupParams n) =
   do pushTask (LLVMCrucibleSetup n [])
      ok
 
-data StartLLVMCrucibleSetupParams =
-  StartLLVMCrucibleSetupParams { llvmSetupName :: ServerName }
+data StartLLVMCrucibleSetupParams
+  = StartLLVMCrucibleSetupParams ServerName
 
 instance FromJSON StartLLVMCrucibleSetupParams where
   parseJSON =
@@ -179,11 +176,8 @@ interpretSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty, cen
          Just v -> return v
          Nothing -> error "Server value not found - impossible!" -- rule out elsewhere
 
-data LLVMLoadModuleParams =
-  LLVMLoadModuleParams
-    { llvmModuleName :: ServerName
-    , llvmModuleFilename :: FilePath
-    }
+data LLVMLoadModuleParams
+  = LLVMLoadModuleParams ServerName FilePath
 
 instance FromJSON LLVMLoadModuleParams where
   parseJSON =
@@ -201,6 +195,6 @@ llvmLoadModule (LLVMLoadModuleParams serverName fileName) =
            Left err -> raise (cantLoadLLVMModule (LLVM.formatError err))
            Right llvmMod ->
              do halloc <- getHandleAlloc
-                Some mtrans <- liftIO $ stToIO $ Crucible.translateModule halloc llvmMod
+                Some mtrans <- liftIO $ Crucible.translateModule halloc llvmMod
                 setServerVal serverName (Some (CMS.LLVMModule fileName llvmMod mtrans))
                 ok

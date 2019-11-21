@@ -1,21 +1,21 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
-module CryptolServer.Data.Expression where
+module CryptolServer.Data.Expression
+  ( module CryptolServer.Data.Expression
+  ) where
 
 import Control.Applicative
 import Control.Exception (throwIO)
 import Control.Monad.IO.Class
 import Data.Aeson as JSON hiding (Encoding, Value, decode)
-import qualified Data.Aeson as JSON
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as Base64
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Scientific as Sc
-import qualified Data.List.NonEmpty as NE
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
@@ -26,22 +26,14 @@ import Numeric (showHex)
 import Cryptol.Eval (evalSel)
 import Cryptol.Eval.Monad
 import Cryptol.Eval.Value
-import Cryptol.IR.FreeVars (freeVars, FreeVars, tyDeps, valDeps)
-import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv, checkExpr, evalExpr, getPrimMap, loadModuleByPath, loadModuleByName, meLoadedModules)
-import Cryptol.ModuleSystem.Env (initialModuleEnv, isLoadedParamMod, meSolverConfig)
-import Cryptol.ModuleSystem.Name (NameInfo(Declared), Name, nameInfo)
 import Cryptol.Parser
-import Cryptol.Parser.AST (Bind(..), BindDef(..), Decl(..), Expr(..), Type(..), PName(..), Ident(..), Literal(..), Named(..), NumInfo(..))
+import Cryptol.Parser.AST (Bind(..), BindDef(..), Decl(..), Expr(..), Type(..), PName(..), Literal(..), Named(..), NumInfo(..))
 import Cryptol.Parser.Position (Located(..), emptyRange)
 import Cryptol.Parser.Selector
-import Cryptol.Prims.Syntax
-import Cryptol.TypeCheck.AST (PrimMap, sType)
-import Cryptol.TypeCheck.Solve (defaultReplExpr)
-import Cryptol.TypeCheck.Subst (apSubst, listParamSubst)
+-- import Cryptol.Prims.Syntax
+import Cryptol.TypeCheck.AST (PrimMap)
 import qualified Cryptol.TypeCheck.Type as TC
 import Cryptol.Utils.Ident
-import Cryptol.Utils.PP (pretty)
-import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 
 
 import Argo
@@ -126,7 +118,7 @@ instance JSON.FromJSON Expression where
         -- gigantic integer that fills up all memory.
         withScientific "integer" $ \s ->
           case Sc.floatingOrInteger s of
-            Left fl -> empty
+            Left _fl -> empty
             Right i -> pure (Integer i)
       concrete =
         withText "concrete syntax" $ pure . Concrete
@@ -173,8 +165,8 @@ instance JSON.ToJSON Expression where
            ]
   toJSON (Record fields) =
     object [ "expression" .= TagRecord
-           , "data" .= object [ name .= toJSON val
-                              | (name, val) <- HM.toList fields
+           , "data" .= object [ fieldName .= toJSON val
+                              | (fieldName, val) <- HM.toList fields
                               ]
            ]
   toJSON (Sequence elts) =
@@ -259,8 +251,8 @@ getExpr (Num enc txt w) =
        (TSeq (TNum w) TBit)
 getExpr (Record fields) =
   fmap ERecord $ for (HM.toList fields) $
-  \(name, spec) ->
-    Named (Located emptyRange (mkIdent name)) <$> getExpr spec
+  \(recName, spec) ->
+    Named (Located emptyRange (mkIdent recName)) <$> getExpr spec
 getExpr (Sequence elts) =
   EList <$> traverse getExpr elts
 getExpr (Tuple projs) =
@@ -275,7 +267,8 @@ getExpr (Let binds body) =
   where
     mkBind (LetBinding x rhs) =
       DBind .
-      (\body -> (Bind (fakeLoc (UnQual (mkIdent x))) [] body Nothing False Nothing [] True Nothing)) .
+      (\bindBody ->
+         Bind (fakeLoc (UnQual (mkIdent x))) [] bindBody Nothing False Nothing [] True Nothing) .
       fakeLoc .
       DExpr <$>
         getExpr rhs
@@ -286,37 +279,9 @@ getExpr (Application fun (arg :| [])) =
 getExpr (Application fun (arg1 :| (arg : args))) =
   getExpr (Application (Application fun (arg1 :| [])) (arg :| args))
 
-invalidBase64 :: ByteString -> String -> JSONRPCException
-invalidBase64 invalidData msg =
-  makeJSONRPCException
-    32 (T.pack msg) (Just (JSON.toJSON (T.pack (show invalidData))))
-
-invalidHex :: Char -> JSONRPCException
-invalidHex invalidData =
-  makeJSONRPCException
-    33 "Not a hex digit"
-    (Just (JSON.toJSON (T.pack (show invalidData))))
-
-invalidType :: TC.Type -> JSONRPCException
-invalidType ty =
-  makeJSONRPCException
-    34 "Can't convert Cryptol data from this type to JSON"
-    (Just (JSON.toJSON (T.pack (show ty))))
-
-unwantedDefaults :: [(TC.TParam, TC.Type)] -> JSONRPCException
-unwantedDefaults defs =
-  makeJSONRPCException
-    35 "Execution would have required these defaults"
-    (Just (JSON.toJSON (T.pack (show defs))))
-
-evalInParamMod :: [Cryptol.ModuleSystem.Name.Name] -> JSONRPCException -- FIXME: this is deliberately wrong to find correct type later
-evalInParamMod mods =
-  makeJSONRPCException
-    36 "Can't evaluate Cryptol in a parameterized module."
-    (Just (toJSON (map pretty mods)))
-
 -- TODO add tests that this is big-endian
 -- | Interpret a ByteString as an Integer
+bytesToInt :: BS.ByteString -> Integer
 bytesToInt bs =
   BS.foldl' (\acc w -> (acc * 256) + toInteger w) 0 bs
 
@@ -330,31 +295,40 @@ readBack prims ty val =
                       return (identText f, fa)
                  | (f, t) <- tfs
                  ]
-    TC.TCon (TC (TCTuple _)) [] ->
+    TC.TCon (TC.TC (TC.TCTuple _)) [] ->
       pure Unit
-    TC.TCon (TC (TCTuple _)) ts ->
+    TC.TCon (TC.TC (TC.TCTuple _)) ts ->
       Tuple <$> sequence [ do v <- evalSel val (TupleSel n Nothing)
                               a <- readBack prims t v
                               return a
                          | (n, t) <- zip [0..] ts
                          ]
-    TC.TCon (TC TCBit) [] ->
+    TC.TCon (TC.TC TC.TCBit) [] ->
       case val of
         VBit b -> pure (Bit b)
-    TC.TCon (TC TCInteger) [] ->
+        _ -> mismatchPanic
+    TC.TCon (TC.TC TC.TCInteger) [] ->
       case val of
         VInteger i -> pure (Integer i)
-    TC.TCon (TC TCSeq) [TC.tNoUser -> len, TC.tNoUser -> contents]
+        _ -> mismatchPanic
+    TC.TCon (TC.TC TC.TCSeq) [TC.tNoUser -> len, TC.tNoUser -> contents]
       | len == TC.tZero ->
         return Unit
-      | contents == TC.TCon (TC TCBit) []
+      | contents == TC.TCon (TC.TC TC.TCBit) []
       , VWord _ wv <- val ->
         do BV w v <- wv >>= asWordVal
            return $ Num Hex (T.pack $ showHex v "") w
-      | TC.TCon (TC (TCNum k)) [] <- len
-      , VSeq l (enumerateSeqMap k -> vs) <- val ->
+      | TC.TCon (TC.TC (TC.TCNum k)) [] <- len
+      , VSeq _l (enumerateSeqMap k -> vs) <- val ->
         Sequence <$> mapM (>>= readBack prims contents) vs
     other -> liftIO $ throwIO (invalidType other)
+  where
+    mismatchPanic =
+      error $ "Internal error: readBack: value '" <>
+              show val <>
+              "' didn't match type '" <>
+              show ty <>
+              "'"
 
 
 observe :: Eval a -> Method ServerState a

@@ -4,8 +4,11 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
-module SAWServer where
+module SAWServer
+  ( module SAWServer
+  ) where
 
+import Prelude hiding (mod)
 import Control.Lens
 import Control.Monad.ST
 import Data.Aeson (FromJSON(..), ToJSON(..), fromJSON, withText, (.:), withObject)
@@ -26,7 +29,7 @@ import Text.LLVM.AST (Type)
 import qualified Verifier.Java.Codebase as JSS
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.Module (emptyModule)
-import Verifier.SAW.SharedTerm (Term, SharedContext, mkSharedContext, scLoadModule)
+import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
 import Verifier.SAW.Term.Functor (mkModuleName)
 import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
@@ -109,10 +112,10 @@ pushTask t = modifyState mod
 dropTask :: Method SAWState ()
 dropTask = modifyState mod
   where mod (SAWState _ _ [] _ _) = error "Internal error - stack underflow"
-        mod (SAWState _ sc ((t, env):stack) ro rw) =
+        mod (SAWState _ sc ((_t, env):stack) ro rw) =
           SAWState env sc stack ro rw
 
-getHandleAlloc :: Method SAWState (Crucible.HandleAllocator RealWorld)
+getHandleAlloc :: Method SAWState Crucible.HandleAllocator
 getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> getState
 
 initialState :: IO SAWState
@@ -133,7 +136,7 @@ initialState =
                               , biBasicSS = ss
                               }
      cenv <- initCryptolEnv sc
-     halloc <- stToIO $ Crucible.newHandleAllocator
+     halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
      let ro = TopLevelRO
                 { roSharedContext = sc
@@ -153,6 +156,7 @@ initialState =
                 , rwJVMTrans = jvmTrans
                 , rwPrimsAvail = mempty
                 , rwSMTArrayMemoryModel = False
+                , rwProfilingFile = Nothing
                 }
      return (SAWState emptyEnv bic [] ro rw)
 
@@ -257,21 +261,21 @@ getLLVMModule n =
   do v <- getServerVal n
      case v of
        VLLVMModule m -> return m
-       other -> raise (notAnLLVMModule n)
+       _other -> raise (notAnLLVMModule n)
 
 getLLVMSetup :: ServerName -> Method SAWState (Pair LLVMCrucibleSetupTypeRepr LLVMCrucibleSetupM)
 getLLVMSetup n =
   do v <- getServerVal n
      case v of
        VLLVMCrucibleSetup setup -> return setup
-       other -> raise (notAnLLVMSetup n)
+       _other -> raise (notAnLLVMSetup n)
 
 getLLVMMethodSpecIR :: ServerName -> Method SAWState (CMS.SomeLLVM CMS.CrucibleMethodSpecIR)
 getLLVMMethodSpecIR n =
   do v <- getServerVal n
      case v of
        VLLVMMethodSpecIR ir -> return ir
-       other -> raise (notAnLLVMMethodSpecIR n)
+       _other -> raise (notAnLLVMMethodSpecIR n)
 
 data LLVMSetupVal cryptolExpr
   = NullPointer

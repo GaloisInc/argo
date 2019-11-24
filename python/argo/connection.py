@@ -167,4 +167,4 @@ class ServerConnection:
                 self._process_replies()
             finally:
                 self.sock.setblocking(False)
-        return self.replies[request_id]
+        return self.replies.pop(request_id) # deletes reply whilst returning it

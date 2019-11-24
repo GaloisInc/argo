@@ -50,8 +50,8 @@ crypt_res = {"setup value": "Cryptol", "expression" : "Salsa20_encrypt (k, v, m)
 
 rotl_contract = {
     "pre vars": [
-        ["value", "value", uint32_t.to_json()],
-        ["shift", "shift", uint32_t.to_json()]
+        {"server name": "value", "name": "value", "type": uint32_t.to_json()},
+        {"server name": "shift", "name": "shift", "type": uint32_t.to_json()}
     ],
     "pre conds": ["0 < shift /\\ shift < 32"],
     "pre allocated": [],
@@ -66,42 +66,48 @@ rotl_contract = {
 
 qr_contract = {
     "pre vars": [
-        ["y0", "y0", uint32_t.to_json()],
-        ["y1", "y1", uint32_t.to_json()],
-        ["y2", "y2", uint32_t.to_json()],
-        ["y3", "y3", uint32_t.to_json()]
+        {"server name": "y0", "name": "y0", "type": uint32_t.to_json()},
+        {"server name": "y1", "name": "y1", "type": uint32_t.to_json()},
+        {"server name": "y2", "name": "y2", "type": uint32_t.to_json()},
+        {"server name": "y3", "name": "y3", "type": uint32_t.to_json()}
     ],
     "pre conds": [],
     "pre allocated": [
-        ["y0p", uint32_t.to_json()],
-        ["y1p", uint32_t.to_json()],
-        ["y2p", uint32_t.to_json()],
-        ["y3p", uint32_t.to_json()]
+        {"server name": "y0p", "type": uint32_t.to_json()},
+        {"server name": "y1p", "type": uint32_t.to_json()},
+        {"server name": "y2p", "type": uint32_t.to_json()},
+        {"server name": "y3p", "type": uint32_t.to_json()}
     ],
-    "pre points tos": [ [y0p, y0], [y1p, y1], [y2p, y2], [y3p, y3] ],
+    "pre points tos": [ {"pointer": y0p, "points to": y0},
+                        {"pointer": y1p, "points to": y1},
+                        {"pointer": y2p, "points to": y2},
+                        {"pointer": y3p, "points to": y3} ],
     "argument vals": [y0p, y1p, y2p, y3p],
     "post vars": [],
     "post conds": [],
     "post allocated": [],
-    "post points tos": [ [y0p, y0f], [y1p, y1f], [y2p, y2f], [y3p, y3f] ],
+    "post points tos": [ {"pointer": y0p, "points to": y0f},
+                         {"pointer": y1p, "points to": y1f},
+                         {"pointer": y2p, "points to": y2f},
+                         {"pointer": y3p, "points to": y3f} ],
     "return val": None
 }
 
 def oneptr_update_contract(ty, res):
     return {
         "pre vars": [
-            ["y", "y", ty.to_json()]
+            {"server name": "y", "name": "y", "type": ty.to_json()}
         ],
         "pre conds": [],
         "pre allocated": [
-            ["yp", ty.to_json()]
+            {"server name": "yp", "type": ty.to_json()}
         ],
-        "pre points tos": [ [yp, y] ],
+        "pre points tos": [ {"pointer": yp, "points to": y} ],
         "argument vals": [yp],
         "post vars": [],
         "post conds": [],
         "post allocated": [],
-        "post points tos": [ [yp, res] ],
+        "post points tos": [ {"pointer": yp, "points to": res} ],
         "return val": None
     }
 
@@ -119,21 +125,22 @@ zero = {"setup value": "Cryptol", "expression" : "0 : [32]" }
 
 expand_contract = {
     "pre vars": [
-        ["k", "k", LLVMArrayType(uint8_t, 32).to_json()],
-        ["n", "n", LLVMArrayType(uint8_t, 16).to_json()]
+        {"server name": "k", "name": "k", "type": LLVMArrayType(uint8_t, 32).to_json()},
+        {"server name": "n", "name": "n", "type": LLVMArrayType(uint8_t, 16).to_json()}
     ],
     "pre conds": [],
     "pre allocated": [
-        ["kp", LLVMArrayType(uint8_t, 32).to_json()],
-        ["np", LLVMArrayType(uint8_t, 16).to_json()],
-        ["ksp", LLVMArrayType(uint8_t, 64).to_json()]
+        {"server name": "kp",  "type": LLVMArrayType(uint8_t, 32).to_json()},
+        {"server name": "np",  "type": LLVMArrayType(uint8_t, 16).to_json()},
+        {"server name": "ksp", "type": LLVMArrayType(uint8_t, 64).to_json()}
     ],
-    "pre points tos": [ [kp, k], [np, n] ],
+    "pre points tos": [ {"pointer": kp, "points to": k},
+                        {"pointer": np, "points to": n} ],
     "argument vals": [kp, np, ksp],
     "post vars": [],
     "post conds": [],
     "post allocated": [],
-    "post points tos": [ [ksp, expand_res] ],
+    "post points tos": [ {"pointer": ksp, "points to": expand_res} ],
     "return val": None
 }
 
@@ -144,22 +151,24 @@ m = {"setup value": "Cryptol", "expression" : "m" }
 def crypt_contract(size : int):
     return {
         "pre vars": [
-            ["k", "k", LLVMArrayType(uint8_t, 32).to_json()],
-            ["v", "v", LLVMArrayType(uint8_t, 8).to_json()],
-            ["m", "m", LLVMArrayType(uint8_t, size).to_json()]
+            {"server name": "k", "name": "k", "type": LLVMArrayType(uint8_t, 32).to_json()},
+            {"server name": "v", "name": "v", "type": LLVMArrayType(uint8_t, 8).to_json()},
+            {"server name": "m", "name": "m", "type": LLVMArrayType(uint8_t, size).to_json()}
         ],
         "pre conds": [],
         "pre allocated": [
-            ["kp", LLVMArrayType(uint8_t, 32).to_json()],
-            ["vp", LLVMArrayType(uint8_t, 8).to_json()],
-            ["mp", LLVMArrayType(uint8_t, size).to_json()]
+            {"server name": "kp", "type": LLVMArrayType(uint8_t, 32).to_json()},
+            {"server name": "vp", "type": LLVMArrayType(uint8_t, 8).to_json()},
+            {"server name": "mp", "type": LLVMArrayType(uint8_t, size).to_json()}
         ],
-        "pre points tos": [ [kp, k], [vp, v], [mp, m] ],
+        "pre points tos": [ {"pointer": kp, "points to": k},
+                            {"pointer": vp, "points to": v},
+                            {"pointer": mp, "points to": m} ],
         "argument vals": [kp, vp, zero, mp, {"setup value": "Cryptol", "expression": (str(size) + " : [32]")}],
         "post vars": [],
         "post conds": [],
         "post allocated": [],
-        "post points tos": [ [mp, crypt_res] ],
+        "post points tos": [ {"pointer": mp, "points to": crypt_res} ],
         "return val": zero
     }
 

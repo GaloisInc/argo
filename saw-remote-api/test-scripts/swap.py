@@ -24,20 +24,22 @@ y = {"setup value": "Cryptol", "expression": "x" }
 
 contract = {
     "pre vars": [
-        ["x", "x", uint32_t],
-        ["y", "y", uint32_t]
+        {"server name": "x", "name": "x", "type": uint32_t},
+        {"server name": "y", "name": "y", "type": uint32_t}
     ],
     "pre conds": [],
     "pre allocated": [
-        ["xp", uint32_t],
-        ["yp", uint32_t]
+        {"server name": "xp", "type": uint32_t},
+        {"server name": "yp", "type": uint32_t}
     ],
-    "pre points tos": [[xp, x], [yp, y]],
+    "pre points tos": [{"pointer": xp, "points to": x},
+                       {"pointer": yp, "points to": y}],
     "argument vals": [xp, yp],
     "post vars": [],
     "post conds": [],
     "post allocated": [],
-    "post points tos": [[xp, y], [yp, x]],
+    "post points tos": [{"pointer": xp, "points to": y},
+                        {"pointer": yp, "points to": x}],
     "return val": None
 }
 

@@ -10,6 +10,9 @@ module SAWServer.LLVMCrucibleSetup
   ( startLLVMCrucibleSetup
   , llvmLoadModule
   , Contract(..)
+  , ContractVar(..)
+  , Allocated(..)
+  , PointsTo(..)
   , compileContract
   ) where
 
@@ -55,18 +58,56 @@ import SAWServer.SetupValue ()
 
 data Contract cryptolExpr =
   Contract
-    { preVars :: [(ServerName, Text, JSONLLVMType)]
-    , preConds :: [cryptolExpr]
-    , preAllocated :: [(ServerName, JSONLLVMType)]
-    , prePointsTos :: [(LLVMSetupVal cryptolExpr, LLVMSetupVal cryptolExpr)]
-    , argumentVals :: [LLVMSetupVal cryptolExpr]
-    , postVars :: [(ServerName, Text, JSONLLVMType)]
-    , postConds :: [cryptolExpr]
-    , postAllocated :: [(ServerName, JSONLLVMType)]
-    , postPointsTos :: [(LLVMSetupVal cryptolExpr, LLVMSetupVal cryptolExpr)]
-    , returnVal :: Maybe (LLVMSetupVal cryptolExpr)
+    { preVars       :: [ContractVar]
+    , preConds      :: [cryptolExpr]
+    , preAllocated  :: [Allocated]
+    , prePointsTos  :: [PointsTo cryptolExpr]
+    , argumentVals  :: [LLVMSetupVal cryptolExpr]
+    , postVars      :: [ContractVar]
+    , postConds     :: [cryptolExpr]
+    , postAllocated :: [Allocated]
+    , postPointsTos :: [PointsTo cryptolExpr]
+    , returnVal     :: Maybe (LLVMSetupVal cryptolExpr)
     }
     deriving (Functor, Foldable, Traversable)
+
+data ContractVar =
+  ContractVar
+    { contractVarServerName :: ServerName
+    , contractVarName       :: Text
+    , contractVarType       :: JSONLLVMType
+    }
+
+data Allocated =
+  Allocated
+    { allocatedServerName :: ServerName
+    , allocatedType       :: JSONLLVMType
+    }
+
+data PointsTo cryptolExpr =
+  PointsTo
+    { pointer  :: LLVMSetupVal cryptolExpr
+    , pointsTo :: LLVMSetupVal cryptolExpr
+    } deriving (Functor, Foldable, Traversable)
+
+instance FromJSON cryptolExpr => FromJSON (PointsTo cryptolExpr) where
+  parseJSON =
+    withObject "Points-to relationship" $ \o ->
+      PointsTo <$> o .: "pointer"
+               <*> o .: "points to"
+
+instance FromJSON Allocated where
+  parseJSON =
+    withObject "LLVM allocated thing" $ \o ->
+      Allocated <$> o .: "server name"
+                <*> o .: "type"
+
+instance FromJSON ContractVar where
+  parseJSON =
+    withObject "LLVM contract variable" $ \o ->
+      ContractVar <$> o .: "server name"
+                  <*> o .: "name"
+                  <*> o .: "type"
 
 instance FromJSON e => FromJSON (Contract e) where
   parseJSON =
@@ -101,18 +142,18 @@ data ServerSetupVal = Val (CMS.AllLLVM SetupValue)
 compileContract :: BuiltinContext -> CryptolEnv -> Contract (P.Expr P.PName) ->  LLVMCrucibleSetupM ()
 compileContract bic cenv c = interpretSetup bic cenv (reverse steps)
   where
-    setupFresh (n, dn, ty) = SetupFresh n dn (llvmType ty)
-    setupAlloc (n, ty) = SetupAlloc n (llvmType ty)
+    setupFresh (ContractVar n dn ty) = SetupFresh n dn (llvmType ty)
+    setupAlloc (Allocated   n    ty) = SetupAlloc n    (llvmType ty)
     steps =
       map setupFresh (preVars c) ++
       map SetupPrecond (preConds c) ++
       map setupAlloc (preAllocated c) ++
-      map (uncurry SetupPointsTo) (prePointsTos c) ++
+      map (\(PointsTo p v) -> SetupPointsTo p v) (prePointsTos c) ++
       [ SetupExecuteFunction (argumentVals c) ] ++
       map setupFresh (postVars c) ++
       map SetupPostcond (postConds c) ++
       map setupAlloc (postAllocated c) ++
-      map (uncurry SetupPointsTo) (postPointsTos c) ++
+      map (\(PointsTo p v) -> SetupPointsTo p v) (postPointsTos c) ++
       [ SetupReturn v | v <- maybeToList (returnVal c) ]
 
 interpretSetup :: BuiltinContext -> CryptolEnv -> [SetupStep] -> LLVMCrucibleSetupM ()

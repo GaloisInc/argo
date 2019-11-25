@@ -18,3 +18,17 @@ library
   hs-source-dirs:    hs
   exposed-modules:   Argo.PythonBindings
   other-modules:     Paths_argo_python
+
+test-suite test-argo-python
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      hs-test
+  main-is:             Main.hs
+  other-modules:       Paths_argo_python
+  build-depends:       base,
+                       argo-python,
+                       filepath,
+                       directory,
+                       tasty,
+                       tasty-hunit,
+                       tasty-quickcheck,
+                       tasty-script-exitcode

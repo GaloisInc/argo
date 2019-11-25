@@ -1,7 +1,8 @@
 import argo.interaction
+import inspect
 from argo.interaction import HasProtocolState
 
-from typing import Any, List
+from typing import Any, List, Optional, Tuple
 
 class CryptolLoadFile(argo.interaction.Command):
     def __init__(self, connection : HasProtocolState, filename : str) -> None:
@@ -65,7 +66,8 @@ class LLVMVerify(argo.interaction.Command):
             check_sat : bool,
             setup : Any,
             tactic : str,
-            lemma_name : str) -> None:
+            lemma_name : str,
+            location : Optional[Tuple[str, int]] = None) -> None:
         params = {'module': module,
                   'function': function,
                   'lemmas': lemmas,
@@ -73,6 +75,13 @@ class LLVMVerify(argo.interaction.Command):
                   'contract': setup,
                   'tactic': tactic,
                   'lemma name': lemma_name}
+        if location is None:
+            calling_frame = inspect.currentframe().f_back
+            self.filename = calling_frame.f_code.co_filename
+            self.line     = calling_frame.f_lineno
+        else:
+            self.filename = location[0]
+            self.line     = location[1]
         super(LLVMVerify, self).__init__('SAW/LLVM/verify', params, connection)
 
     def process_result(self, _res : Any) -> Any:

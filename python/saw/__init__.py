@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import argo
 import argo.connection as ac
 import argo.interaction
@@ -55,7 +56,14 @@ class SAWConnection:
                     contract : Any,
                     tactic : str,
                     lemma_name : str) -> argo.interaction.Command:
-        self.most_recent_result = LLVMVerify(self, module, function, lemmas, check_sat, contract, tactic, lemma_name)
+        # find location of function call
+        calling_frame = inspect.currentframe().f_back
+        filename = calling_frame.f_code.co_filename
+        line     = calling_frame.f_lineno
+        location = (filename, line)
+
+        self.most_recent_result = \
+            LLVMVerify(self, module, function, lemmas, check_sat, contract, tactic, lemma_name, location)
         return self.most_recent_result
 
     def llvm_assume(self,

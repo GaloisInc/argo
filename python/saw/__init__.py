@@ -15,7 +15,7 @@ class SAWConnection:
 
     most_recent_result : Optional[argo.interaction.Interaction]
 
-    def __init__(self, command_or_connection : Union[str, ServerProcess]) -> None:
+    def __init__(self, command_or_connection : Union[str, ac.ServerConnection]) -> None:
         self.most_recent_result = None
         if isinstance(command_or_connection, str):
             self.proc = ac.ServerProcess(command_or_connection)

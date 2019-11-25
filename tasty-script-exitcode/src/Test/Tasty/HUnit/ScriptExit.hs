@@ -56,6 +56,15 @@ python3 =
     , testLangArgsFormat = \file -> [file]
     }
 
+mypy :: TestLang
+mypy =
+  TestLang
+    { testLangName       = "MyPy (Python 3)"
+    , testLangExtension  = ".py"
+    , testLangExecutable = "mypy"
+    , testLangArgsFormat = \file -> [file]
+    }
+
 -- | Python 3 in a virtual environment: this definition assumes that
 -- an executable named @python3@ is present in @$PATH@. The first
 -- argument is a description of the Python packages to make available
@@ -112,23 +121,28 @@ perLanguageTests :: [TestLang] -> [FilePath] -> [TestTree]
 perLanguageTests testLanguages =
   toTestTrees . foldr addScript Map.empty
   where
+    languageSupport :: Map String [(String, FilePath -> TestTree)]
     languageSupport =
-      Map.fromList $
+      Map.fromListWith (++) $
         map (\TestLang{testLangName,
                        testLangExtension,
                        testLangExecutable,
                        testLangArgsFormat} ->
                (testLangExtension,
-                (testLangName,
-                 scriptTest testLangExecutable testLangArgsFormat)))
+                [(testLangName,
+                  scriptTest testLangExecutable testLangArgsFormat)]))
             testLanguages
 
     addScript :: FilePath -> Map String [TestTree] -> Map String [TestTree]
-    addScript fileName =
+    addScript fileName tests =
       case Map.lookup (takeExtension fileName) languageSupport of
-        Nothing -> id
-        Just (language, makeTest) ->
-          Map.insertWith (++) language [makeTest fileName]
+        Nothing -> tests
+        Just relevantLangs ->
+          foldr
+            (\(language, makeTest) ->
+              Map.insertWith (++) language [makeTest fileName])
+            tests
+            relevantLangs
 
     toTestTrees :: Map String [TestTree] -> [TestTree]
     toTestTrees =

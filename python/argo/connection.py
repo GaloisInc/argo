@@ -77,13 +77,6 @@ class ServerProcess:
         if self.proc is not None:
             os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
 
-    def __enter__(self):
-        self.setup()
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.__del__()
-
 
 class ServerConnection:
     """A ``ServerConnection`` represents a logical connection to a

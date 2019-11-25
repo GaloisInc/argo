@@ -188,13 +188,6 @@ class CryptolConnection:
         else:
             self.server_connection = command_or_connection
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        if self.proc is not None:
-            self.proc.__exit__(type, value, traceback)
-
     def snapshot(self) -> CryptolConnection:
         """Create a lightweight snapshot of this connection. The snapshot
         shares the underlying server process, but can have different

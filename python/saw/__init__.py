@@ -23,13 +23,6 @@ class SAWConnection:
         else:
             self.server_connection = command_or_connection
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        if self.proc is not None:
-            self.proc.__exit__(type, value, traceback)
-
     def snapshot(self) -> SAWConnection:
         """Return a ``SAWConnection`` that has the same process and state as
         the current connection. The new connection's state will be

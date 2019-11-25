@@ -89,7 +89,9 @@ class FreshVar(SetupTerm):
     def to_json(self) -> Any:
         if self.name is None:
             self.name = self.spec.get_fresh_name()
-        return [self.name, self.name, self.type.to_json()]
+        return {"server name": self.name,
+                "name": self.name,
+                "type": self.type.to_json()}
 
     def to_ref_json(self) -> Any:
         if self.name is None:
@@ -107,7 +109,7 @@ class Allocated(SetupTerm):
     def to_json(self) -> Any:
         if self.name is None:
             self.name = self.spec.get_fresh_name()
-        return [self.name, self.type.to_json()]
+        return {"server name": self.name, "type": self.type.to_json()}
 
     def to_ref_json(self) -> Any:
         if self.name is None:
@@ -146,7 +148,8 @@ class PointsTo:
         self.target = target
 
     def to_json(self) -> Any:
-        return [self.pointer.to_ref_json(), self.target.to_ref_json()]
+        return {"pointer": self.pointer.to_ref_json(),
+                "points to": self.target.to_ref_json()}
 
 
 
@@ -303,4 +306,3 @@ class Contract:
                 'post allocated': [a.to_json() for a in self.__post_state.allocated],
                 'post points tos': [pt.to_json() for pt in self.__post_state.points_to],
                 'return val': self.__returns.to_json()}
-

@@ -1,22 +1,24 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module SAWServer.LLVMVerify (llvmVerify) where
+module SAWServer.LLVMVerify
+  ( llvmVerify
+  , llvmAssume
+  , LLVMVerifyParams(..)
+  , LLVMAssumeParams(..)
+  ) where
 
 import Prelude hiding (mod)
 import Control.Lens
-import Data.Aeson (FromJSON(..), ToJSON(..), object, withObject, (.=), (.:))
-import Data.Parameterized.Pair
-import Data.Parameterized.Some
+import Data.Aeson (FromJSON(..), withObject, (.:))
 
 import SAWScript.Builtins (satABC)
-import SAWScript.Crucible.LLVM.Builtins (crucible_llvm_verify)
+import SAWScript.Crucible.LLVM.Builtins
 import SAWScript.Options (defaultOptions)
 import SAWScript.Value (rwCryptol)
 
 import Argo
 import CryptolServer.Data.Expression
 import SAWServer
-import SAWServer.CryptolExpression (getTypedTerm)
 import SAWServer.Exceptions
 import SAWServer.LLVMCrucibleSetup
 import SAWServer.OK
@@ -45,6 +47,23 @@ instance FromJSON LLVMVerifyParams where
                      <*> o .: "tactic"
                      <*> o .: "lemma name"
 
+data LLVMAssumeParams =
+  LLVMAssumeParams
+    { assumeModule       :: ServerName
+    , assumeFunctionName :: String
+    -- TODO: might want to be able to save contracts and refer to them by name?
+    , assumeContract     :: Contract Expression -- ServerName
+    , assumeLemmaName    :: ServerName
+    }
+
+instance FromJSON LLVMAssumeParams where
+  parseJSON =
+    withObject "SAW/LLVM/assume params" $ \o ->
+    LLVMAssumeParams <$> o .: "module"
+                     <*> o .: "function"
+                     <*> o .: "contract"
+                     <*> o .: "lemma name"
+
 llvmVerify :: LLVMVerifyParams -> Method SAWState OK
 llvmVerify (LLVMVerifyParams modName fun lemmaNames checkSat contract tactic lemmaName) =
   do tasks <- view sawTask <$> getState
@@ -60,6 +79,23 @@ llvmVerify (LLVMVerifyParams modName fun lemmaNames checkSat contract tactic lem
             setup <- compileContract bic cenv <$> traverse getExpr contract
             -- TODO proof script - currently hard-coding abc
             res <- tl $ crucible_llvm_verify bic defaultOptions mod fun lemmas checkSat setup satABC
+            dropTask
+            setServerVal lemmaName res -- TODO: is this necessary?
+            ok
+
+llvmAssume :: LLVMAssumeParams -> Method SAWState OK
+llvmAssume (LLVMAssumeParams modName fun contract lemmaName) =
+  do tasks <- view sawTask <$> getState
+     case tasks of
+       (_:_) -> raise $ notAtTopLevel $ map fst tasks
+       [] ->
+         do pushTask (LLVMCrucibleSetup lemmaName [])
+            state <- getState
+            mod <- getLLVMModule modName
+            let bic = view  sawBIC state
+                cenv = rwCryptol (view sawTopLevelRW state)
+            setup <- compileContract bic cenv <$> traverse getExpr contract
+            res <- tl $ crucible_llvm_unsafe_assume_spec bic defaultOptions mod fun setup
             dropTask
             setServerVal lemmaName res -- TODO: is this necessary?
             ok

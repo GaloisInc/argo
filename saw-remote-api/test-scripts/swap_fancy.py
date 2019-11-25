@@ -5,7 +5,8 @@ from saw.llvm import uint32_t, Contract, void
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
-c = saw.connect("cabal new-exec --verbose=0 saw-remote-api -- --dynamic4")
+c = saw.connect("cabal new-exec --verbose=0 saw-remote-api -- --dynamic4",
+                delay_verification_exceptions = True)
 
 swap_bc = os.path.join(dir_path, 'swap.bc')
 
@@ -34,4 +35,5 @@ class Swap(Contract):
 
 contract = Swap()
 
-print(c.llvm_verify('m', 'swap', [], False, contract.contract(), 'abc', 'ok').result())
+c.llvm_verify('m', 'swap', [], False, contract.contract(), 'abc', 'ok').result()
+c.assert_all_verifications()

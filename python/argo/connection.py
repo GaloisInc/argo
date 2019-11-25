@@ -5,6 +5,7 @@ import os
 import re
 import socket
 import subprocess
+import signal
 import sys # pylint: disable=unused-import
 from typing import Any, Dict, List, Mapping, Optional, Union
 from mypy_extensions import TypedDict
@@ -14,7 +15,7 @@ from . import netstring
 
 # Must be boxed separately to enable sharing of connections
 class IDSource: # pylint: disable=too-few-public-methods
-    """A source of unique identifiers."""
+    """A source of unique identifiers for JSON RPC requests."""
 
     next_id : int
 
@@ -61,6 +62,7 @@ class ServerProcess:
                 # stderr=sys.stdout,
                 stderr=subprocess.DEVNULL,
                 env=self.get_environment(),
+                start_new_session=True,
                 universal_newlines=True)
             out_line = self.proc.stdout.readline()
 
@@ -73,7 +75,7 @@ class ServerProcess:
 
     def __del__(self) -> None:
         if self.proc is not None:
-            self.proc.kill()
+            os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
 
 
 class ServerConnection:

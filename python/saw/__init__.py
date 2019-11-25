@@ -6,15 +6,11 @@ import argo.connection as ac
 import argo.interaction
 from saw.commands import *
 
-from typing import Optional
+from typing import Optional, Union, Any, List
 
-
-def connect(command : str,
+def connect(command_or_connection : Union[str, ac.ServerConnection],
             delay_verification_exceptions : Optional[bool] = False) -> SAWConnection:
-    proc = ac.ServerProcess(command)
-    conn = ac.ServerConnection(proc)
-    return SAWConnection(conn, delay_verification_exceptions)
-
+    return SAWConnection(command_or_connection, delay_verification_exceptions)
 
 class SAWConnection:
     """A representation of a current user state in a session with SAW."""
@@ -22,10 +18,17 @@ class SAWConnection:
     most_recent_result : Optional[argo.interaction.Interaction]
 
     def __init__(self,
-                 server_connection : ac.ServerConnection,
+                 command_or_connection : Union[str, ac.ServerConnection],
                  delay_verification_exceptions : Optional[bool] = False) -> None:
         self.most_recent_result = None
-        self.server_connection = server_connection
+        # Set up new server if passed a command; connect to one if passed an
+        # open connection
+        if isinstance(command_or_connection, str):
+            self.proc = ac.ServerProcess(command_or_connection)
+            self.server_connection = ac.ServerConnection(self.proc)
+        else:
+            self.server_connection = command_or_connection
+        # Set up log of all verifications if enabled
         self._verifications : Optional[List[Tuple[str, int, Dict[str, str], bool]]] = None
         if delay_verification_exceptions:
             self._verifications = []

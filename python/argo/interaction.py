@@ -2,7 +2,7 @@
 
 from argo.connection import ServerConnection
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Optional
 from typing_extensions import Protocol
 
 class HasProtocolState(Protocol):
@@ -68,8 +68,9 @@ class Interaction:
 
 class ArgoException(Exception):
     """A Python representation of the underlying JSON RPC error."""
-    def __init__(self, message : str, data : Any) -> None:
+    def __init__(self, message : str, code : int, data : Any) -> None:
         super().__init__(message)
+        self.code = code
         self.data = data
 
 
@@ -89,14 +90,29 @@ class Command(Interaction):
     def _result_and_state(self) -> Tuple[Any, Any]:
         res = self.raw_result()
         if 'error' in res:
-            msg = res['error']['message']
-            if 'data' in res['error']:
-                msg += " " + str(res['error']['data'])
-            raise ArgoException(msg, res['error'].get('data'))
+            code = res['error']['code']
+            msg  = res['error']['message']
+            data = res['error'].get('data')
+            # If an error is handled, return the result non-exceptionally
+            error_override = process_error(code, data, msg)
+            if error_override is not None:
+                return error_override
+            else:
+                if data is not None:
+                    msg += " " + str(data)
+                raise ArgoException(msg, code, data)
         elif 'result' in res:
             return (res['result']['answer'], res['result']['state'])
         else:
             raise ValueError("Invalid result type from JSON RPC")
+
+    def process_error(self, code : int, data : Any, msg : str) -> Any:
+        """Subclasses may override this to suppress particular errors returned
+        by the query and transform them into application-specific results.
+        When None is returned, the original exception is thrown in calling
+        code; otherwise, the result of process_error is returned
+        non-exceptionally."""
+        return None
 
     def process_result(self, result : Any) -> Any:
         """Subclasses should override this, to transform a JSON-encoded result
@@ -134,10 +150,17 @@ class Query(Interaction):
     def _result(self) -> Any:
         res = self.raw_result()
         if 'error' in res:
-            msg = res['error']['message']
-            if 'data' in res['error']:
-                msg += " " + str(res['error']['data'])
-            raise ArgoException(msg, res['error'].get('data'))
+            code = res['error']['code']
+            msg  = res['error']['message']
+            data = res['error'].get('data')
+            # If an error is handled, return the result non-exceptionally
+            error_override = process_error(code, data, msg)
+            if error_override is not None:
+                return error_override
+            else:
+                if data is not None:
+                    msg += " " + str(data)
+                raise ArgoException(msg, code, data)
         elif 'result' in res:
             return res['result']['answer']
 
@@ -147,6 +170,13 @@ class Query(Interaction):
         """
         raise NotImplementedError('process_result')
 
+    def process_error(self, code : int, data : Any, msg : str) -> Any:
+        """Subclasses may override this to suppress particular errors returned
+        by the query and transform them into application-specific results.
+        When None is returned, the original exception is thrown in calling
+        code; otherwise, the result of process_error is returned
+        non-exceptionally."""
+        return None
 
     def result(self) -> Any:
         """Return the result of the query."""

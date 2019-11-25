@@ -86,7 +86,6 @@ class Command(Interaction):
     corresponding command's appropriate representation.
     """
 
-
     def _result_and_state(self) -> Tuple[Any, Any]:
         res = self.raw_result()
         if 'error' in res:
@@ -94,15 +93,15 @@ class Command(Interaction):
             msg  = res['error']['message']
             data = res['error'].get('data')
             # If an error is handled, return the result non-exceptionally
-            error_override = process_error(code, data, msg)
+            error_override = self.process_error(code, data, msg)
             if error_override is not None:
-                return error_override
+                return (error_override, self.init_state)
             else:
                 if data is not None:
                     msg += " " + str(data)
                 raise ArgoException(msg, code, data)
         elif 'result' in res:
-            return (res['result']['answer'], res['result']['state'])
+            return (self.process_result(res['result']['answer']), res['result']['state'])
         else:
             raise ValueError("Invalid result type from JSON RPC")
 
@@ -126,7 +125,7 @@ class Command(Interaction):
 
     def result(self) -> Any:
         """Return the result of the command."""
-        return self.process_result(self._result_and_state()[0])
+        return self._result_and_state()[0]
 
 class Query(Interaction):
     """A higher-level interface to a JSON RPC query that follows Argo conventions.
@@ -154,7 +153,7 @@ class Query(Interaction):
             msg  = res['error']['message']
             data = res['error'].get('data')
             # If an error is handled, return the result non-exceptionally
-            error_override = process_error(code, data, msg)
+            error_override = self.process_error(code, data, msg)
             if error_override is not None:
                 return error_override
             else:
@@ -162,7 +161,7 @@ class Query(Interaction):
                     msg += " " + str(data)
                 raise ArgoException(msg, code, data)
         elif 'result' in res:
-            return res['result']['answer']
+            return self.process_result(res['result']['answer'])
 
     def process_result(self, result : Any) -> Any:
         """Subclasses should override this, to transform a JSON-encoded result
@@ -180,4 +179,4 @@ class Query(Interaction):
 
     def result(self) -> Any:
         """Return the result of the query."""
-        return self.process_result(self._result())
+        return self._result()

@@ -5,7 +5,7 @@ import argo.connection as ac
 import argo.interaction
 from saw.commands import *
 
-from typing import Optional
+from typing import Optional, Union, Any, List
 
 def connect(command : str, cryptol_path : Optional[str] = None) -> SAWConnection:
     return SAWConnection(command)

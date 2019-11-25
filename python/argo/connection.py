@@ -14,7 +14,7 @@ from . import netstring
 
 # Must be boxed separately to enable sharing of connections
 class IDSource: # pylint: disable=too-few-public-methods
-    """A source of unique identifiers."""
+    """A source of unique identifiers for JSON RPC requests."""
 
     next_id : int
 

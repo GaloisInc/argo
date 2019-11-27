@@ -6,6 +6,8 @@ import re
 from typing import Any, List, Optional, Set, Union
 from typing_extensions import Literal
 
+from . import SAWConnection
+
 class LLVMType(metaclass=ABCMeta):
     @abstractmethod
     def to_json(self) -> Any: pass
@@ -181,6 +183,18 @@ class Void:
 
 void = Void()
 
+@dataclass
+class VerifyResult:
+    contract : 'Contract'
+    lemma_name : str
+
+# Lemma names are generated deterministically with respect to a
+# particular Python execution trace. This means that re-running the
+# same script will be fast when using caching, but REPL-style usage
+# will be slow, invalidating the cache at each step. We should be
+# smarter about this.
+used_lemma_names = set([]) # type: Set[str]
+
 class Contract:
     __used_names : Set[str]
 
@@ -277,8 +291,17 @@ class Contract:
         else:
             raise ValueError("Not in postcondition")
 
+    def lemma_name(self, hint  : Optional[str] = None) -> str:
+        if hint is None:
+            hint = self.__class__.__name__
 
-    def contract(self) -> Any:
+        name = uniquify('lemma_' + hint, used_lemma_names)
+
+        used_lemma_names.add(name)
+
+        return name
+
+    def contract_json(self) -> Any:
         if self.__state != 'pre':
             raise Exception("Wrong state")
         self.pre()

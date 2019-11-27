@@ -1,15 +1,11 @@
-import os
-import os.path
-import saw
+from saw.easy import *
 from saw.llvm import uint32_t, Contract, void
 
+import os
+import os.path
+
 dir_path = os.path.dirname(os.path.realpath(__file__))
-
-c = saw.connect("cabal new-exec --verbose=0 saw-remote-api -- --dynamic4")
-
 swap_bc = os.path.join(dir_path, 'swap.bc')
-
-c.llvm_load_module('m', swap_bc).result()
 
 class Swap(Contract):
     def __init__(self) -> None:
@@ -32,6 +28,9 @@ class Swap(Contract):
         self.points_to(self.y_pointer, self.x)
         self.returns(void)
 
-contract = Swap()
+connect("cabal new-exec --verbose=0 saw-remote-api -- --dynamic4")
 
-print(c.llvm_verify('m', 'swap', [], False, contract.contract_json(), 'abc', 'ok').result())
+mod = llvm_load_module(swap_bc)
+
+result = llvm_verify(mod, 'swap', Swap())
+

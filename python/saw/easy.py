@@ -80,5 +80,5 @@ def llvm_verify(module : LLVMModule,
                                             check_sat,
                                             contract.contract_json(),
                                             tactic.name,
-                                            name)
+                                            name).result()
     return VerificationSucceeded(server_name=name, contract=contract)

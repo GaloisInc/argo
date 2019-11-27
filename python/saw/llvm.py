@@ -66,14 +66,17 @@ class CryptolTerm(SetupTerm):
 
         return CryptolTerm(out_term)
 
+    def __repr__(self) -> str:
+        return f"CryptolTerm({self.expression!r})"
+
     def to_json(self) -> Any:
         return cryptoltypes.to_cryptol(self.expression)
 
     def to_ref_json(self) -> Any:
         return {'setup value': 'Cryptol', 'expression': self.to_json()}
 
-    def __to_cryptol__(self, _ty : Any) -> Any:
-        return self.expression
+    def __to_cryptol__(self, ty : Any) -> Any:
+        return self.expression.__to_cryptol__(ty)
 
 class FreshVar(SetupTerm):
     name : Optional[str]
@@ -99,6 +102,15 @@ class FreshVar(SetupTerm):
         if self.name is None:
             self.name = self.spec.get_fresh_name()
         return {'setup value': 'saved', 'name': self.name}
+
+    def __gt__(self, other : cryptoltypes.CryptolJSON) -> CryptolTerm:
+        gt = CryptolTerm("(>)")
+        return gt(self, other)
+
+    def __lt__(self, other : cryptoltypes.CryptolJSON) -> CryptolTerm:
+        lt = CryptolTerm("(<)")
+        return lt(self, other)
+
 
 class Allocated(SetupTerm):
     name : Optional[str]
@@ -140,9 +152,6 @@ def uniquify(x : str, used : Set[str]) -> str:
         x = next_name(x)
     return x
 
-class Prop(metaclass=ABCMeta):
-    @abstractmethod
-    def to_json(self) -> Any: pass
 
 class PointsTo:
     def __init__(self, pointer : SetupVal, target : SetupVal) -> None:
@@ -159,7 +168,7 @@ class PointsTo:
 class State:
     contract : 'Contract'
     fresh : List[FreshVar] = field(default_factory=list)
-    conditions : List[Prop] = field(default_factory=list)
+    conditions : List[CryptolTerm] = field(default_factory=list)
     allocated : List[Allocated] = field(default_factory=list)
     points_to : List[PointsTo] = field(default_factory=list)
 
@@ -179,6 +188,9 @@ ContractState = \
 @dataclass
 class Void:
     def to_json(self) -> Any:
+        return None
+
+    def to_ref_json(self) -> Any:
         return None
 
 void = Void()
@@ -276,6 +288,16 @@ class Contract:
         else:
             raise Exception("wrong state")
 
+    def proclaim(self, condition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
+        if not isinstance(condition, CryptolTerm):
+            condition = CryptolTerm(condition)
+        if self.__state == 'pre':
+            self.__pre_state.conditions.append(condition)
+        elif self.__state == 'post':
+            self.__post_state.conditions.append(condition)
+        else:
+            raise Exception("wrong state")
+
     def arguments(self, *args : SetupVal) -> None:
         if self.__arguments is not None:
             raise ValueError("The arguments are already specified")
@@ -328,4 +350,4 @@ class Contract:
                 'post conds': [c.to_json() for c in self.__post_state.conditions],
                 'post allocated': [a.to_json() for a in self.__post_state.allocated],
                 'post points tos': [pt.to_json() for pt in self.__post_state.points_to],
-                'return val': self.__returns.to_json()}
+                'return val': self.__returns.to_ref_json()}

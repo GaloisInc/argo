@@ -10,6 +10,7 @@ import Argo.CacheTree
 
 import Control.Monad.IO.Class
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Aeson (Result(..), Value(..), fromJSON, toJSON, object)
 import qualified Data.HashMap.Strict as HashMap
 
@@ -103,10 +104,17 @@ withState ::
   Value {- ^ raw parameters object -} ->
   Method (HistoryWrapper s) Value
 withState k params =
-  do hs <- getState
-     let (steps, params') = extractSteps params
-     logger <- getDebugLogger
+  do hs               <- getState
+     logger           <- getDebugLogger
+     (steps, params') <- extractStepsM params
      liftIO (k logger hs steps params')
+
+-- | Extract the state field from a parameter object or raise
+-- a JSONRPC error.
+extractStepsM ::
+  Value                             {- ^ raw parameters object       -} ->
+  Method s ([(Text, Value)], Value) {- ^ steps, remaining parameters -}
+extractStepsM = either raise pure . extractSteps
 
 ------------------------------------------------------------------------
 
@@ -116,13 +124,34 @@ stateKey = "state"
 answerKey :: Text
 answerKey = "answer"
 
-extractSteps :: Value -> ([(Text, Value)], Value)
+invalidStateField :: String -> Value -> JSONRPCException
+invalidStateField message field =
+  makeJSONRPCException 20
+    ("Invalid state field: this indicates a protocol error, " <>
+     "caused by an incorrectly implemented client or server. "  <>
+     "Please report this as a bug.")
+    (Just (Object (HashMap.fromList [("state", field),
+                                     ("error", String (Text.pack message))])))
+
+missingStateField :: JSONRPCException
+missingStateField =
+  makeJSONRPCException 10
+    ("Missing state field: this indicates a protocol error, " <>
+     "caused by an incorrectly implemented client or server. " <>
+     "Please report this as a bug.")
+    (Nothing :: Maybe ())
+
+extractSteps :: Value -> Either JSONRPCException ([(Text, Value)], Value)
 extractSteps v
   | Object o      <- v
   , Just history  <- HashMap.lookup stateKey o
-  , Success steps <- fromJSON history
-  , let v' = Object (HashMap.delete stateKey o) = (steps, v')
-extractSteps v = ([], v)  -- no state field, so default to empty history
+  = case fromJSON history of
+      Success steps ->
+        let v' = Object (HashMap.delete stateKey o)
+        in Right (steps, v')
+      Error message -> Left (invalidStateField message history)
+extractSteps _ =
+  Left missingStateField
 
 -- | Combine a command result and the current sequence of steps
 -- together into a single JSON value.

@@ -6,7 +6,7 @@ import cryptol.cryptoltypes
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
-c = CryptolConnection("cabal new-exec cryptol-remote-api -- --dynamic4")
+c = cryptol.connect("cabal new-exec --verbose=0 cryptol-remote-api -- --dynamic4")
 
 c.change_directory(dir_path)
 

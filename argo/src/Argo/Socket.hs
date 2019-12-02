@@ -7,12 +7,8 @@ module Argo.Socket
 import Control.Concurrent       (forkFinally)
 import Control.Concurrent.Async (Async, async, forConcurrently_)
 import Control.Exception        (displayException)
-import Control.Lens             (view)
 import Control.Monad            (forever)
-import Data.String              (IsString(..))
-import qualified Data.Text as T
-import System.IO                (Handle, IOMode(ReadWriteMode), hClose, hPutStrLn, stderr)
-import qualified Data.Map as Map
+import System.IO                (IOMode(ReadWriteMode), hClose, hPutStrLn, stderr)
 
 import qualified Network.Socket as N
 
@@ -92,18 +88,17 @@ acceptClient app s =
      h         <- N.socketToHandle c ReadWriteMode
      -- don't use c after this, it is owned by h
 
-     log ("CONNECT: " ++ show peer)
-     forkFinally (serveHandlesNS (Just stderr) h h app) $ \res ->
+     logMessage ("CONNECT: " ++ show peer)
+     _ <- forkFinally (serveHandlesNS (Just stderr) h h app) $ \res ->
        do case res of
-            Right _ -> log ("CLOSE: " ++ show peer)
-            Left e  -> log ("ERROR: " ++ show peer ++ " " ++ displayException e)
+            Right _ -> logMessage ("CLOSE: " ++ show peer)
+            Left e  -> logMessage ("ERROR: " ++ show peer ++ " " ++ displayException e)
           hClose h
 
      return ()
 
   where
-    log msg = hPutStrLn stderr msg
-
+    logMessage msg = hPutStrLn stderr msg
 
 
 -- | Hints used by 'serveSocket' specifying a stream socket intended for

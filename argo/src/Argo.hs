@@ -9,6 +9,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints -Wno-name-shadowing #-}
 
 -- | An implementation of the basic primitives of JSON-RPC 2.0.
 module Argo
@@ -42,28 +43,22 @@ module Argo
   , serveHandles
   , serveStdIONS
   , serveHandlesNS
+  , serveHTTP
   -- * Request identifiers
   , RequestID(..)
   ) where
 
-import Control.Applicative
 import Control.Concurrent
-import Control.Concurrent.MVar
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Exception hiding (TypeError)
 import Control.Lens hiding ((.=))
-import Control.Monad.IO.Class
 import qualified Data.Aeson as JSON
 import Data.Aeson ((.:), (.:!), (.=))
-import Data.Coerce
-import GHC.Exts (Constraint)
-import GHC.TypeLits
 import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
 import Data.Binary.Builder
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.ByteString as SBS
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (maybeToList)
@@ -76,7 +71,6 @@ import Network.Wai (strictRequestBody)
 import System.IO
 import Web.Scotty hiding (raise, params, get, put)
 
-import Debug.Trace
 
 import Argo.Netstring
 
@@ -422,7 +416,7 @@ serveHandles hLog hIn hOut app = init >>= loop
       case input of
         [] -> return ()
         l:rest ->
-          do forkIO $
+          do _ <- forkIO $
                (case JSON.eitherDecode l of
                   Left msg -> throw (parseError (T.pack msg))
                   Right req -> handleRequest log out app req)
@@ -435,7 +429,10 @@ serveHandles hLog hIn hOut app = init >>= loop
       out (JSON.encode exn <> BS.singleton newline)
 
     reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
-    reportOtherException = undefined  -- TODO: convert to JSONRPCException
+    reportOtherException out exn =
+      out $
+        JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
+        <> BS.singleton newline
 
     log = case hLog of
             Just h -> T.hPutStrLn h
@@ -468,7 +465,7 @@ serveHandlesNS hLog hIn hOut app =
          case mbLine of
            Nothing   -> return ()
            Just line ->
-             do processLine output line
+             do _ <- processLine output line
                 loop output input
 
     processLine output line =
@@ -478,11 +475,15 @@ serveHandlesNS hLog hIn hOut app =
              Left  msg -> throwIO (parseError (T.pack msg))
              Right req -> handleRequest log output app req
            `catch` reportError output
-           -- TODO add a catch for other errors that throws a JSON-RPC wrapper
+           `catch` reportOtherException output
 
     reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
     reportError output exn =
       output (JSON.encode exn)
+
+    reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
+    reportOtherException out exn =
+      out $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
 
     log :: Text -> IO ()
     log msg = case hLog of
@@ -501,10 +502,16 @@ serveHTTP app port =
        -- NOTE: Making the assumption that WAI forks a thread - TODO: verify this
        stream $ \put flush ->
          do output <- synchronized (\ str -> put (fromByteString (BS.toStrict str)) *> flush)
-            let reportError = \ (exn :: JSONRPCException) ->
-                                output (JSON.encode exn <> BS.singleton newline)
+            let reportError =
+                  \ (exn :: JSONRPCException) ->
+                    output (JSON.encode exn <> BS.singleton newline)
+                reportOtherException =
+                  \ (exn :: SomeException) ->
+                    output $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
+                             <> BS.singleton newline
             (case JSON.eitherDecode body of
                Left msg -> throw (parseError (T.pack msg))
                Right req -> handleRequest (T.hPutStrLn stderr) output app req)
              `catch` reportError
+             `catch` reportOtherException
  where newline = 0x0a -- ASCII/UTF8

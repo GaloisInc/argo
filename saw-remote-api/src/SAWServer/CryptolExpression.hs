@@ -1,10 +1,10 @@
-module SAWServer.CryptolExpression where
+{-# LANGUAGE PartialTypeSignatures #-}
+module SAWServer.CryptolExpression (getTypedTerm, getTypedTermOfCExp) where
 
-import Control.Lens
+import Control.Lens hiding (re)
 import Control.Monad.IO.Class
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
-import qualified Data.Text as T
 
 import Cryptol.Eval (EvalOpts(..), defaultPPOpts)
 import Cryptol.ModuleSystem (ModuleRes)
@@ -13,6 +13,7 @@ import Cryptol.ModuleSystem.Env (ModuleEnv)
 import Cryptol.ModuleSystem.Interface (noIfaceParams)
 import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
 import qualified Cryptol.ModuleSystem.Renamer as MR
+import Cryptol.Parser.AST
 import Cryptol.Parser.Position (emptyRange, getLoc)
 import Cryptol.TypeCheck (tcExpr)
 import Cryptol.TypeCheck.Monad (InferOutput(..), inpVars, inpTSyns)
@@ -21,22 +22,26 @@ import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP
 import SAWScript.Value (biSharedContext, TopLevelRW(..))
 import Verifier.SAW.CryptolEnv
+import Verifier.SAW.SharedTerm (SharedContext)
 import Verifier.SAW.TypedTerm(TypedTerm(..))
 
 import Argo
 import CryptolServer.Data.Expression
 import SAWServer
-import SAWServer.Exceptions
+import CryptolServer.Exceptions (cryptolError)
 
 getTypedTerm :: Expression -> Method SAWState TypedTerm
 getTypedTerm inputExpr =
   do cenv <- rwCryptol . view sawTopLevelRW <$> getState
-
      expr <- getExpr inputExpr
      sc <- biSharedContext . view sawBIC <$> getState
-     let env = eModuleEnv cenv
+     (t, _) <- moduleCmdResult =<< (liftIO $ getTypedTermOfCExp sc cenv expr)
+     return t
 
-     ((checkedExpr, schema), modEnv') <- liftModuleM env $
+getTypedTermOfCExp :: SharedContext -> CryptolEnv -> Expr PName -> IO (ModuleRes TypedTerm)
+getTypedTermOfCExp sc cenv expr =
+  do let env = eModuleEnv cenv
+     mres <- runModuleM (defaultEvalOpts, env) $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names
@@ -54,21 +59,22 @@ getTypedTerm inputExpr =
 
           out <- liftIO (tcExpr re tcEnv')
           interactive (runInferOutput out)
-
-     let env' = cenv { eModuleEnv = modEnv' }
-     trm <- liftIO $ translateExpr sc env' checkedExpr
-
-     return (TypedTerm schema trm)
+     case mres of
+       (Right ((checkedExpr, schema), modEnv'), ws) ->
+         do let env' = cenv { eModuleEnv = modEnv' }
+            trm <- liftIO $ translateExpr sc env' checkedExpr
+            return (Right (TypedTerm schema trm, modEnv'), ws)
+       (Left err, ws) -> return (Left err, ws)
 
 liftModuleM :: ModuleEnv -> ModuleM a -> Method SAWState (a, ModuleEnv)
 liftModuleM env m = liftIO (runModuleM (defaultEvalOpts, env) m) >>= moduleCmdResult
 
 moduleCmdResult :: ModuleRes a -> Method SAWState (a, ModuleEnv)
-moduleCmdResult (res, ws) =
-  do mapM_ (liftIO . print . pp) ws
-     case res of
+moduleCmdResult (result, warnings) =
+  do mapM_ (liftIO . print . pp) warnings
+     case result of
        Right (a, me) -> return (a, me)
-       Left err      -> raise $ genericError $ T.pack $ "Cryptol error:\n" ++ show (pp err) -- X.throwIO (ModuleSystemError err)
+       Left err      -> raise $ cryptolError err warnings
 
 defaultEvalOpts :: EvalOpts
 defaultEvalOpts = EvalOpts quietLogger defaultPPOpts

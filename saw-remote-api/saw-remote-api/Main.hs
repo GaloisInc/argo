@@ -1,19 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Main where
+module Main (main) where
 
 import Control.Applicative
 import Control.Concurrent.Async (wait)
-import Control.Exception
-import Control.Lens hiding ((.=))
-import Control.Monad (ap)
-import Control.Monad.IO.Class (MonadIO(..))
 import qualified Data.Aeson as JSON
-import Data.Aeson ((.:), (.=))
-import qualified Data.Aeson.Types as JSON
 import Data.Text (Text)
 import qualified Options.Applicative as Opt
-import System.Directory (doesDirectoryExist, setCurrentDirectory)
-import System.IO (stdout)
+import System.IO (BufferMode(..), hSetBuffering, stdout)
 
 import Argo
 import Argo.Socket
@@ -72,20 +65,17 @@ realMain opts =
        StdIONetstring -> serveStdIONS theApp
        SocketNetstring (Port p) -> serveSocket "127.0.0.1" p theApp
        SocketNetstringDyn h ->
-         do (a, p) <- serveSocketDynamic h theApp
+         do hSetBuffering stdout NoBuffering
+            (a, p) <- serveSocketDynamic h theApp
             putStrLn ("PORT " ++ show p)
             wait a
 
 sawMethods :: [(Text, MethodType, JSON.Value -> Method SAWState JSON.Value)]
 sawMethods =
-  [ ("SAW/Cryptol/start setup",  Command, method startCryptolSetup)
-  , ("SAW/Cryptol/load module",  Command, method cryptolSetupLoadModule)
-  , ("SAW/Cryptol/load file",    Command, method cryptolSetupLoadFile)
-  , ("SAW/Cryptol/finish setup", Command, method cryptolSetupDone)
+  [ ("SAW/Cryptol/load module",  Command, method cryptolLoadModule)
+  , ("SAW/Cryptol/load file",    Command, method cryptolLoadFile)
   , ("SAW/Cryptol/save term",    Command, method saveTerm)
-  , ("SAW/LLVM/start setup",     Command, method startLLVMCrucibleSetup)
-  , ("SAW/LLVM/return",          Command, method llvmCrucibleReturn)
-  , ("SAW/LLVM/finish setup",    Command, method llvmCrucibleSetupDone)
   , ("SAW/LLVM/load module",     Command, method llvmLoadModule)
   , ("SAW/LLVM/verify",          Command, method llvmVerify)
+  , ("SAW/LLVM/assume",          Command, method llvmAssume)
   ]

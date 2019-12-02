@@ -12,24 +12,32 @@ import Test.QuickCheck.Instances.ByteString
 import Test.QuickCheck.Instances.Scientific
 import Test.QuickCheck.Instances.Text
 import Test.Tasty
-import Test.Tasty.Program
+import Test.Tasty.HUnit.ScriptExit
 import Test.Tasty.QuickCheck
 
 import CryptolServer.Call
 
 import Debug.Trace
 
+import Argo.PythonBindings
+import Paths_cryptol_remote_api
+
 main :: IO ()
-main = defaultMain tests
+main =
+  do reqs <- getArgoPythonFile "requirements.txt"
+     withPython3venv (Just reqs) $ \pip python ->
+       do pySrc <- getArgoPythonFile "."
+          testScriptsDir <- getDataFileName "test-scripts/"
+          pip ["install", pySrc]
+          putStrLn "pipped"
 
-tests :: TestTree
-tests = testGroup "The tests" [ callMsgProps {-, pythonTests  Need to figure out how to make it find the file -} ]
+          scriptTests <- makeScriptTests testScriptsDir [python]
 
-
-pythonTests =
-  testGroup "Python tests"
-    [ testProgram "Python regression tests" "python3" ["python/cryptol-tests.py"] (Just ".")
-    ]
+          defaultMain $
+            testGroup "Tests for saw-remote-api"
+              [ testGroup "Scripting API tests" scriptTests
+              , callMsgProps
+              ]
 
 instance Arbitrary Encoding where
   arbitrary = oneof [pure Hex, pure Base64]

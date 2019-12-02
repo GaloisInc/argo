@@ -1,8 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
-module CryptolServer.Data.Type where
+module CryptolServer.Data.Type
+  ( JSONSchema(..)
+  , JSONType(..)
+  ) where
 
 import qualified Data.Aeson as JSON
-import Data.Aeson ((.:), (.=))
+import Data.Aeson ((.=))
 import qualified Data.Text as T
 
 import Cryptol.Parser.Selector (ppSelector)
@@ -25,7 +28,7 @@ instance JSON.ToJSON JSONSchema where
                         [ "name" .= show (ppWithNames ns v)
                         , "kind" .= JSONKind (kindOf v)
                         ]
-                      | v@(TParam uniq k flav info) <- vars
+                      | v@(TParam _uniq _k _flav _info) <- vars
                       ]
                      , "propositions" .= map (JSON.toJSON . JSONType ns) props
                      , "type" .= JSONType ns ty
@@ -46,6 +49,9 @@ instance JSON.ToJSON JSONKind where
 instance JSON.ToJSON JSONType where
   toJSON (JSONType ns t) = convert t
     where
+      convert (TCon (TError _ _) _) =
+        -- TODO: figure out what to do in this situation
+        error "JSON conversion of errors is not yet supported"
       convert (TCon (TC tc) args) =
         JSON.object $
         case (tc, args) of
@@ -84,11 +90,11 @@ instance JSON.ToJSON JSONType where
             ]
       convert (TCon (TF tf) args) =
         JSON.object
-        [ "type" .= T.pack t
+        [ "type" .= T.pack t'
         , "arguments" .= map (JSONType ns) args
         ]
         where
-          t =
+          t' =
             case tf of
               TCAdd -> "+"
               TCSub -> "-"
@@ -120,9 +126,9 @@ instance JSON.ToJSON JSONType where
             , "greater" .= JSONType ns t1
             , "less" .= JSONType ns t2
             ]
-          (PFin, [t]) ->
+          (PFin, [t']) ->
             [ "prop" .= T.pack "fin"
-            , "subject" .= JSONType ns t
+            , "subject" .= JSONType ns t'
             ]
           (PHas x, [t1, t2]) ->
             [ "prop" .= T.pack "has"
@@ -130,30 +136,30 @@ instance JSON.ToJSON JSONType where
             , "type" .= JSONType ns t1
             , "is"   .= JSONType ns t2
             ]
-          (PArith, [t]) ->
+          (PArith, [t']) ->
             [ "prop" .= T.pack "Arith"
-            , "subject" .= JSONType ns t
+            , "subject" .= JSONType ns t'
             ]
-          (PCmp, [t]) ->
+          (PCmp, [t']) ->
             [ "prop" .= T.pack "Cmp"
-            , "subject" .= JSONType ns t
+            , "subject" .= JSONType ns t'
             ]
-          (PSignedCmp, [t]) ->
+          (PSignedCmp, [t']) ->
             [ "prop" .= T.pack "SignedCmp"
-            , "subject" .= JSONType ns t
+            , "subject" .= JSONType ns t'
             ]
           (PLiteral, [t1, t2]) ->
             [ "prop" .= T.pack "Literal"
             , "size" .= JSONType ns t1
-            , "subject " .= JSONType ns t2
+            , "subject" .= JSONType ns t2
             ]
-          (PZero, [t]) ->
+          (PZero, [t']) ->
             [ "prop" .= T.pack "Zero"
-            , "subject " .= JSONType ns t
+            , "subject" .= JSONType ns t'
             ]
-          (PLogic, [t]) ->
+          (PLogic, [t']) ->
             [ "prop" .= T.pack "Logic"
-            , "subject " .= JSONType ns t
+            , "subject" .= JSONType ns t'
             ]
           (PTrue, []) ->
             [ "prop" .= T.pack "True"
@@ -163,10 +169,10 @@ instance JSON.ToJSON JSONType where
             , "left" .= JSONType ns t1
             , "right" .= JSONType ns t2
             ]
-          (pc, args) ->
+          (pc', args') ->
             [ "prop" .= T.pack "unknown"
-            , "constructor" .= show pc
-            , "arguments" .= show args
+            , "constructor" .= show pc'
+            , "arguments" .= show args'
             ]
       convert (TVar v) =
         JSON.object
@@ -174,12 +180,12 @@ instance JSON.ToJSON JSONType where
         , "kind" .= JSONKind (kindOf v)
         , "name" .= show (ppWithNames ns v)
         ]
-      convert (TUser n args def) = convert def
+      convert (TUser _n _args def) = convert def
       convert (TRec fields) =
         JSON.object
         [ "type" .= T.pack "record"
         , "fields" .=
-          JSON.object [ T.pack (show (pp f)) .= JSONType ns t
-                      | (f, t) <- fields
+          JSON.object [ T.pack (show (pp f)) .= JSONType ns t'
+                      | (f, t') <- fields
                       ]
         ]

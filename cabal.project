@@ -1,7 +1,9 @@
 packages:
   argo/
+  python/
   cryptol-remote-api/
   saw-remote-api/
+  tasty-script-exitcode/
 
 optional-packages:
   deps/cryptol/
@@ -32,4 +34,4 @@ optional-packages:
   deps/macaw/x86_symbolic/
   deps/elf-edit/
   deps/dwarf/
-  deps/saw-core-what4 
+  deps/saw-core-what4

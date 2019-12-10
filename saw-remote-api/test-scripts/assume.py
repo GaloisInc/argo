@@ -1,6 +1,7 @@
 import os
 import os.path
 import saw
+from saw.proofscript import *
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -36,6 +37,6 @@ addone_contract = {
     "return val": {"setup value": "Cryptol", "expression": "8 : [32]"}
 }
 
-
+prover = proof_script([abc])
 c.llvm_assume('m', 'seven', seven_contract, 'seven_ov').result()
-c.llvm_verify('m', 'addone', ['seven_ov'], False, addone_contract, 'abc', 'addone_ov').result()
+c.llvm_verify('m', 'addone', ['seven_ov'], False, addone_contract, prover, 'addone_ov').result()

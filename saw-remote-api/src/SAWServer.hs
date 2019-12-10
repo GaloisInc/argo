@@ -54,11 +54,11 @@ import SAWServer.Exceptions
 type SAWCont = (SAWEnv, SAWTask)
 
 data SAWTask
-  = ProofScript
+  = ProofScriptTask
   | LLVMCrucibleSetup ServerName [SetupStep]
 
 instance Show SAWTask where
-  show ProofScript = "ProofScript"
+  show ProofScriptTask = "ProofScript"
   show (LLVMCrucibleSetup n steps) = "(LLVMCrucibleSetup" ++ show n ++ " " ++ show steps ++ ")"
 
 data SetupStep

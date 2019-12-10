@@ -2,6 +2,7 @@ import os
 import os.path
 import saw
 from saw.llvm import uint32_t, Contract, void
+from saw.proofscript import *
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -34,4 +35,5 @@ class Swap(Contract):
 
 contract = Swap()
 
-print(c.llvm_verify('m', 'swap', [], False, contract.contract(), 'abc', 'ok').result())
+prover = proof_script([abc])
+print(c.llvm_verify('m', 'swap', [], False, contract.contract(), prover, 'ok').result())

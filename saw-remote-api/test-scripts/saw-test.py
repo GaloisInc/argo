@@ -2,6 +2,7 @@ print("Starting")
 import os
 import os.path
 import saw
+from saw.proofscript import *
 
 print("Imported")
 
@@ -32,4 +33,5 @@ contract = {
     "return val": "null"
 }
 
-print(c.llvm_verify('m', 'always_null', [], False, contract, 'abc', 'ok').result())
+prover = proof_script([abc])
+print(c.llvm_verify('m', 'always_null', [], False, contract, prover, 'ok').result())

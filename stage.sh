@@ -3,16 +3,17 @@
 set -e
 
 CDIR=dist/cryptol-saw-remote-api
-BIN=$(stack path --local-install-root)/bin
 DATE=$(date "+%Y-%m-%d")
+CRA=$(cabal v2-exec which cryptol-remote-api)
+SRA=$(cabal v2-exec which saw-remote-api)
 
 mkdir -p ${CDIR}
 mkdir -p ${CDIR}/bin
 mkdir -p ${CDIR}/doc
 mkdir -p ${CDIR}/python
 
-cp ${BIN}/cryptol-remote-api ${CDIR}/bin
-cp ${BIN}/saw-remote-api ${CDIR}/bin
+cp ${CRA} ${CDIR}/bin
+cp ${SRA} ${CDIR}/bin
 cp docs/*.rst ${CDIR}/doc
 cp -r python ${CDIR}
 

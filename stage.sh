@@ -16,6 +16,7 @@ cp ${CRA} ${CDIR}/bin
 cp ${SRA} ${CDIR}/bin
 cp docs/*.rst ${CDIR}/doc
 cp -r python ${CDIR}
+rm -rf ${CDIR}/python/.stack-work
 
 cd dist
 tar -czvf cryptol-saw-remote-api-${DATE}.tar.gz cryptol-saw-remote-api

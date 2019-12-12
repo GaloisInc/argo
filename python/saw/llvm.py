@@ -5,6 +5,8 @@ import pprint
 import re
 from typing import Any, List, Optional, Set, Union
 from typing_extensions import Literal
+import inspect
+import uuid
 
 from . import SAWConnection
 
@@ -221,6 +223,10 @@ class Contract:
 
     __in_post : bool
 
+    __definition_lineno : Optional[int]
+    __definition_filename : Optional[str]
+    __unique_id : uuid.UUID
+
     def __init__(self) -> None:
         self.__pre_state = State(self)
         self.__post_state = State(self)
@@ -228,6 +234,15 @@ class Contract:
         self.__arguments = None
         self.__returns = None
         self.__in_post = False
+        self.__unique_id = uuid.uuid4()
+        frame = inspect.currentframe()
+        if frame is not None:
+            frame = frame.f_back
+            self.__definition_lineno = frame.f_lineno
+            self.__definition_filename = frame.f_code.co_filename
+        else:
+            self.__definition_lineno = None
+            self.__definition_filename = None
 
     # To be overridden by users
     def pre(self) -> None:
@@ -325,7 +340,7 @@ class Contract:
 
     def contract_json(self) -> Any:
         if self.__state != 'pre':
-            raise Exception("Wrong state")
+            raise Exception("Wrong state: ")
         self.pre()
         self.add_default_var_names()
 

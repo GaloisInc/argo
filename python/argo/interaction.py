@@ -68,9 +68,10 @@ class Interaction:
 
 class ArgoException(Exception):
     """A Python representation of the underlying JSON RPC error."""
-    def __init__(self, message : str, data : Any) -> None:
+    def __init__(self, code : int, message : str, data : Any) -> None:
         super().__init__(message)
         self.data = data
+        self.code = code
 
 
 class Command(Interaction):
@@ -92,7 +93,7 @@ class Command(Interaction):
             msg = res['error']['message']
             if 'data' in res['error']:
                 msg += " " + str(res['error']['data'])
-            raise ArgoException(msg, res['error'].get('data'))
+            raise ArgoException(res['error']['code'], msg, res['error'].get('data'))
         elif 'result' in res:
             return (res['result']['answer'], res['result']['state'])
         else:
@@ -137,7 +138,7 @@ class Query(Interaction):
             msg = res['error']['message']
             if 'data' in res['error']:
                 msg += " " + str(res['error']['data'])
-            raise ArgoException(msg, res['error'].get('data'))
+            raise ArgoException(res['error']['code'], msg, res['error'].get('data'))
         elif 'result' in res:
             return res['result']['answer']
 

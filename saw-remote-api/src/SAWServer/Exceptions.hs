@@ -7,6 +7,8 @@ module SAWServer.Exceptions (
   , notAnLLVMSetup
   , notAnLLVMSetupVal
   , notAnLLVMMethodSpecIR
+  , notASimpset
+  , notATerm
   -- * Wrong monad errors
   , notSettingUpCryptol
   , notSettingUpLLVMCrucible
@@ -21,7 +23,6 @@ module SAWServer.Exceptions (
 
 import Control.Exception
 import Data.Aeson as JSON
-import Data.Text (Text)
 import qualified Data.Text as T
 
 import Argo
@@ -87,6 +88,28 @@ notAnLLVMMethodSpecIR name =
     ("The server value with name " <>
      T.pack (show name) <>
      " is not an LLVM method specification")
+    (Just $ object ["name" .= name])
+
+notASimpset ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a simpset -}->
+  JSONRPCException
+notASimpset name =
+  makeJSONRPCException 10060
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a simpset")
+    (Just $ object ["name" .= name])
+
+notATerm ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a term -}->
+  JSONRPCException
+notATerm name =
+  makeJSONRPCException 10070
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a term")
     (Just $ object ["name" .= name])
 
 notSettingUpCryptol :: JSONRPCException

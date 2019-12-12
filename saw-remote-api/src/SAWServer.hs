@@ -29,7 +29,7 @@ import Text.LLVM.AST (Type)
 import qualified Verifier.Java.Codebase as JSS
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.Module (emptyModule)
-import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
+import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule, Term)
 import Verifier.SAW.Term.Functor (mkModuleName)
 import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
@@ -42,6 +42,7 @@ import SAWScript.Prover.Rewrite (basic_ss)
 import SAWScript.Value (AIGProxy(..), BuiltinContext(..), LLVMCrucibleSetupM, TopLevelRO(..), TopLevelRW(..), defaultPPOpts)
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
+import Verifier.SAW.Rewriter (Simpset)
 import qualified Verifier.Java.SAWBackend as JavaSAW
 import qualified Verifier.LLVM.Backend.SAW as LLVMSAW
 import qualified Cryptol.Utils.Ident as Cryptol
@@ -186,6 +187,7 @@ data LLVMCrucibleSetupTypeRepr :: * -> * where
 
 data ServerVal
   = VTerm TypedTerm
+  | VSimpset Simpset
   | VType Cryptol.Schema
   | VCryptolModule CryptolModule -- from SAW, includes Term mappings
   | VLLVMCrucibleSetup (Pair LLVMCrucibleSetupTypeRepr LLVMCrucibleSetupM)
@@ -194,6 +196,7 @@ data ServerVal
 
 instance Show ServerVal where
   show (VTerm t) = "(VTerm " ++ show t ++ ")"
+  show (VSimpset ss) = "(VSimpset " ++ show ss ++ ")"
   show (VType t) = "(VType " ++ show t ++ ")"
   show (VCryptolModule _) = "VCryptolModule"
   show (VLLVMCrucibleSetup _) = "VLLVMCrucibleSetup"
@@ -205,6 +208,9 @@ class IsServerVal a where
 
 instance IsServerVal TypedTerm where
   toServerVal = VTerm
+
+instance IsServerVal Simpset where
+  toServerVal = VSimpset
 
 instance IsServerVal Cryptol.Schema where
   toServerVal = VType
@@ -276,6 +282,20 @@ getLLVMMethodSpecIR n =
      case v of
        VLLVMMethodSpecIR ir -> return ir
        _other -> raise (notAnLLVMMethodSpecIR n)
+
+getSimpset :: ServerName -> Method SAWState Simpset
+getSimpset n =
+  do v <- getServerVal n
+     case v of
+       VSimpset ss -> return ss
+       _other -> raise (notASimpset n)
+
+getTerm :: ServerName -> Method SAWState TypedTerm
+getTerm n =
+  do v <- getServerVal n
+     case v of
+       VTerm t -> return t
+       _other -> raise (notATerm n)
 
 data LLVMSetupVal cryptolExpr
   = NullPointer

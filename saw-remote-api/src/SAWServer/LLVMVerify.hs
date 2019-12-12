@@ -77,11 +77,11 @@ llvmVerify (LLVMVerifyParams modName fun lemmaNames checkSat contract script lem
             lemmas <- mapM getLLVMMethodSpecIR lemmaNames
             let bic = view  sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
-                proofScript = interpretProofScript script
+            proofScript <- interpretProofScript script
             setup <- compileContract bic cenv <$> traverse getExpr contract
             res <- tl $ crucible_llvm_verify bic defaultOptions mod fun lemmas checkSat setup proofScript
             dropTask
-            setServerVal lemmaName res -- TODO: is this necessary?
+            setServerVal lemmaName res
             ok
 
 llvmAssume :: LLVMAssumeParams -> Method SAWState OK
@@ -98,5 +98,5 @@ llvmAssume (LLVMAssumeParams modName fun contract lemmaName) =
             setup <- compileContract bic cenv <$> traverse getExpr contract
             res <- tl $ crucible_llvm_unsafe_assume_spec bic defaultOptions mod fun setup
             dropTask
-            setServerVal lemmaName res -- TODO: is this necessary?
+            setServerVal lemmaName res
             ok

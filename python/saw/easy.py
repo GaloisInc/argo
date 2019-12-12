@@ -1,9 +1,11 @@
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional, Set, Union
+from typing import List, Optional, Set, Union, Dict
+import uuid
 
 from . import SAWConnection
 from argo.connection import ServerConnection
+from argo.interaction import ArgoException
 from . import llvm
 
 designated_connection = None # type: Optional[SAWConnection]
@@ -22,6 +24,9 @@ def get_designated_connection() -> SAWConnection:
         raise ValueError("There is not yet a designated connection.")
     else:
         return designated_connection
+
+def set_designated_connection(conn: SAWConnection) -> None:
+    designated_connection = conn
 
 def connect(command_or_connection : Union[str, ServerConnection]) -> None:
     global designated_connection
@@ -51,7 +56,66 @@ class VerificationResult(metaclass=ABCMeta):
 @dataclass
 class VerificationSucceeded(VerificationResult):
     server_name : str
+    assumptions : List[VerificationResult]
     contract : llvm.Contract
+    _unique_id : uuid.UUID
+
+    def __init__(self,
+                 server_name : str,
+                 assumptions : List[VerificationResult],
+                 contract : llvm.Contract) -> None:
+        self.server_name = server_name
+        self.assumptions = assumptions
+        self.contract = contract
+        self._unique_id = uuid.uuid4()
+
+    def __bool__(self) -> bool:
+        return True
+
+@dataclass
+class VerificationFailed(VerificationResult):
+    server_name : str
+    assumptions : List[VerificationResult]
+    contract : llvm.Contract
+    exception : Exception
+    _unique_id : uuid.UUID
+
+    def __init__(self,
+                 server_name : str,
+                 assumptions : List[VerificationResult],
+                 contract : llvm.Contract,
+                 exception : Exception) -> None:
+        self.server_name = server_name
+        self.assumptions = assumptions
+        self.contract = contract
+        self.exception = exception
+        self._unique_id = uuid.uuid4()
+
+    def __bool__(self) -> bool:
+        return False
+
+class AllVerificationResults:
+    __results : Dict[uuid.UUID, VerificationResult]
+    __qed_called : bool = False
+
+    def __init__(self) -> None:
+        self.__results = {}
+        self.__qed_called = True
+
+    def __add_result__(self, result : VerificationResult) -> None:
+        self.__qed_called = False
+        self.__results[result._unique_id] = result
+
+    def __qed__(self):
+        ok = True
+        for _, result in self.__results.items():
+            if not result.__bool__():
+                ok = False
+        assert ok, verification_results.__results.__repr__()
+        self.__qed_called = True
+
+# Script-execution-global set of all results verified so far
+verification_results = AllVerificationResults()
 
 @dataclass
 class Tactic:
@@ -74,11 +138,41 @@ def llvm_verify(module : LLVMModule,
     name = llvm.uniquify(lemma_name_hint, used_server_names)
     used_server_names.add(name)
 
-    get_designated_connection().llvm_verify(module.server_name,
-                                            function,
-                                            [l.server_name for l in lemmas],
-                                            check_sat,
-                                            contract.contract_json(),
-                                            tactic.name,
-                                            name).result()
-    return VerificationSucceeded(server_name=name, contract=contract)
+    result : VerificationResult
+    contract_json = contract.contract_json()
+    conn = get_designated_connection()
+    conn_snapshot = conn.snapshot()
+    try:
+        conn.llvm_verify(module.server_name,
+                         function,
+                         [l.server_name for l in lemmas],
+                         check_sat,
+                         contract_json,
+                         tactic.name,
+                         name).result()
+        result = VerificationSucceeded(server_name=name,
+                                       assumptions=lemmas,
+                                       contract=contract)
+    except ArgoException as exception:
+        if exception.code == 10300: # verification exception
+                                    # TODO: use a subclass to represent
+            # roll back to snapshot because the current connection's
+            # latest result is now a verification exception!
+            conn = conn_snapshot
+            set_designated_connection(conn)
+            # assume the verification succeeded
+            conn.llvm_assume(module.server_name,
+                             function,
+                             contract_json,
+                             name).result()
+            result = VerificationFailed(server_name=name,
+                                        assumptions=lemmas,
+                                        contract=contract,
+                                        exception=exception)
+        else:
+            raise exception
+    verification_results.__add_result__(result)
+    return result
+
+def qed() -> None:
+    verification_results.__qed__()

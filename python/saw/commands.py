@@ -1,9 +1,14 @@
 import argo.interaction
 from argo.interaction import HasProtocolState
+from . import exceptions
 
 from typing import Any, List
 
-class CryptolLoadFile(argo.interaction.Command):
+class SAWCommand(argo.interaction.Command):
+    def process_error(self, ae : argo.interaction.ArgoException) -> Exception:
+        return exceptions.make_saw_exception(ae)
+
+class CryptolLoadFile(SAWCommand):
     def __init__(self, connection : HasProtocolState, filename : str) -> None:
         super(CryptolLoadFile, self).__init__(
             'SAW/Cryptol/load file',
@@ -14,7 +19,7 @@ class CryptolLoadFile(argo.interaction.Command):
     def process_result(self, _res : Any) -> Any:
         return None
 
-class CryptolLoadModule(argo.interaction.Command):
+class CryptolLoadModule(SAWCommand):
     def __init__(self, connection : HasProtocolState, module_name : str) -> None:
         super(CryptolLoadModule, self).__init__(
             'SAW/Cryptol/load module',
@@ -25,7 +30,7 @@ class CryptolLoadModule(argo.interaction.Command):
     def process_result(self, _res : Any) -> Any:
         return None
 
-class LLVMLoadModule(argo.interaction.Command):
+class LLVMLoadModule(SAWCommand):
     def __init__(self, connection : HasProtocolState,
                  name : str,
                  bitcode_file : str) -> None:
@@ -38,7 +43,7 @@ class LLVMLoadModule(argo.interaction.Command):
     def process_result(self, _res : Any) -> Any:
         return None
 
-class LLVMAssume(argo.interaction.Command):
+class LLVMAssume(SAWCommand):
     def __init__(
             self,
             connection : HasProtocolState,
@@ -55,7 +60,7 @@ class LLVMAssume(argo.interaction.Command):
     def process_result(self, _res : Any) -> Any:
         return None
 
-class LLVMVerify(argo.interaction.Command):
+class LLVMVerify(SAWCommand):
     def __init__(
             self,
             connection : HasProtocolState,

@@ -1,7 +1,10 @@
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional, Set, Union, Dict
+from typing import List, Optional, Set, Union, Dict, Tuple
+import webbrowser
+import subprocess
 import uuid
+import os
 
 from . import SAWConnection
 from argo.connection import ServerConnection
@@ -52,6 +55,7 @@ def llvm_load_module(bitcode_file : str) -> LLVMModule:
 
 class VerificationResult(metaclass=ABCMeta):
     server_name : str
+    # assumptions : List[VerificationResult]
     contract : llvm.Contract
     _unique_id : uuid.UUID
 
@@ -61,7 +65,6 @@ class VerificationResult(metaclass=ABCMeta):
 @dataclass
 class VerificationSucceeded(VerificationResult):
     server_name : str
-    assumptions : List[VerificationResult]
     contract : llvm.Contract
 
     def __init__(self,
@@ -79,7 +82,6 @@ class VerificationSucceeded(VerificationResult):
 @dataclass
 class VerificationFailed(VerificationResult):
     server_name : str
-    assumptions : List[VerificationResult]
     contract : llvm.Contract
     exception : Exception
 
@@ -109,12 +111,57 @@ class AllVerificationResults:
         self.__qed_called = False
         self.__results[result._unique_id] = result
 
+    def dot_graph(self) -> str:
+        out = "digraph { \n"
+        for _, result in self.__results.items():
+            # Determine the node color
+            if result:
+                color = "blue"
+                bgcolor = "lightblue"
+            else:
+                color = "red"
+                bgcolor = "lightred"
+            # Determine the node attributes
+            attrs : Dict[str, str] = {
+                'label': result.contract.__class__.__name__,
+                'color': color,
+                'bgcolor': bgcolor,
+                'shape': 'box',
+                'penwidth': '4pt',
+            }
+            # Render the attributes
+            attr_string = ""
+            for key, val in attrs.items():
+                attr_string += key + " = " + val + ";"
+            # Render this node line
+            out += '"' + str(result._unique_id) + '" [' + attr_string + "];\n"
+            # Render each of the assumption edges
+            for assumption in result.assumptions:
+                out += '"' \
+                    + str(result._unique_id) \
+                    + '" -> "' \
+                    + str(assumption._unique_id) \
+                    + '"'
+        out += "\n}"
+        return out
+
+    def svg_graph(self) -> str:
+        # Generate a GraphViz DOT representation
+        dot_repr = self.dot_graph()
+        # Write out & render the DOT file and open it in a web browser
+        svg = subprocess.run(["dot", "-T", "svg"],
+                             input=dot_repr,
+                             text=True).stdout
+        return svg
+
     def __qed__(self) -> None:
+        # Iterate through all lemmata to determine if everything is okay
+        # Builds a graph of all dependencies
         ok = True
         for _, result in self.__results.items():
             if not result:
                 ok = False
-        assert ok, verification_results.__results.__repr__()
+        assert ok, self.svg_graph()
         self.__qed_called = True
 
 # Script-execution-global set of all results verified so far

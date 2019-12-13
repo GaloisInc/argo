@@ -2,12 +2,25 @@
 
 from argo.connection import ServerConnection
 
+from abc import abstractmethod
 from typing import Any, Dict, Tuple
 from typing_extensions import Protocol
 
 class HasProtocolState(Protocol):
     def protocol_state(self) -> Any: ...
     server_connection : ServerConnection
+
+class ArgoException(Exception):
+    message : str
+    data : Dict[str, Any]
+    code : int
+
+    """A Python representation of the underlying JSON RPC error."""
+    def __init__(self, code : int, message : str, data : Any) -> None:
+        super().__init__(message)
+        self.message = message
+        self.data = data
+        self.code = code
 
 class Interaction:
     """A representation of a concrete interaction with the
@@ -51,27 +64,35 @@ class Interaction:
                 wait_for_reply_to(self.request_id)
         return self._raw_response
 
+    @abstractmethod
     def state(self) -> Any:
         """Subclasses should implement this method to return the protocol
         state after the RPC call is complete. This should be obtained from
         the result of ``self.raw_result()``.
         """
-        raise NotImplementedError('state')
+        pass
 
+    @abstractmethod
     def result(self) -> Any:
         """Subclasses should implement this method to return the protocol
         result after the RPC call is complete and succeeds. This
         should be obtained from the result of ``self.raw_result()``.
         """
-        raise NotImplementedError('result')
+        pass
 
+    @abstractmethod
+    def process_result(self, result : Any) -> Any:
+        """Subclasses should override this, to transform a JSON-encoded result
+        into the application-specific result.
+        """
+        pass
 
-class ArgoException(Exception):
-    """A Python representation of the underlying JSON RPC error."""
-    def __init__(self, code : int, message : str, data : Any) -> None:
-        super().__init__(message)
-        self.data = data
-        self.code = code
+    @abstractmethod
+    def process_error(self, exception : ArgoException) -> Exception:
+        """Subclasses may override this to specialize exceptions to their own
+        domain.
+        """
+        return exception
 
 
 class Command(Interaction):
@@ -86,24 +107,20 @@ class Command(Interaction):
     corresponding command's appropriate representation.
     """
 
-
     def _result_and_state(self) -> Tuple[Any, Any]:
         res = self.raw_result()
         if 'error' in res:
             msg = res['error']['message']
             if 'data' in res['error']:
                 msg += " " + str(res['error']['data'])
-            raise ArgoException(res['error']['code'], msg, res['error'].get('data'))
+            exception = ArgoException(res['error']['code'],
+                                      msg,
+                                      res['error'].get('data'))
+            raise self.process_error(exception)
         elif 'result' in res:
             return (res['result']['answer'], res['result']['state'])
         else:
             raise ValueError("Invalid result type from JSON RPC")
-
-    def process_result(self, result : Any) -> Any:
-        """Subclasses should override this, to transform a JSON-encoded result
-        into the application-specific result.
-        """
-        raise NotImplementedError('process_result')
 
     def state(self) -> Any:
         """Return the protocol state after the command is complete."""
@@ -138,16 +155,12 @@ class Query(Interaction):
             msg = res['error']['message']
             if 'data' in res['error']:
                 msg += " " + str(res['error']['data'])
-            raise ArgoException(res['error']['code'], msg, res['error'].get('data'))
+            exception = ArgoException(res['error']['code'],
+                                      msg,
+                                      res['error'].get('data'))
+            raise self.process_error(exception)
         elif 'result' in res:
             return res['result']['answer']
-
-    def process_result(self, result : Any) -> Any:
-        """Subclasses should override this, to transform a JSON-encoded result
-        into the application-specific result.
-        """
-        raise NotImplementedError('process_result')
-
 
     def result(self) -> Any:
         """Return the result of the query."""

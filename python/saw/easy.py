@@ -7,6 +7,7 @@ from . import SAWConnection
 from argo.connection import ServerConnection
 from argo.interaction import ArgoException
 from . import llvm
+from . import exceptions
 
 designated_connection = None # type: Optional[SAWConnection]
 
@@ -52,13 +53,16 @@ def llvm_load_module(bitcode_file : str) -> LLVMModule:
 class VerificationResult(metaclass=ABCMeta):
     server_name : str
     contract : llvm.Contract
+    _unique_id : uuid.UUID
+
+    def __bool__(self) -> bool:
+        pass
 
 @dataclass
 class VerificationSucceeded(VerificationResult):
     server_name : str
     assumptions : List[VerificationResult]
     contract : llvm.Contract
-    _unique_id : uuid.UUID
 
     def __init__(self,
                  server_name : str,
@@ -78,7 +82,6 @@ class VerificationFailed(VerificationResult):
     assumptions : List[VerificationResult]
     contract : llvm.Contract
     exception : Exception
-    _unique_id : uuid.UUID
 
     def __init__(self,
                  server_name : str,
@@ -106,10 +109,10 @@ class AllVerificationResults:
         self.__qed_called = False
         self.__results[result._unique_id] = result
 
-    def __qed__(self):
+    def __qed__(self) -> None:
         ok = True
         for _, result in self.__results.items():
-            if not result.__bool__():
+            if not result:
                 ok = False
         assert ok, verification_results.__results.__repr__()
         self.__qed_called = True
@@ -153,24 +156,20 @@ def llvm_verify(module : LLVMModule,
         result = VerificationSucceeded(server_name=name,
                                        assumptions=lemmas,
                                        contract=contract)
-    except ArgoException as exception:
-        if exception.code == 10300: # verification exception
-                                    # TODO: use a subclass to represent
-            # roll back to snapshot because the current connection's
-            # latest result is now a verification exception!
-            conn = conn_snapshot
-            set_designated_connection(conn)
-            # assume the verification succeeded
-            conn.llvm_assume(module.server_name,
-                             function,
-                             contract_json,
-                             name).result()
-            result = VerificationFailed(server_name=name,
-                                        assumptions=lemmas,
-                                        contract=contract,
-                                        exception=exception)
-        else:
-            raise exception
+    except exceptions.VerificationError as err:
+        # roll back to snapshot because the current connection's
+        # latest result is now a verification exception!
+        conn = conn_snapshot
+        set_designated_connection(conn)
+        # assume the verification succeeded
+        conn.llvm_assume(module.server_name,
+                            function,
+                            contract_json,
+                            name).result()
+        result = VerificationFailed(server_name=name,
+                                    assumptions=lemmas,
+                                    contract=contract,
+                                    exception=err)
     verification_results.__add_result__(result)
     return result
 

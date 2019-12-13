@@ -24,5 +24,5 @@ contract = {
     "return val": {"setup value": "Cryptol", "expression": "7 : [32]"}
 }
 
-prover = proof_script([abc])
+prover = ProofScript([abc]).to_json()
 print(c.llvm_verify('m', 'seven', [], False, contract, prover, 'ok').result())

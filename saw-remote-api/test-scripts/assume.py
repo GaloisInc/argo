@@ -37,6 +37,6 @@ addone_contract = {
     "return val": {"setup value": "Cryptol", "expression": "8 : [32]"}
 }
 
-prover = proof_script([abc])
+prover = ProofScript([abc]).to_json()
 c.llvm_assume('m', 'seven', seven_contract, 'seven_ov').result()
 c.llvm_verify('m', 'addone', ['seven_ov'], False, addone_contract, prover, 'addone_ov').result()

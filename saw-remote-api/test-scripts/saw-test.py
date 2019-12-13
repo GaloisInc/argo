@@ -33,5 +33,5 @@ contract = {
     "return val": "null"
 }
 
-prover = proof_script([abc])
+prover = ProofScript([abc]).to_json()
 print(c.llvm_verify('m', 'always_null', [], False, contract, prover, 'ok').result())

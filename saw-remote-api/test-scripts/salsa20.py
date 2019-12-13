@@ -173,7 +173,7 @@ def crypt_contract(size : int):
         "return val": zero
     }
 
-prover = proof_script([abc])
+prover = ProofScript([abc]).to_json()
 
 print("Verifying rotl")
 c.llvm_verify('m', 'rotl', [], False, rotl_contract, prover, 'rotl_ov').result()

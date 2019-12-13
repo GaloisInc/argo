@@ -35,5 +35,5 @@ class Swap(Contract):
 
 contract = Swap()
 
-prover = proof_script([abc])
+prover = ProofScript([abc]).to_json()
 print(c.llvm_verify('m', 'swap', [], False, contract.contract(), prover, 'ok').result())

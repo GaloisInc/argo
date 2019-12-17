@@ -226,6 +226,7 @@ class Contract:
     __definition_lineno : Optional[int]
     __definition_filename : Optional[str]
     __unique_id : uuid.UUID
+    __cached_json : Optional[Any]
 
     def __init__(self) -> None:
         self.__pre_state = State(self)
@@ -235,6 +236,7 @@ class Contract:
         self.__returns = None
         self.__in_post = False
         self.__unique_id = uuid.uuid4()
+        self.__cached_json = None
         frame = inspect.currentframe()
         if frame is not None:
             frame = frame.f_back
@@ -339,30 +341,36 @@ class Contract:
         return name
 
     def contract_json(self) -> Any:
-        if self.__state != 'pre':
-            raise Exception("Wrong state: ")
-        self.pre()
-        self.add_default_var_names()
+        if self.__cached_json is not None:
+            return self.__cached_json
+        else:
+            if self.__state != 'pre':
+                raise Exception("Wrong state: ")
+            self.pre()
+            self.add_default_var_names()
 
-        self.__state = 'call'
-        self.call()
+            self.__state = 'call'
+            self.call()
 
-        self.__state = 'post'
-        self.post()
-        self.add_default_var_names()
+            self.__state = 'post'
+            self.post()
+            self.add_default_var_names()
 
-        self.__state = 'done'
+            self.__state = 'done'
 
-        if self.__returns is None:
-            raise Exception("forgot return")
+            if self.__returns is None:
+                raise Exception("forgot return")
 
-        return {'pre vars': [v.to_json() for v in self.__pre_state.fresh],
-                'pre conds': [c.to_json() for c in self.__pre_state.conditions],
-                'pre allocated': [a.to_json() for a in self.__pre_state.allocated],
-                'pre points tos': [pt.to_json() for pt in self.__pre_state.points_to],
-                'argument vals': [a.to_ref_json() for a in self.__arguments] if self.__arguments is not None else [],
-                'post vars': [v.to_json() for v in self.__post_state.fresh],
-                'post conds': [c.to_json() for c in self.__post_state.conditions],
-                'post allocated': [a.to_json() for a in self.__post_state.allocated],
-                'post points tos': [pt.to_json() for pt in self.__post_state.points_to],
-                'return val': self.__returns.to_ref_json()}
+            self.__cached_json = \
+                {'pre vars': [v.to_json() for v in self.__pre_state.fresh],
+                 'pre conds': [c.to_json() for c in self.__pre_state.conditions],
+                 'pre allocated': [a.to_json() for a in self.__pre_state.allocated],
+                 'pre points tos': [pt.to_json() for pt in self.__pre_state.points_to],
+                 'argument vals': [a.to_ref_json() for a in self.__arguments] if self.__arguments is not None else [],
+                 'post vars': [v.to_json() for v in self.__post_state.fresh],
+                 'post conds': [c.to_json() for c in self.__post_state.conditions],
+                 'post allocated': [a.to_json() for a in self.__post_state.allocated],
+                 'post points tos': [pt.to_json() for pt in self.__post_state.points_to],
+                 'return val': self.__returns.to_ref_json()}
+
+            return self.__cached_json

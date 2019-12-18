@@ -1,10 +1,11 @@
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional, Set, Union, Dict, Tuple
+from typing import List, Optional, Set, Union, Dict, Tuple, Any
 import webbrowser
 import subprocess
 import uuid
 import os
+import sys
 
 from . import SAWConnection
 from argo.connection import ServerConnection
@@ -55,7 +56,7 @@ def llvm_load_module(bitcode_file : str) -> LLVMModule:
 
 class VerificationResult(metaclass=ABCMeta):
     server_name : str
-    # assumptions : List[VerificationResult]
+    assumptions : List[Any]
     contract : llvm.Contract
     _unique_id : uuid.UUID
 
@@ -127,14 +128,15 @@ class AllVerificationResults:
                 'color': color,
                 'bgcolor': bgcolor,
                 'shape': 'box',
-                'penwidth': '4pt',
+                'penwidth': '4',
             }
             # Render the attributes
             attr_string = ""
             for key, val in attrs.items():
-                attr_string += key + " = " + val + ";"
+                attr_string += key + " = \"" + val + "\"; "
             # Render this node line
-            out += '"' + str(result._unique_id) + '" [' + attr_string + "];\n"
+            out += '    "' + str(result._unique_id) \
+                + '" [' + attr_string.rstrip('; ') + "];\n"
             # Render each of the assumption edges
             for assumption in result.assumptions:
                 out += '"' \
@@ -142,16 +144,16 @@ class AllVerificationResults:
                     + '" -> "' \
                     + str(assumption._unique_id) \
                     + '"'
-        out += "\n}"
+        out += "}"
         return out
 
     def svg_graph(self) -> str:
         # Generate a GraphViz DOT representation
         dot_repr = self.dot_graph()
         # Write out & render the DOT file and open it in a web browser
-        svg = subprocess.run(["dot", "-T", "svg"],
-                             input=dot_repr,
-                             text=True).stdout
+        svg = subprocess.check_output(["dot", "-T", "svg"],
+                                      input=dot_repr,
+                                      text=True)
         return svg
 
     def __qed__(self) -> None:
@@ -161,7 +163,8 @@ class AllVerificationResults:
         for _, result in self.__results.items():
             if not result:
                 ok = False
-        assert ok, self.svg_graph()
+        # assert ok, "Verification did not succeed."
+        sys.stdout.write(self.svg_graph())
         self.__qed_called = True
 
 # Script-execution-global set of all results verified so far

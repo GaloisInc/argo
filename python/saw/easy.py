@@ -12,6 +12,7 @@ from argo.connection import ServerConnection
 from argo.interaction import ArgoException
 from . import llvm
 from . import exceptions
+from . import proofscript
 
 designated_connection = None # type: Optional[SAWConnection]
 
@@ -56,8 +57,8 @@ def llvm_load_module(bitcode_file : str) -> LLVMModule:
 
 class VerificationResult(metaclass=ABCMeta):
     server_name : str
-    assumptions : List[Any]
-    contract : llvm.Contract
+    assumptions : List[Any]   # really, List[VerificationResult],
+    contract : llvm.Contract  # but mypy doesn't allow recursive types
     _unique_id : uuid.UUID
 
     def __bool__(self) -> bool:
@@ -170,29 +171,22 @@ class AllVerificationResults:
 # Script-execution-global set of all results verified so far
 verification_results = AllVerificationResults()
 
-@dataclass
-class Tactic:
-    name : str
-
-abc = Tactic('abc')
-
 def llvm_verify(module : LLVMModule,
                 function : str,
                 contract : llvm.Contract,
                 lemmas : Optional[List[VerificationResult]] = None,
                 check_sat : bool = False,
-                tactic : Optional[Tactic] = None,
+                script : Optional[proofscript.ProofScript] = None,
                 lemma_name_hint : Optional[str] = None) -> VerificationResult:
 
     if lemmas is None: lemmas = []
-    if tactic is None: tactic = abc
+    if script is None: script = proofscript.ProofScript([proofscript.abc])
 
     lemma_name_hint = contract.__class__.__name__ + "_" + function
     name = llvm.uniquify(lemma_name_hint, used_server_names)
     used_server_names.add(name)
 
     result : VerificationResult
-    contract_json = contract.contract_json()
     conn = get_designated_connection()
     conn_snapshot = conn.snapshot()
     try:
@@ -200,8 +194,8 @@ def llvm_verify(module : LLVMModule,
                          function,
                          [l.server_name for l in lemmas],
                          check_sat,
-                         contract_json,
-                         tactic.name,
+                         contract.to_json(),
+                         script.to_json(),
                          name).result()
         result = VerificationSucceeded(server_name=name,
                                        assumptions=lemmas,
@@ -213,9 +207,9 @@ def llvm_verify(module : LLVMModule,
         set_designated_connection(conn)
         # assume the verification succeeded
         conn.llvm_assume(module.server_name,
-                            function,
-                            contract_json,
-                            name).result()
+                         function,
+                         contract.to_json(),
+                         name).result()
         result = VerificationFailed(server_name=name,
                                     assumptions=lemmas,
                                     contract=contract,

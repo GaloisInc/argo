@@ -19,19 +19,16 @@ class SAWException(Exception):
     def __dir__(self) -> Iterable[str]:
         return chain(super().__dir__(), [str(k) for k in self.data.keys()])
 
-class UnhandledExceptionCode(Exception):
-    def __init__(self) -> None:
-        super().__init__()
-
 def make_saw_exception(ae : ArgoException) -> SAWException:
     """Convert an ArgoException to its corresponding SAWException, failing with
-    UnhandledExceptionCode if the code for this ArgoException is invalid.
+    the original ArgoException if the code for this ArgoException does not
+    correspond to a SAWException.
     """
     specific_exception_class = error_code_table.get(ae.code)
     if specific_exception_class is not None:
         return specific_exception_class(ae)
     else:
-        raise UnhandledExceptionCode()
+        raise ae
 
 # Server value errors:
 class ServerValueError(SAWException): pass
@@ -39,7 +36,11 @@ class NoServerValue(ServerValueError): pass
 class NotACryptolEnvironment(ServerValueError): pass
 class NotAnLLVMModule(ServerValueError): pass
 class NotAnLLVMSetupScript(ServerValueError): pass
+class NotAnLLVMSetupValue(ServerValueError): pass
 class NotAnLLVMMethodSpecification(ServerValueError): pass
+class NotAnLLVMMethodSpecIR(ServerValueError): pass
+class NotASimpset(ServerValueError): pass
+class NotATerm(ServerValueError): pass
 
 # Setup errors:
 class SetupError(SAWException): pass
@@ -64,7 +65,11 @@ error_code_table : Dict[int, Type[SAWException]] = {
     10010: NotACryptolEnvironment,
     10020: NotAnLLVMModule,
     10030: NotAnLLVMSetupScript,
+    10040: NotAnLLVMSetupValue,
     10040: NotAnLLVMMethodSpecification,
+    10050: NotAnLLVMMethodSpecIR,
+    10060: NotASimpset,
+    10070: NotATerm,
     # Setup errors:
     10100: NotSettingUpCryptol,
     10110: NotSettingUpCrucibleLLVM,

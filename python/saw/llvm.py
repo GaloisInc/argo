@@ -340,7 +340,7 @@ class Contract:
 
         return name
 
-    def contract_json(self) -> Any:
+    def to_json(self) -> Any:
         if self.__cached_json is not None:
             return self.__cached_json
         else:

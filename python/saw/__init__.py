@@ -53,9 +53,9 @@ class SAWConnection:
                     lemmas : List[str],
                     check_sat : bool,
                     contract : Any,
-                    tactic : str,
+                    script : Any,
                     lemma_name : str) -> argo.interaction.Command:
-        self.most_recent_result = LLVMVerify(self, module, function, lemmas, check_sat, contract, tactic, lemma_name)
+        self.most_recent_result = LLVMVerify(self, module, function, lemmas, check_sat, contract, script, lemma_name)
         return self.most_recent_result
 
     def llvm_assume(self,

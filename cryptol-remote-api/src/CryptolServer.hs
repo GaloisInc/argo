@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
-
 module CryptolServer (module CryptolServer) where
 
 import Control.Lens

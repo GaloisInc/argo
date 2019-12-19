@@ -70,6 +70,7 @@ library
                    SAWServer.LLVMVerify,
                    SAWServer.NoParams,
                    SAWServer.OK,
+                   SAWServer.ProofScript,
                    SAWServer.SaveTerm,
                    SAWServer.SetupValue,
                    SAWServer.Term,

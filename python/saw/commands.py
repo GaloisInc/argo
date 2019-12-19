@@ -69,14 +69,14 @@ class LLVMVerify(SAWCommand):
             lemmas : List[str],
             check_sat : bool,
             setup : Any,
-            tactic : str,
+            script : str,
             lemma_name : str) -> None:
         params = {'module': module,
                   'function': function,
                   'lemmas': lemmas,
                   'check sat': check_sat,
                   'contract': setup,
-                  'tactic': tactic,
+                  'script': script,
                   'lemma name': lemma_name}
         super(LLVMVerify, self).__init__('SAW/LLVM/verify', params, connection)
 

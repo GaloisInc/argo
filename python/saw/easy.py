@@ -6,6 +6,10 @@ import subprocess
 import uuid
 import os
 import sys
+import inspect
+import posixpath
+import atexit
+import re
 
 from . import SAWConnection
 from argo.connection import ServerConnection
@@ -13,9 +17,12 @@ from argo.interaction import ArgoException
 from . import llvm
 from . import exceptions
 from . import proofscript
+from . import dashboard
 
 designated_connection = None # type: Optional[SAWConnection]
-
+designated_dashboard_path = None # type: Optional[str]
+# Script-execution-global set of all results verified so far
+all_verification_results = None # type: Optional[AllVerificationResults]
 used_server_names = set([]) # type: Set[str]
 
 def fresh_server_name(hint : Optional[str] = None) -> str:
@@ -31,15 +38,51 @@ def get_designated_connection() -> SAWConnection:
     else:
         return designated_connection
 
+def get_designated_url() -> str:
+    global designated_dashboard_path
+    if designated_dashboard_path is None:
+        raise ValueError("There is not yet a designated dashboard URL")
+    else:
+        return "http://localhost:" + str(dashboard.DEFAULT_PORT) \
+            + "/" + designated_dashboard_path
+
 def set_designated_connection(conn: SAWConnection) -> None:
     designated_connection = conn
 
-def connect(command_or_connection : Union[str, ServerConnection]) -> None:
+def connect(command_or_connection : Union[str, ServerConnection],
+            dashboard_path : Optional[str] = None) -> None:
     global designated_connection
+    global designated_dashboard_path
+    global all_verification_results
+    if all_verification_results is None:
+        all_verification_results = AllVerificationResults()
+    else:
+        raise ValueError("There is already an initialized list of verification" \
+                         " results. Did you call `connect()` more than once?")
+    atexit.register(qed) # call qed before shutting down
     if designated_connection is None:
         designated_connection = SAWConnection(command_or_connection)
     else:
-        raise ValueError("There is already a designated connection.")
+        raise ValueError("There is already a designated connection." \
+                         " Did you call `connect()` more than once?")
+    if designated_dashboard_path is None:
+        if dashboard_path is None:
+            current_frame = inspect.currentframe()
+            if current_frame is None:
+                raise ValueError("Cannot automatically assign a dashboard URL" \
+                                 " outside a file; use the explicit option" \
+                                 " `dashboard_path = \"...\"` when calling `connect()`")
+            else:
+                f_back = current_frame.f_back
+                filename = os.path.realpath(inspect.getfile(f_back))
+                dashboard_path = \
+                    re.sub(r'\.py$', '.html', posixpath.join(*filename.split(os.path.sep))) \
+                      .replace('^/', '')
+        designated_dashboard_path = dashboard_path
+    else:
+        raise ValueError("There is already a designated dashboard URL." \
+                         " Did you call `connect()` more than once?")
+    print("Dashboard:", get_designated_url(), file=sys.stderr)
 
 def cryptol_load_file(filename : str) -> None:
     get_designated_connection().cryptol_load_file(filename)
@@ -103,15 +146,17 @@ class VerificationFailed(VerificationResult):
 
 class AllVerificationResults:
     __results : Dict[uuid.UUID, VerificationResult]
-    __qed_called : bool = False
+    __cache_dirty : bool
 
     def __init__(self) -> None:
         self.__results = {}
-        self.__qed_called = True
+        self.__cache_dirty = True
+        self.__update_dashboard__()
 
     def __add_result__(self, result : VerificationResult) -> None:
-        self.__qed_called = False
+        self.__cache_dirty = True
         self.__results[result._unique_id] = result
+        self.__update_dashboard__()
 
     def dot_graph(self) -> str:
         out = "digraph { \n"
@@ -157,6 +202,18 @@ class AllVerificationResults:
                                       text=True)
         return svg
 
+    def dashboard_html(self) -> str:
+        return "<svg>" + self.svg_graph() + "</svg>"
+
+    def __update_dashboard__(self) -> None:
+        if designated_dashboard_path is not None:
+            dashboard.serve_self_refreshing(designated_dashboard_path,
+                                            os.path.basename(designated_dashboard_path),
+                                            self.dashboard_html(),
+                                            within_process=lambda: atexit.unregister(qed))
+        else:
+            ValueError("Attempted to update dashboard before it was initialized")
+
     def __qed__(self) -> None:
         # Iterate through all lemmata to determine if everything is okay
         # Builds a graph of all dependencies
@@ -164,12 +221,11 @@ class AllVerificationResults:
         for _, result in self.__results.items():
             if not result:
                 ok = False
-        # assert ok, "Verification did not succeed."
-        sys.stdout.write(self.svg_graph())
-        self.__qed_called = True
-
-# Script-execution-global set of all results verified so far
-verification_results = AllVerificationResults()
+        if not ok:
+            print("Verification did not succeed.", file=sys.stderr)
+            sys.exit(1)
+        # sys.stdout.write(self.svg_graph())
+        self.__cache_dirty = True
 
 def llvm_verify(module : LLVMModule,
                 function : str,
@@ -214,8 +270,8 @@ def llvm_verify(module : LLVMModule,
                                     assumptions=lemmas,
                                     contract=contract,
                                     exception=err)
-    verification_results.__add_result__(result)
+    all_verification_results.__add_result__(result)
     return result
 
 def qed() -> None:
-    verification_results.__qed__()
+    all_verification_results.__qed__()

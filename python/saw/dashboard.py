@@ -44,17 +44,22 @@ def add_to_tempdir(tempdir : str,
 def serve_temp(path : str,
                content : str,
                port : int = DEFAULT_PORT,
-               location_filename : str = DEFAULT_LOCATION_FILENAME) -> None:
+               location_filename : str = DEFAULT_LOCATION_FILENAME,
+               within_process : Callable[[], None] = (lambda: None)) -> None:
 
     # Try to serve the server on a forked process
     this_pid = os.fork()
     if this_pid != 0: return
 
+    # Call the functions inside this new process
+    # E.g. to unregister atexit hooks from above
+    within_process()
+
     # Make a new temporary directory to serve all our files from, and
     # try to start the server (this may fail if the server is already
     # running)
     try:
-        print("Trying to start new server")
+        # print("Trying to start new server")
         with tempfile.TemporaryDirectory() as tempdir:
             with socketserver.TCPServer(("", port), handle_dir(tempdir)) as httpd:
 
@@ -87,7 +92,7 @@ def serve_temp(path : str,
 
             # Write the string to the specified path, relativized to
             # the tempdir's location
-            print("Using already-extant server")
+            # print("Using already-extant server")
             add_to_tempdir(tempdir, path, content)
 
     # Kill this server process no matter what
@@ -144,13 +149,17 @@ return """
 </html>
 """
 
+def hash_str(s : str) -> str:
+    return hashlib.sha256(s.encode()).hexdigest()
+
 def serve_self_refreshing(path : str,
                           title : str,
                           content : str,
-                          refresh_interval : float = 1,
-                          content_directory : str = DEFAULT_CONTENT_DIRECTORY) -> None:
+                          refresh_interval : float = 0.2,
+                          content_directory : str = DEFAULT_CONTENT_DIRECTORY,
+                          within_process : Callable[[], None] = (lambda: None)) -> None:
     refresh_interval_millis = math.floor(refresh_interval * 1000)
-    body_path = os.path.join(content_directory, hashlib.sha256(path.encode()).hexdigest())
+    body_path = os.path.join(content_directory, hash_str(path))
     html_frame = self_refreshing_html(title, body_path)
     wrapped_content = \
         """<div id="content" data-next-refresh=\"""" \
@@ -160,8 +169,8 @@ def serve_self_refreshing(path : str,
         + content \
         + """</div>"""
     path = os.path.join(path, "index.html")
-    serve_temp(body_path, wrapped_content)
-    serve_temp(path, html_frame)
+    serve_temp(body_path, wrapped_content, within_process=within_process)
+    serve_temp(path, html_frame, within_process=within_process)
 
 def main() -> None:
     i = random.uniform(0, 1)

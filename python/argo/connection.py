@@ -75,7 +75,10 @@ class ServerProcess:
 
     def __del__(self) -> None:
         if self.proc is not None:
-            os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+            try:
+                os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 class ServerConnection:

@@ -29,7 +29,6 @@ class RotlContract(Contract):
 
 
 rotl_result = llvm_verify(mod, 'rotl', RotlContract())
-print(rotl_result)
 
 class TrivialContract(Contract):
     def post(self): self.returns(void)
@@ -71,7 +70,6 @@ class QuarterRoundContract(Contract):
 
 
 qr_result = llvm_verify(mod, 's20_quarterround', QuarterRoundContract(), lemmas=[rotl_result])
-print(qr_result)
 
 
 class OnePointerUpdateContract(Contract):
@@ -102,7 +100,6 @@ class RowRoundContract(OnePointerUpdateContract):
         self.points_to(self.y_p, self.cryptol("rowround")(self.y))
 
 rr_result = llvm_verify(mod, 's20_rowround', RowRoundContract(), lemmas=[qr_result])
-print(rr_result)
 
 
 class ColumnRoundContract(OnePointerUpdateContract):
@@ -114,7 +111,6 @@ class ColumnRoundContract(OnePointerUpdateContract):
         self.points_to(self.y_p, self.cryptol("columnround")(self.y))
 
 cr_result = llvm_verify(mod, 's20_columnround', ColumnRoundContract(), lemmas=[rr_result])
-print(cr_result)
 
 
 class DoubleRoundContract(OnePointerUpdateContract):
@@ -126,7 +122,6 @@ class DoubleRoundContract(OnePointerUpdateContract):
         self.points_to(self.y_p, self.cryptol("doubleround")(self.y))
 
 dr_result = llvm_verify(mod, 's20_doubleround', DoubleRoundContract(), lemmas=[cr_result, rr_result])
-print(dr_result)
 
 
 class HashContract(OnePointerUpdateContract):
@@ -138,7 +133,6 @@ class HashContract(OnePointerUpdateContract):
         self.points_to(self.y_p, self.cryptol("Salsa20")(self.y))
 
 hash_result = llvm_verify(mod, 's20_hash', HashContract(), lemmas=[dr_result])
-print(hash_result)
 
 
 class ExpandContract(Contract):
@@ -161,7 +155,6 @@ class ExpandContract(Contract):
         self.points_to(self.ks_p, self.cryptol("Salsa20_expansion`{a=2}")((self.k, self.n)))
 
 expand_result = llvm_verify(mod, 's20_expand32', ExpandContract(), lemmas=[hash_result])
-print(expand_result)
 
 
 class Salsa20CryptContract(Contract):
@@ -189,4 +182,3 @@ class Salsa20CryptContract(Contract):
         self.points_to(self.m_p, self.cryptol("Salsa20_encrypt")((self.k, self.v, self.m)))
 
 crypt_result = llvm_verify(mod, 's20_crypt32', Salsa20CryptContract(63), lemmas=[expand_result])
-print(crypt_result)

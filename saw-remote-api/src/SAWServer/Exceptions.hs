@@ -27,6 +27,11 @@ import qualified Data.Text as T
 
 import Argo
 
+--------------------------------------------------------------------------------
+-- NOTE: IF YOU MODIFY EXCEPTION CODES OR ADD NEW ONES, THESE CHANGES MUST BE
+--       SYNCHRONIZED WITH ANY CLIENTS (such as argo/python/saw/exceptions.py)
+--------------------------------------------------------------------------------
+
 serverValNotFound ::
   (ToJSON name, Show name) =>
   name {- ^ the name that was not found -}->

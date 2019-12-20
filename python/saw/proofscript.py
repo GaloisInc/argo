@@ -14,7 +14,7 @@ class RME(Prover):
     return { "name": "rme" }
 
 class UnintProver(Prover):
-  def __init__(self, name : str, unints : List[str]):
+  def __init__(self, name : str, unints : List[str]) -> None:
     self.name = name
     self.unints = unints
 
@@ -22,38 +22,38 @@ class UnintProver(Prover):
     return { "name": self.name, "uninterpreted functions": self.unints }
 
 class CVC4(UnintProver):
-  def __init__(self, unints : List[str]):
-    super.__init(self, "cvc4", unints)
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("cvc4", unints)
 
 class Yices(UnintProver):
-  def __init__(self, unints : List[str]):
-    super.__init(self, "yices", unints)
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("yices", unints)
 
 class Z3(UnintProver):
-  def __init__(self, unints : List[str]):
-    super.__init(self, "z3", unints)
+  def __init__(self, unints : List[str]) -> None:
+    super().__init__("z3", unints)
 
 class ProofTactic(metaclass=ABCMeta):
   @abstractmethod
   def to_json(self) -> Any: pass
 
 class UseProver(ProofTactic):
-  def __init__(self, prover : Prover) -> Any:
+  def __init__(self, prover : Prover) -> None:
     self.prover = prover
 
   def to_json(self) -> Any:
-    # TODO: why do we need to pass in self.prover below?
-    return { "tactic": "use prover", "prover": self.prover.to_json(self.prover) }
+    return { "tactic": "use prover",
+             "prover": self.prover.to_json() }
 
 class Unfold(ProofTactic):
-  def __init__(self, names : List[str]) -> Any:
+  def __init__(self, names : List[str]) -> None:
     self.names = names
 
   def to_json(self) -> Any:
     return { "tactic": "unfold", "names": self.names }
 
 class EvaluateGoal(ProofTactic):
-  def __init__(self, names : List[str]) -> Any:
+  def __init__(self, names : List[str]) -> None:
     self.names = names
 
   def to_json(self) -> Any:
@@ -80,14 +80,14 @@ class ProofScript:
   def to_json(self) -> Any:
     return { 'tactics': [t.to_json() for t in self.tactics] }
 
-abc = UseProver(ABC)
-rme = UseProver(RME)
+abc = UseProver(ABC())
+rme = UseProver(RME())
 
-def cvc4(unints : List[str]):
+def cvc4(unints : List[str]) -> ProofTactic:
   return UseProver(CVC4(unints))
 
-def yices(unints : List[str]):
+def yices(unints : List[str]) -> ProofTactic:
   return UseProver(Yices(unints))
 
-def z3(unints : List[str]):
+def z3(unints : List[str]) -> ProofTactic:
   return UseProver(Z3(unints))

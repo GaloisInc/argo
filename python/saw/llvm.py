@@ -5,6 +5,8 @@ import pprint
 import re
 from typing import Any, List, Optional, Set, Union
 from typing_extensions import Literal
+import inspect
+import uuid
 
 class LLVMType(metaclass=ABCMeta):
     @abstractmethod
@@ -64,14 +66,17 @@ class CryptolTerm(SetupTerm):
 
         return CryptolTerm(out_term)
 
+    def __repr__(self) -> str:
+        return f"CryptolTerm({self.expression!r})"
+
     def to_json(self) -> Any:
         return cryptoltypes.to_cryptol(self.expression)
 
     def to_ref_json(self) -> Any:
         return {'setup value': 'Cryptol', 'expression': self.to_json()}
 
-    def __to_cryptol__(self, _ty : Any) -> Any:
-        return self.expression
+    def __to_cryptol__(self, ty : Any) -> Any:
+        return self.expression.__to_cryptol__(ty)
 
 class FreshVar(SetupTerm):
     name : Optional[str]
@@ -97,6 +102,15 @@ class FreshVar(SetupTerm):
         if self.name is None:
             self.name = self.spec.get_fresh_name()
         return {'setup value': 'saved', 'name': self.name}
+
+    def __gt__(self, other : cryptoltypes.CryptolJSON) -> CryptolTerm:
+        gt = CryptolTerm("(>)")
+        return gt(self, other)
+
+    def __lt__(self, other : cryptoltypes.CryptolJSON) -> CryptolTerm:
+        lt = CryptolTerm("(<)")
+        return lt(self, other)
+
 
 class Allocated(SetupTerm):
     name : Optional[str]
@@ -138,9 +152,6 @@ def uniquify(x : str, used : Set[str]) -> str:
         x = next_name(x)
     return x
 
-class Prop(metaclass=ABCMeta):
-    @abstractmethod
-    def to_json(self) -> Any: pass
 
 class PointsTo:
     def __init__(self, pointer : SetupVal, target : SetupVal) -> None:
@@ -157,7 +168,7 @@ class PointsTo:
 class State:
     contract : 'Contract'
     fresh : List[FreshVar] = field(default_factory=list)
-    conditions : List[Prop] = field(default_factory=list)
+    conditions : List[CryptolTerm] = field(default_factory=list)
     allocated : List[Allocated] = field(default_factory=list)
     points_to : List[PointsTo] = field(default_factory=list)
 
@@ -179,7 +190,22 @@ class Void:
     def to_json(self) -> Any:
         return None
 
+    def to_ref_json(self) -> Any:
+        return None
+
 void = Void()
+
+@dataclass
+class VerifyResult:
+    contract : 'Contract'
+    lemma_name : str
+
+# Lemma names are generated deterministically with respect to a
+# particular Python execution trace. This means that re-running the
+# same script will be fast when using caching, but REPL-style usage
+# will be slow, invalidating the cache at each step. We should be
+# smarter about this.
+used_lemma_names = set([]) # type: Set[str]
 
 class Contract:
     __used_names : Set[str]
@@ -195,6 +221,11 @@ class Contract:
 
     __in_post : bool
 
+    __definition_lineno : Optional[int]
+    __definition_filename : Optional[str]
+    __unique_id : uuid.UUID
+    __cached_json : Optional[Any]
+
     def __init__(self) -> None:
         self.__pre_state = State(self)
         self.__post_state = State(self)
@@ -202,6 +233,16 @@ class Contract:
         self.__arguments = None
         self.__returns = None
         self.__in_post = False
+        self.__unique_id = uuid.uuid4()
+        self.__cached_json = None
+        frame = inspect.currentframe()
+        if frame is not None:
+            frame = frame.f_back
+            self.__definition_lineno = frame.f_lineno
+            self.__definition_filename = frame.f_code.co_filename
+        else:
+            self.__definition_lineno = None
+            self.__definition_filename = None
 
     # To be overridden by users
     def pre(self) -> None:
@@ -262,6 +303,16 @@ class Contract:
         else:
             raise Exception("wrong state")
 
+    def proclaim(self, condition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
+        if not isinstance(condition, CryptolTerm):
+            condition = CryptolTerm(condition)
+        if self.__state == 'pre':
+            self.__pre_state.conditions.append(condition)
+        elif self.__state == 'post':
+            self.__post_state.conditions.append(condition)
+        else:
+            raise Exception("wrong state")
+
     def arguments(self, *args : SetupVal) -> None:
         if self.__arguments is not None:
             raise ValueError("The arguments are already specified")
@@ -277,32 +328,47 @@ class Contract:
         else:
             raise ValueError("Not in postcondition")
 
+    def lemma_name(self, hint  : Optional[str] = None) -> str:
+        if hint is None:
+            hint = self.__class__.__name__
 
-    def contract(self) -> Any:
-        if self.__state != 'pre':
-            raise Exception("Wrong state")
-        self.pre()
-        self.add_default_var_names()
+        name = uniquify('lemma_' + hint, used_lemma_names)
 
-        self.__state = 'call'
-        self.call()
+        used_lemma_names.add(name)
 
-        self.__state = 'post'
-        self.post()
-        self.add_default_var_names()
+        return name
 
-        self.__state = 'done'
+    def to_json(self) -> Any:
+        if self.__cached_json is not None:
+            return self.__cached_json
+        else:
+            if self.__state != 'pre':
+                raise Exception("Wrong state: ")
+            self.pre()
+            self.add_default_var_names()
 
-        if self.__returns is None:
-            raise Exception("forgot return")
+            self.__state = 'call'
+            self.call()
 
-        return {'pre vars': [v.to_json() for v in self.__pre_state.fresh],
-                'pre conds': [c.to_json() for c in self.__pre_state.conditions],
-                'pre allocated': [a.to_json() for a in self.__pre_state.allocated],
-                'pre points tos': [pt.to_json() for pt in self.__pre_state.points_to],
-                'argument vals': [a.to_ref_json() for a in self.__arguments] if self.__arguments is not None else [],
-                'post vars': [v.to_json() for v in self.__post_state.fresh],
-                'post conds': [c.to_json() for c in self.__post_state.conditions],
-                'post allocated': [a.to_json() for a in self.__post_state.allocated],
-                'post points tos': [pt.to_json() for pt in self.__post_state.points_to],
-                'return val': self.__returns.to_json()}
+            self.__state = 'post'
+            self.post()
+            self.add_default_var_names()
+
+            self.__state = 'done'
+
+            if self.__returns is None:
+                raise Exception("forgot return")
+
+            self.__cached_json = \
+                {'pre vars': [v.to_json() for v in self.__pre_state.fresh],
+                 'pre conds': [c.to_json() for c in self.__pre_state.conditions],
+                 'pre allocated': [a.to_json() for a in self.__pre_state.allocated],
+                 'pre points tos': [pt.to_json() for pt in self.__pre_state.points_to],
+                 'argument vals': [a.to_ref_json() for a in self.__arguments] if self.__arguments is not None else [],
+                 'post vars': [v.to_json() for v in self.__post_state.fresh],
+                 'post conds': [c.to_json() for c in self.__post_state.conditions],
+                 'post allocated': [a.to_json() for a in self.__post_state.allocated],
+                 'post points tos': [pt.to_json() for pt in self.__post_state.points_to],
+                 'return val': self.__returns.to_ref_json()}
+
+            return self.__cached_json

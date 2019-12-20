@@ -1,6 +1,6 @@
 import os
 import os.path
-import saw
+import saw.connection as saw
 from saw.proofscript import *
 
 dir_path = os.path.dirname(os.path.realpath(__file__))

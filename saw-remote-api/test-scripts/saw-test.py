@@ -1,7 +1,7 @@
 print("Starting")
 import os
 import os.path
-import saw
+import saw.connection as saw
 from saw.proofscript import *
 
 print("Imported")

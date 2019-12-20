@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 import os.path
-import saw
+import saw.connection as saw
 from saw.llvm import *
 from saw.proofscript import *
 

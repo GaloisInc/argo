@@ -1,4 +1,4 @@
-from saw.easy import *
+from saw import *
 from saw.llvm import uint32_t, Contract, void
 
 import os
@@ -33,4 +33,3 @@ connect("cabal new-exec --verbose=0 saw-remote-api -- --dynamic4")
 mod = llvm_load_module(swap_bc)
 
 result = llvm_verify(mod, 'swap', Swap())
-

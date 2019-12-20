@@ -8,8 +8,6 @@ from typing_extensions import Literal
 import inspect
 import uuid
 
-from . import SAWConnection
-
 class LLVMType(metaclass=ABCMeta):
     @abstractmethod
     def to_json(self) -> Any: pass

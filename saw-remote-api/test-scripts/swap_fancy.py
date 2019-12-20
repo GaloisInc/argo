@@ -1,6 +1,6 @@
 import os
 import os.path
-import saw
+import saw.connection as saw
 from saw.llvm import uint32_t, Contract, void
 from saw.proofscript import *
 

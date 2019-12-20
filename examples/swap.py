@@ -34,5 +34,3 @@ connect("saw-remote-api --dynamic4")
 mod = llvm_load_module(swap_bc)
 
 result = llvm_verify(mod, 'swap', Swap())
-
-print(result)

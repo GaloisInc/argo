@@ -38,3 +38,16 @@ the code for the Python client libraries, also either globally or within
 a `virtualenv`, using
 
     `pip install -e python/`
+
+Running Examples
+================
+
+Once you have installed the necessary dependencies and set up your
+environment variables as described above, the scripts in the `examples`
+directory should be directly runnable. The `.py` files in that directory
+are executable and have an interpreter directive to tell the shell to
+run them with `python3`.
+
+When the verification scripts run, they will print a URL which will show
+you a graphical indication of verification status as it progresses.  For
+this to work, the Graphviz `dot` program must be in your `PATH`.

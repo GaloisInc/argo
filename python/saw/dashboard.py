@@ -30,7 +30,7 @@ class TempDirHandler(http.server.SimpleHTTPRequestHandler):
 def handle_dir(directory: str) -> Any:
     return functools.partial(TempDirHandler, directory=directory)
 
-def run_dashboard(port : int = DEFAULT_PORT,
+def launch_dashboard(port : int = DEFAULT_PORT,
                   location_filename : str = DEFAULT_LOCATION_FILENAME):
     if os.fork() != 0: return
     with tempfile.TemporaryDirectory() as tempdir:
@@ -81,7 +81,7 @@ def serve_temp(path : str, content : str,
         except ConnectionRefusedError:
             if not attempted_server:
                 # Serve all files in the temporary directory, forever:
-                proc = multiprocessing.Process(target=run_dashboard,
+                proc = multiprocessing.Process(target=launch_dashboard,
                                                args=(port, location_filename))
                 proc.start()
 
@@ -148,7 +148,7 @@ def hash_str(s : str) -> str:
 def serve_self_refreshing(path : str,
                           title : str,
                           content : str,
-                          refresh_interval : float = 0.2,
+                          refresh_interval : float = 0.3,
                           content_directory : str = DEFAULT_CONTENT_DIRECTORY) -> None:
     refresh_interval_millis = math.floor(refresh_interval * 1000)
     body_path = os.path.join(content_directory, hash_str(path))
@@ -167,4 +167,4 @@ def serve_self_refreshing(path : str,
 if __name__ == "__main__":
     try: port = int(sys.argv[1])
     except IndexError: port = None
-    run_dashboard(port=port)
+    launch_dashboard(port=port)

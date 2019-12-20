@@ -47,6 +47,7 @@ def get_designated_url() -> str:
             + "/" + designated_dashboard_path
 
 def set_designated_connection(conn: SAWConnection) -> None:
+    global designated_connection
     designated_connection = conn
 
 def connect(command_or_connection : Union[str, ServerConnection],
@@ -146,15 +147,14 @@ class VerificationFailed(VerificationResult):
 
 class AllVerificationResults:
     __results : Dict[uuid.UUID, VerificationResult]
-    __cache_dirty : bool
+    __qed_called : bool
 
     def __init__(self) -> None:
         self.__results = {}
-        self.__cache_dirty = True
         self.__update_dashboard__()
+        self.__qed_called = False
 
     def __add_result__(self, result : VerificationResult) -> None:
-        self.__cache_dirty = True
         self.__results[result._unique_id] = result
         self.__update_dashboard__()
 
@@ -163,18 +163,19 @@ class AllVerificationResults:
         for _, result in self.__results.items():
             # Determine the node color
             if result:
-                color = "blue"
-                bgcolor = "lightblue"
+                color = "green"
+                bgcolor = "lightgreen"
             else:
                 color = "red"
-                bgcolor = "lightred"
+                bgcolor = "lightpink"
             # Determine the node attributes
             attrs : Dict[str, str] = {
                 'label': result.contract.__class__.__name__,
                 'color': color,
                 'bgcolor': bgcolor,
-                'shape': 'box',
-                'penwidth': '4',
+                'fontname': "Helvetica",
+                'shape': 'rect',
+                'penwidth': '2',
             }
             # Render the attributes
             attr_string = ""
@@ -184,13 +185,21 @@ class AllVerificationResults:
             out += '    "' + str(result._unique_id) \
                 + '" [' + attr_string.rstrip('; ') + "];\n"
             # Render each of the assumption edges
-            for assumption in result.assumptions:
-                out += '"' \
-                    + str(result._unique_id) \
-                    + '" -> "' \
+            for assumption in result.assumptions[:]:
+                attrs: Dict[str, str] = {
+                    'penwidth': '2',
+                    'arrowType': 'open',
+                }
+                attr_string = ""
+                for key, val in attrs.items():
+                    attr_string += key + " = \"" + val + "\"; "
+                out += '    "' \
                     + str(assumption._unique_id) \
-                    + '"'
+                    + '" -> "' \
+                    + str(result._unique_id) \
+                    + '" [' + attr_string.rstrip('; ') + '];\n'
         out += "}"
+        # print(out)
         return out
 
     def svg_graph(self) -> str:
@@ -203,7 +212,19 @@ class AllVerificationResults:
         return svg
 
     def dashboard_html(self) -> str:
-        return "<svg>" + self.svg_graph() + "</svg>"
+        if self.__qed_called:
+            if self.all_ok():
+                progress = '✅'
+            else:
+                progress = '🚫'
+        else:
+            progress = '<i style="font-weight: normal">(running...)</i>'
+        return \
+            '<center><h1 style="font-family: Helvetica, Arial, sans-serif">' \
+            + os.path.basename(designated_dashboard_path) + ': ' + progress \
+            + """</h1><div height="100%><svg height="100%" width="100%">""" \
+            + self.svg_graph() \
+            + "</svg></div></center>"
 
     def __update_dashboard__(self) -> None:
         if designated_dashboard_path is not None:
@@ -213,18 +234,21 @@ class AllVerificationResults:
         else:
             ValueError("Attempted to update dashboard before it was initialized")
 
-    def __qed__(self) -> None:
+    def all_ok(self):
         # Iterate through all lemmata to determine if everything is okay
         # Builds a graph of all dependencies
         ok = True
         for _, result in self.__results.items():
             if not result:
                 ok = False
-        if not ok:
+        return ok
+
+    def __qed__(self) -> None:
+        self.__qed_called = True
+        self.__update_dashboard__()
+        if not self.all_ok():
             print("Verification did not succeed.", file=sys.stderr)
             sys.exit(1)
-        # sys.stdout.write(self.svg_graph())
-        self.__cache_dirty = True
 
 def llvm_verify(module : LLVMModule,
                 function : str,
@@ -258,9 +282,12 @@ def llvm_verify(module : LLVMModule,
     except exceptions.VerificationError as err:
         # roll back to snapshot because the current connection's
         # latest result is now a verification exception!
-        conn = conn_snapshot
-        set_designated_connection(conn)
-        # assume the verification succeeded
+        set_designated_connection(conn_snapshot)
+        conn = get_designated_connection()
+        # Assume the verification succeeded
+        # TODO: What if you **can't** assume, because the contract can't be
+        # understood (e.g. "types are not memory compatible")? We can't move
+        # forward, how to signal this?
         conn.llvm_assume(module.server_name,
                          function,
                          contract.to_json(),
@@ -269,6 +296,7 @@ def llvm_verify(module : LLVMModule,
                                     assumptions=lemmas,
                                     contract=contract,
                                     exception=err)
+    global all_verification_results
     if all_verification_results is not None:
         all_verification_results.__add_result__(result)
     else:
@@ -276,7 +304,9 @@ def llvm_verify(module : LLVMModule,
                          " connection is not yet initialized")
     return result
 
+@atexit.register
 def qed() -> None:
+    global all_verification_results
     if all_verification_results is not None:
         all_verification_results.__qed__()
     else:

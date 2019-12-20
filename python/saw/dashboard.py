@@ -14,6 +14,7 @@ import hashlib
 import math
 import subprocess
 import multiprocessing
+from pathlib import Path
 from typing import Optional, Any, Type, Callable
 
 DEFAULT_PORT = 27182
@@ -56,6 +57,7 @@ def add_to_tempdir(tempdir : str,
     (dirs, filename) = os.path.split(temp_path)
     os.makedirs(dirs, exist_ok=True)
     print(content, end='', flush=True, file=open(temp_path, 'w'))
+    Path(temp_path).touch(exist_ok=True)
 
 def serve_temp(path : str, content : str,
                port : int = DEFAULT_PORT,
@@ -152,7 +154,7 @@ def hash_str(s : str) -> str:
 def serve_self_refreshing(path : str,
                           title : str,
                           content : str,
-                          refresh_interval : float = 0.3,
+                          refresh_interval : float = 0.5,
                           content_directory : str = DEFAULT_CONTENT_DIRECTORY,
                           within_process : Optional[Callable[[], None]] = None) -> None:
     refresh_interval_millis = math.floor(refresh_interval * 1000)

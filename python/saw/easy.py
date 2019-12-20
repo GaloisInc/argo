@@ -124,7 +124,7 @@ class VerificationSucceeded(VerificationResult):
 
 @dataclass
 class VerificationFailed(VerificationResult):
-    exception : Exception
+    exception : exceptions.VerificationError
 
     def __init__(self,
                  server_name : str,
@@ -182,7 +182,7 @@ class AllVerificationResults:
                 'label': result.contract.__class__.__name__,
                 'color': color,
                 'bgcolor': bgcolor,
-                'fontname': "Helvetica",
+                'fontname': "Courier",
                 'shape': 'rect',
                 'penwidth': '2',
             }
@@ -220,6 +220,22 @@ class AllVerificationResults:
                                       text=True)
         return svg
 
+    def errors_html(self) -> str:
+        # Generate an HTML representation of all the errors so far
+        out = '<div style="padding: 20pt; font-family: Courier; text-align: left">'
+        if not self.all_ok():
+            out += '<h2>Errors:</h2>'
+        for _, result in self.__results.items():
+            if isinstance(result, VerificationFailed):
+                out += '<p style="font-size: 16pt">'
+                out += '<b>' + result.contract.__class__.__name__ + ': </b>'
+                out += '<span style="color: firebrick">'
+                out += str(result.exception)
+                out += '</span>'
+                out += '</p>'
+        out += '</div>'
+        return out
+
     def dashboard_html(self) -> str:
         progress : str
         if self.__qed_called:
@@ -236,11 +252,14 @@ class AllVerificationResults:
         if designated_dashboard_path is not None:
             proof_name : str = os.path.basename(designated_dashboard_path)
             return \
-                '<center><h1 style="font-family: Helvetica, Arial, sans-serif">' \
+                '<center><h1 style="font-family: Courier">' \
                 + proof_name + ': ' + progress \
                 + """</h1><div height="100%><svg height="100%" width="100%">""" \
                 + self.svg_graph() \
-                + "</svg></div></center>"
+                + "</svg></div>" \
+                + "<div>" \
+                + self.errors_html() \
+                + "</div></center>"
         else:
             raise ValueError("Can't render dashboard HTML before dashboard is initialized")
 

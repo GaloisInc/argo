@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from saw.easy import *
+from saw import *
 from saw.llvm import uint32_t, Contract, void
 
 import os

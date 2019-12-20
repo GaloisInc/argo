@@ -2,9 +2,8 @@
 import os
 import os.path
 from cryptol.cryptoltypes import to_cryptol
-import saw
 from saw.llvm import Contract, LLVMArrayType, uint8_t, uint32_t, void
-from saw.easy import *
+from saw import *
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 connect("saw-remote-api --dynamic4")

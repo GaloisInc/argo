@@ -110,9 +110,6 @@ class VerificationResult(metaclass=ABCMeta):
 
 @dataclass
 class VerificationSucceeded(VerificationResult):
-    server_name : str
-    contract : llvm.Contract
-
     def __init__(self,
                  server_name : str,
                  assumptions : List[VerificationResult],
@@ -127,8 +124,6 @@ class VerificationSucceeded(VerificationResult):
 
 @dataclass
 class VerificationFailed(VerificationResult):
-    server_name : str
-    contract : llvm.Contract
     exception : Exception
 
     def __init__(self,
@@ -145,14 +140,28 @@ class VerificationFailed(VerificationResult):
     def __bool__(self) -> bool:
         return False
 
+@dataclass
+class AssumptionFailed(VerificationFailed):
+    def __init__(self,
+                 server_name : str,
+                 assumptions : List[VerificationResult],
+                 contract : llvm.Contract,
+                 exception : Exception) -> None:
+        super().__init__(server_name,
+                         assumptions,
+                         contract,
+                         exception)
+
 class AllVerificationResults:
     __results : Dict[uuid.UUID, VerificationResult]
     __qed_called : bool
+    __proceeding_normally : bool
 
     def __init__(self) -> None:
         self.__results = {}
         self.__update_dashboard__()
         self.__qed_called = False
+        self.__proceeding_normally = True
 
     def __add_result__(self, result : VerificationResult) -> None:
         self.__results[result._unique_id] = result
@@ -169,7 +178,7 @@ class AllVerificationResults:
                 color = "red"
                 bgcolor = "lightpink"
             # Determine the node attributes
-            attrs : Dict[str, str] = {
+            node_attrs : Dict[str, str] = {
                 'label': result.contract.__class__.__name__,
                 'color': color,
                 'bgcolor': bgcolor,
@@ -178,26 +187,26 @@ class AllVerificationResults:
                 'penwidth': '2',
             }
             # Render the attributes
-            attr_string = ""
-            for key, val in attrs.items():
-                attr_string += key + " = \"" + val + "\"; "
+            node_attr_string = ""
+            for key, val in node_attrs.items():
+                node_attr_string += key + " = \"" + val + "\"; "
             # Render this node line
             out += '    "' + str(result._unique_id) \
-                + '" [' + attr_string.rstrip('; ') + "];\n"
+                + '" [' + node_attr_string.rstrip('; ') + "];\n"
             # Render each of the assumption edges
             for assumption in result.assumptions[:]:
-                attrs: Dict[str, str] = {
+                edge_attrs: Dict[str, str] = {
                     'penwidth': '2',
                     'arrowType': 'open',
                 }
-                attr_string = ""
-                for key, val in attrs.items():
-                    attr_string += key + " = \"" + val + "\"; "
+                edge_attr_string = ""
+                for key, val in edge_attrs.items():
+                    edge_attr_string += key + " = \"" + val + "\"; "
                 out += '    "' \
                     + str(assumption._unique_id) \
                     + '" -> "' \
                     + str(result._unique_id) \
-                    + '" [' + attr_string.rstrip('; ') + '];\n'
+                    + '" [' + edge_attr_string.rstrip('; ') + '];\n'
         out += "}"
         # print(out)
         return out
@@ -212,29 +221,39 @@ class AllVerificationResults:
         return svg
 
     def dashboard_html(self) -> str:
+        progress : str
         if self.__qed_called:
+            progress = '<span style="font-weight: normal">'
             if self.all_ok():
-                progress = '✅'
+                progress += '✅ (successfully verified!)'
+            elif self.__proceeding_normally:
+                progress += '🚫 (failed to verify)'
             else:
-                progress = '🚫'
+                progress += '🚫 (incomplete: exception during proving)'
+            progress += '</span>'
         else:
             progress = '<i style="font-weight: normal">(running...)</i>'
-        return \
-            '<center><h1 style="font-family: Helvetica, Arial, sans-serif">' \
-            + os.path.basename(designated_dashboard_path) + ': ' + progress \
-            + """</h1><div height="100%><svg height="100%" width="100%">""" \
-            + self.svg_graph() \
-            + "</svg></div></center>"
+        if designated_dashboard_path is not None:
+            proof_name : str = os.path.basename(designated_dashboard_path)
+            return \
+                '<center><h1 style="font-family: Helvetica, Arial, sans-serif">' \
+                + proof_name + ': ' + progress \
+                + """</h1><div height="100%><svg height="100%" width="100%">""" \
+                + self.svg_graph() \
+                + "</svg></div></center>"
+        else:
+            raise ValueError("Can't render dashboard HTML before dashboard is initialized")
 
     def __update_dashboard__(self) -> None:
         if designated_dashboard_path is not None:
             dashboard.serve_self_refreshing(designated_dashboard_path,
                                             os.path.basename(designated_dashboard_path),
-                                            self.dashboard_html())
+                                            self.dashboard_html(),
+                                            within_process=lambda: atexit.unregister(qed))
         else:
             ValueError("Attempted to update dashboard before it was initialized")
 
-    def all_ok(self):
+    def all_ok(self) -> bool:
         # Iterate through all lemmata to determine if everything is okay
         # Builds a graph of all dependencies
         ok = True
@@ -243,12 +262,17 @@ class AllVerificationResults:
                 ok = False
         return ok
 
-    def __qed__(self) -> None:
+    def __qed__(self, complete : bool) -> None:
         self.__qed_called = True
+        self.__proceeding_normally = \
+            self.__proceeding_normally and complete
         self.__update_dashboard__()
         if not self.all_ok():
             print("Verification did not succeed.", file=sys.stderr)
             sys.exit(1)
+        else:
+            print("Verification succeeded.", file=sys.stderr)
+            sys.exit(0)
 
 def llvm_verify(module : LLVMModule,
                 function : str,
@@ -268,6 +292,7 @@ def llvm_verify(module : LLVMModule,
     result : VerificationResult
     conn = get_designated_connection()
     conn_snapshot = conn.snapshot()
+    abort_proof = False
     try:
         conn.llvm_verify(module.server_name,
                          function,
@@ -279,36 +304,48 @@ def llvm_verify(module : LLVMModule,
         result = VerificationSucceeded(server_name=name,
                                        assumptions=lemmas,
                                        contract=contract)
+    # If the verification did not succeed...
     except exceptions.VerificationError as err:
         # roll back to snapshot because the current connection's
         # latest result is now a verification exception!
         set_designated_connection(conn_snapshot)
         conn = get_designated_connection()
         # Assume the verification succeeded
-        # TODO: What if you **can't** assume, because the contract can't be
-        # understood (e.g. "types are not memory compatible")? We can't move
-        # forward, how to signal this?
-        conn.llvm_assume(module.server_name,
-                         function,
-                         contract.to_json(),
-                         name).result()
-        result = VerificationFailed(server_name=name,
-                                    assumptions=lemmas,
-                                    contract=contract,
-                                    exception=err)
+        try:
+            conn.llvm_assume(module.server_name,
+                             function,
+                             contract.to_json(),
+                             name).result()
+            result = VerificationFailed(server_name=name,
+                                        assumptions=lemmas,
+                                        contract=contract,
+                                        exception=err)
+        # If something stopped us from even **assuming**...
+        except exceptions.VerificationError as err:
+            set_designated_connection(conn_snapshot)
+            result = AssumptionFailed(server_name=name,
+                                      assumptions=lemmas,
+                                      contract=contract,
+                                      exception=err)
+            abort_proof = True
+
+    # Add the verification result to the list
     global all_verification_results
     if all_verification_results is not None:
         all_verification_results.__add_result__(result)
     else:
         raise ValueError("Could not track verification result because" \
                          " connection is not yet initialized")
-    return result
+
+    # Abort the proof if we failed to assume a failed verification, otherwise
+    # return the result of the verification
+    if abort_proof:
+        all_verification_results.__qed__(False)
+    else:
+        return result
 
 @atexit.register
 def qed() -> None:
     global all_verification_results
     if all_verification_results is not None:
-        all_verification_results.__qed__()
-    else:
-        raise ValueError("Could not finish proof because connection is not yet" \
-                         "initialized")
+        all_verification_results.__qed__(True)

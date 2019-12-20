@@ -31,8 +31,11 @@ def handle_dir(directory: str) -> Any:
     return functools.partial(TempDirHandler, directory=directory)
 
 def launch_dashboard(port : int = DEFAULT_PORT,
-                  location_filename : str = DEFAULT_LOCATION_FILENAME):
+                     location_filename : str = DEFAULT_LOCATION_FILENAME,
+                     within_process : Optional[Callable[[], None]] = None) -> None:
+    if within_process is not None: within_process()
     if os.fork() != 0: return
+    if within_process is not None: within_process()
     with tempfile.TemporaryDirectory() as tempdir:
         with socketserver.TCPServer(("", port), handle_dir(tempdir)) as httpd:
             # Store the location of the tempdir in itself
@@ -56,7 +59,8 @@ def add_to_tempdir(tempdir : str,
 
 def serve_temp(path : str, content : str,
                port : int = DEFAULT_PORT,
-               location_filename : str = DEFAULT_LOCATION_FILENAME) -> None:
+               location_filename : str = DEFAULT_LOCATION_FILENAME,
+               within_process : Optional[Callable[[], None]] = None) -> None:
     attempted_server = False
     success = False
     while not success:
@@ -82,7 +86,7 @@ def serve_temp(path : str, content : str,
             if not attempted_server:
                 # Serve all files in the temporary directory, forever:
                 proc = multiprocessing.Process(target=launch_dashboard,
-                                               args=(port, location_filename))
+                                               args=(port, location_filename, within_process))
                 proc.start()
 
                 # Try to connect to new server after a slight pause
@@ -149,7 +153,8 @@ def serve_self_refreshing(path : str,
                           title : str,
                           content : str,
                           refresh_interval : float = 0.3,
-                          content_directory : str = DEFAULT_CONTENT_DIRECTORY) -> None:
+                          content_directory : str = DEFAULT_CONTENT_DIRECTORY,
+                          within_process : Optional[Callable[[], None]] = None) -> None:
     refresh_interval_millis = math.floor(refresh_interval * 1000)
     body_path = os.path.join(content_directory, hash_str(path))
     html_frame = self_refreshing_html(title, body_path)
@@ -161,10 +166,10 @@ def serve_self_refreshing(path : str,
         + content \
         + """</div>"""
     path = os.path.join(path, "index.html")
-    serve_temp(body_path, wrapped_content)
-    serve_temp(path, html_frame)
+    serve_temp(body_path, wrapped_content, within_process=within_process)
+    serve_temp(path, html_frame, within_process=within_process)
 
 if __name__ == "__main__":
     try: port = int(sys.argv[1])
-    except IndexError: port = None
+    except IndexError: port = DEFAULT_PORT
     launch_dashboard(port=port)

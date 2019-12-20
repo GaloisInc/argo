@@ -76,7 +76,7 @@ def connect(command_or_connection : Union[str, ServerConnection],
                 f_back = current_frame.f_back
                 filename = os.path.realpath(inspect.getfile(f_back))
                 dashboard_path = \
-                    re.sub(r'\.py$', '.html', posixpath.join(*filename.split(os.path.sep))) \
+                    re.sub(r'\.py$', '', posixpath.join(*filename.split(os.path.sep))) \
                       .replace('^/', '')
         designated_dashboard_path = dashboard_path
     else:
@@ -209,8 +209,7 @@ class AllVerificationResults:
         if designated_dashboard_path is not None:
             dashboard.serve_self_refreshing(designated_dashboard_path,
                                             os.path.basename(designated_dashboard_path),
-                                            self.dashboard_html(),
-                                            within_process=lambda: atexit.unregister(qed))
+                                            self.dashboard_html())
         else:
             ValueError("Attempted to update dashboard before it was initialized")
 
@@ -270,8 +269,16 @@ def llvm_verify(module : LLVMModule,
                                     assumptions=lemmas,
                                     contract=contract,
                                     exception=err)
-    all_verification_results.__add_result__(result)
+    if all_verification_results is not None:
+        all_verification_results.__add_result__(result)
+    else:
+        raise ValueError("Could not track verification result because" \
+                         " connection is not yet initialized")
     return result
 
 def qed() -> None:
-    all_verification_results.__qed__()
+    if all_verification_results is not None:
+        all_verification_results.__qed__()
+    else:
+        raise ValueError("Could not finish proof because connection is not yet" \
+                         "initialized")

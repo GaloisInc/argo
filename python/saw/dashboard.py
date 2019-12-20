@@ -12,21 +12,34 @@ import types
 import time
 import hashlib
 import math
+import subprocess
+import multiprocessing
 from typing import Optional, Any, Type, Callable
 
 DEFAULT_PORT = 27182
 DEFAULT_LOCATION_FILENAME = '.__LOCATION__'
-DEFAULT_CONTENT_DIRECTORY = '.__CONTENT__'
-MAX_RETRY_ATTEMPTS = 3
+DEFAULT_CONTENT_DIRECTORY= '.__CONTENT__'
 
 class TempDirHandler(http.server.SimpleHTTPRequestHandler):
     # Suppress logging output
-    def log_message(*args : Any, **kwargs : Any) -> Any: pass
+    def log_message(*args : Any, **kwargs : Any) -> Any:
+        pass
 
 # Serving files from an arbitrary base path
 # Source: https://stackoverflow.com/a/46332163/568988
 def handle_dir(directory: str) -> Any:
     return functools.partial(TempDirHandler, directory=directory)
+
+def run_dashboard(port : int = DEFAULT_PORT,
+                  location_filename : str = DEFAULT_LOCATION_FILENAME):
+    if os.fork() != 0: return
+    with tempfile.TemporaryDirectory() as tempdir:
+        with socketserver.TCPServer(("", port), handle_dir(tempdir)) as httpd:
+            # Store the location of the tempdir in itself
+            print(tempdir, end='', flush=True,
+                  file=open(os.path.join(tempdir, location_filename), 'w'))
+            # Serve all files in the temporary directory:
+            httpd.serve_forever()
 
 class NoTempDirResponse(Exception):
     def __init__(self, status : int):
@@ -41,62 +54,42 @@ def add_to_tempdir(tempdir : str,
     os.makedirs(dirs, exist_ok=True)
     print(content, end='', flush=True, file=open(temp_path, 'w'))
 
-def serve_temp(path : str,
-               content : str,
+def serve_temp(path : str, content : str,
                port : int = DEFAULT_PORT,
-               location_filename : str = DEFAULT_LOCATION_FILENAME,
-               within_process : Callable[[], None] = (lambda: None)) -> None:
-
-    # Try to serve the server on a forked process
-    this_pid = os.fork()
-    if this_pid != 0: return
-
-    # Call the functions inside this new process
-    # E.g. to unregister atexit hooks from above
-    within_process()
-
-    # Make a new temporary directory to serve all our files from, and
-    # try to start the server (this may fail if the server is already
-    # running)
-    try:
-        # print("Trying to start new server")
-        with tempfile.TemporaryDirectory() as tempdir:
-            with socketserver.TCPServer(("", port), handle_dir(tempdir)) as httpd:
-
-                # Store the location of the tempdir in itself
-                print(tempdir, end='', flush=True,
-                      file=open(os.path.join(tempdir, location_filename), 'w'))
-
-                # Write the string to the specified path, relativized
-                # to the tempdir's location
-                add_to_tempdir(tempdir, path, content)
-
-                # Serve all files in the temporary directory:
-                httpd.serve_forever()
-
-    # Or if we can't start the server on this port, we should try to
-    # interact with the extant server there
-    except OSError as e:
-        if e.errno == 48:
-            # See if a server is running at our port and ask it where its
-            # tempdir is located
+               location_filename : str = DEFAULT_LOCATION_FILENAME) -> None:
+    attempted_server = False
+    success = False
+    while not success:
+        # See if a server is already running at our port
+        try:
             conn = http.client.HTTPConnection("127.0.0.1", port=port)
             conn.request("GET", location_filename)
             response = conn.getresponse()
             status = response.status
 
-            # Any running version of our server should tell us where its
-            # tempdir is
+            # Any running version of our server should tell us where its tempdir is
             if status != 200: raise NoTempDirResponse(status)
             tempdir = response.read().decode("utf-8")
 
-            # Write the string to the specified path, relativized to
-            # the tempdir's location
-            # print("Using already-extant server")
+            # Write the string to the specified path in the tempdir
             add_to_tempdir(tempdir, path, content)
 
-    # Kill this server process no matter what
-    finally: sys.exit()
+            # It worked!
+            success = True
+
+        # If not, start a server
+        except ConnectionRefusedError:
+            if not attempted_server:
+                # Serve all files in the temporary directory, forever:
+                proc = multiprocessing.Process(target=run_dashboard,
+                                               args=(port, location_filename))
+                proc.start()
+
+                # Try to connect to new server after a slight pause
+                attempted_server = True
+                time.sleep(0.1)
+            else:
+                raise ValueError("Could not start dashboard server")
 
 def self_refreshing_html(title : str, body_path : str) -> str: \
 return """
@@ -156,8 +149,7 @@ def serve_self_refreshing(path : str,
                           title : str,
                           content : str,
                           refresh_interval : float = 0.2,
-                          content_directory : str = DEFAULT_CONTENT_DIRECTORY,
-                          within_process : Callable[[], None] = (lambda: None)) -> None:
+                          content_directory : str = DEFAULT_CONTENT_DIRECTORY) -> None:
     refresh_interval_millis = math.floor(refresh_interval * 1000)
     body_path = os.path.join(content_directory, hash_str(path))
     html_frame = self_refreshing_html(title, body_path)
@@ -169,13 +161,10 @@ def serve_self_refreshing(path : str,
         + content \
         + """</div>"""
     path = os.path.join(path, "index.html")
-    serve_temp(body_path, wrapped_content, within_process=within_process)
-    serve_temp(path, html_frame, within_process=within_process)
-
-def main() -> None:
-    i = random.uniform(0, 1)
-    serve_self_refreshing("", str(i), "<h1>" + str(i) + "</h1>",
-                          refresh_interval=0.25)
+    serve_temp(body_path, wrapped_content)
+    serve_temp(path, html_frame)
 
 if __name__ == "__main__":
-    main()
+    try: port = int(sys.argv[1])
+    except IndexError: port = None
+    run_dashboard(port=port)

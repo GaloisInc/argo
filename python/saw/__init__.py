@@ -43,7 +43,7 @@ def get_designated_url() -> str:
     if designated_dashboard_path is None:
         raise ValueError("There is not yet a designated dashboard URL")
     else:
-        return "http://localhost:" + str(dashboard.DEFAULT_PORT) \
+        return "http://localhost:" + str(dashboard.MYXINE_PORT) \
             + "/" + designated_dashboard_path
 
 def set_designated_connection(conn: connection.SAWConnection) -> None:
@@ -267,8 +267,7 @@ class AllVerificationResults:
         if designated_dashboard_path is not None:
             dashboard.serve_self_refreshing(designated_dashboard_path,
                                             os.path.basename(designated_dashboard_path),
-                                            self.dashboard_html(),
-                                            within_process=lambda: atexit.unregister(qed))
+                                            self.dashboard_html())
         else:
             ValueError("Attempted to update dashboard before it was initialized")
 

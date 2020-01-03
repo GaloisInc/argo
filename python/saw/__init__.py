@@ -238,26 +238,29 @@ class AllVerificationResults:
 
     def dashboard_html(self) -> str:
         progress : str
+        progress = '<div style="font-weight: normal; font-family: Courier; font-size: 20pt; padding: 20pt">'
         if self.__qed_called:
-            progress = '<span style="font-weight: normal">'
             if self.all_ok():
-                progress += '✅ (successfully verified!)'
+                progress += '✅ <span style="font-size: 25pt">(successfully verified!)</span>'
             elif self.__proceeding_normally:
-                progress += '🚫 (failed to verify)'
+                progress += '🚫 <span style="font-size: 25pt">(failed to verify)</span>'
             else:
-                progress += '🚫 (incomplete: exception during proving)'
-            progress += '</span>'
+                progress += '🚫 <span style="font-size: 25pt">(incomplete: exception during proving)</span>'
+            progress += '</div>'
         else:
-            progress = '<i style="font-weight: normal">(running...)</i>'
+            progress += dashboard.LOADING_SVG \
+                + '<br/><span style="font-size: 25pt"><i style="font-weight: normal">(running...)</i></span>'
+        progress += "</div>"
         if designated_dashboard_path is not None:
             proof_name : str = os.path.basename(designated_dashboard_path)
             return \
                 '<center><h1 style="font-family: Courier">' \
-                + proof_name + ': ' + progress \
+                + proof_name \
                 + """</h1><div height="100%><svg height="100%" width="100%">""" \
                 + self.svg_graph() \
                 + "</svg></div>" \
                 + "<div>" \
+                + progress \
                 + self.errors_html() \
                 + "</div></center>"
         else:

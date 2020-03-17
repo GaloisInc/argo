@@ -256,9 +256,9 @@ class AllVerificationResults:
             return \
                 '<center><h1 style="font-family: Courier">' \
                 + proof_name \
-                + """</h1><div height="100%><svg height="100%" width="100%">""" \
+                + """</h1><div height="100%>""" \
                 + self.svg_graph() \
-                + "</svg></div>" \
+                + "</div>" \
                 + "<div>" \
                 + progress \
                 + self.errors_html() \

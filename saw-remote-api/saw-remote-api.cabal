@@ -79,9 +79,7 @@ library
 executable saw-remote-api
   import: deps, warnings
   main-is:             Main.hs
-  build-depends:       async                ^>= 2.2.1,
-                       optparse-applicative ^>= 0.14,
-                       saw-remote-api
+  build-depends:       saw-remote-api
   -- other-modules:
   -- other-extensions:
   hs-source-dirs: saw-remote-api

@@ -67,8 +67,6 @@ executable cryptol-remote-api
 
   build-depends:
     cryptol-remote-api,
-    optparse-applicative ^>= 0.14,
-    async                ^>= 2.2.1,
     sbv
 
 test-suite test-cryptol-remote-api

@@ -33,6 +33,7 @@ common deps
     lens                        ^>= 4.17,
     mtl                         ^>= 2.2,
     network                     ^>= 3.0.1,
+    optparse-applicative        ^>= 0.14,
     scientific                  ^>= 0.3,
     scotty                      ^>= 0.11.3,
     text                        ^>= 1.2.3,
@@ -43,9 +44,10 @@ common deps
 library
   import: deps, warnings
   exposed-modules:
-    Argo.CacheTree
-    Argo.HistoryWrapper
     Argo
+    Argo.CacheTree
+    Argo.DefaultMain
+    Argo.HistoryWrapper
     Argo.Socket
     Argo.Netstring
   hs-source-dirs: src

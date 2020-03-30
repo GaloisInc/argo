@@ -14,13 +14,14 @@ cache:
 git:
   submodules: false
 
+python:
+  - "3.7"
 
 matrix:
   include:
     - env: CABALVER="3.0" GHCVER="8.6.5"
       compiler: ": #GHC 8.6.5"
       addons: {apt: {packages: [cabal-install-3.0,ghc-8.6.5,python3-venv], sources: [hvr-ghc]}}
-      python: 3.7
 #    - env: CABALVER="3.0" GHCVER="8.4.4"
 #      compiler: ": #GHC 8.4.4"
 #      addons: {apt: {packages: [cabal-install-3.0,ghc-8.4.4], sources: [hvr-ghc]}}

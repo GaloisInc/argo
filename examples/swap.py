@@ -29,7 +29,7 @@ class Swap(Contract):
         self.points_to(self.y_pointer, self.x)
         self.returns(void)
 
-connect("saw-remote-api --dynamic4")
+connect("cabal -v0 v2-run exe:saw-remote-api -- --dynamic4")
 
 mod = llvm_load_module(swap_bc)
 

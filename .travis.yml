@@ -28,7 +28,7 @@ before_install:
   - unset CC
   - export PATH=/opt/ghc/bin:$HOME/.cabal/bin:$PATH
   - which python3
-  - update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7
+  - update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 100
 
 script:
   - git submodule init

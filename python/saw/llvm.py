@@ -236,10 +236,9 @@ class Contract:
         self.__unique_id = uuid.uuid4()
         self.__cached_json = None
         frame = inspect.currentframe()
-        if frame is not None:
-            frame = frame.f_back
-            self.__definition_lineno = frame.f_lineno
-            self.__definition_filename = frame.f_code.co_filename
+        if frame is not None and frame.f_back is not None:
+            self.__definition_lineno = frame.f_back.f_lineno
+            self.__definition_filename = frame.f_back.f_code.co_filename
         else:
             self.__definition_lineno = None
             self.__definition_filename = None

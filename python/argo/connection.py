@@ -64,6 +64,9 @@ class ServerProcess:
                 env=self.get_environment(),
                 start_new_session=True,
                 universal_newlines=True)
+
+            if self.proc.stdout is None:
+                raise ValueError("Server process has no stdout")
             out_line = self.proc.stdout.readline()
 
             match = re.match(r'PORT (\d+)', out_line)

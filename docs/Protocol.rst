@@ -61,17 +61,22 @@ every message has a parameter field named ``state``.
 
 When the first message is sent from the client to the server, the
 ``state`` parameter should be initialized to the empty JSON array
-``[]``. Replies from the server contain a new state that should be
+``[]``. Replies from the server may contain a new state that should be
 used in subsequent requests, so that state changes executed by the
-request are visible. In particular, replies are always a JSON object
-with two fields:
+request are visible.
 
-``state``
-  The new state, to be sent in subsequent requests
+In particular, per JSON-RPC, non-error replies are always a JSON
+object that contains a ``result`` field. The result field always
+contains an ``answer`` field, and contains ``state`` when the request
+resulted in a new server state.
 
 ``answer``
   The value returned as a response to the request (the precise
   contents depend on which request was sent)
+
+``state``
+  The new state, to be sent in subsequent requests. If this field is
+  missing, then the client should re-use the state from their request.
 
 While the state representations returned from the server presently
 have a predictable relationship to the commands that gave rise to

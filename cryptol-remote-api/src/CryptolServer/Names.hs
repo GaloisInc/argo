@@ -10,7 +10,7 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 
 import Cryptol.Parser.Name (PName(..))
-import Cryptol.ModuleSystem.Env (dynamicEnv, focusedEnv)
+import Cryptol.ModuleSystem.Env (ModContext(..), ModuleEnv(..), DynamicEnv(..), focusedEnv)
 import Cryptol.ModuleSystem.Interface (IfaceDecl(..), IfaceDecls(..))
 import Cryptol.ModuleSystem.Name (Name)
 import Cryptol.ModuleSystem.NamingEnv (NamingEnv(..), lookupValNames, shadowing)
@@ -26,8 +26,8 @@ import CryptolServer.Data.Type
 visibleNames :: JSON.Value -> Method ServerState [NameInfo]
 visibleNames _ =
   do me <- view moduleEnv <$> getState
-     let (_dyDecls, dyNames, _dyDisp) = dynamicEnv me
-     let (_fParams, fDecls, fNames, _fDisp) = focusedEnv me
+     let DEnv { deNames = dyNames } = meDynEnv me
+     let ModContext { mctxDecls = fDecls, mctxNames = fNames} = focusedEnv me
      let inScope = Map.keys (neExprs $ dyNames `shadowing` fNames)
      return $ concatMap (getInfo fNames (ifDecls fDecls)) inScope
 

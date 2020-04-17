@@ -15,7 +15,6 @@ optional-packages:
   deps/crucible/crucible-llvm/
   deps/crucible/crucible-jvm/
   deps/crucible/crux/
-  deps/crucible/what4/
   deps/cryptol-verifier/
   deps/jvm-parser/
   deps/jvm-verifier/
@@ -35,3 +34,4 @@ optional-packages:
   deps/elf-edit/
   deps/dwarf/
   deps/saw-core-what4
+  deps/what4/what4

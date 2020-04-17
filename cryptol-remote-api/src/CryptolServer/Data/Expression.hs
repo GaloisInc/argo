@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -25,7 +26,10 @@ import Numeric (showHex)
 
 import Cryptol.Eval (evalSel)
 import Cryptol.Eval.Monad
-import Cryptol.Eval.Value
+import Cryptol.Eval.Concrete (evalPrim)
+import Cryptol.Eval.Concrete.Value hiding (Concrete)
+import qualified Cryptol.Eval.Concrete.Value as C
+import Cryptol.Eval.Value (GenValue(..), asWordVal, enumerateSeqMap)
 import Cryptol.Parser
 import Cryptol.Parser.AST (Bind(..), BindDef(..), Decl(..), Expr(..), Type(..), PName(..), Literal(..), Named(..), NumInfo(..))
 import Cryptol.Parser.Position (Located(..), emptyRange)
@@ -287,10 +291,11 @@ bytesToInt bs =
 
 readBack :: PrimMap -> TC.Type -> Value -> Eval Expression
 readBack prims ty val =
+  let ?evalPrim = evalPrim in
   case TC.tNoUser ty of
     TC.TRec tfs ->
       Record . HM.fromList <$>
-        sequence [ do fv <- evalSel val (RecordSel f Nothing)
+        sequence [ do fv <- evalSel C.Concrete val (RecordSel f Nothing)
                       fa <- readBack prims t fv
                       return (identText f, fa)
                  | (f, t) <- tfs
@@ -298,7 +303,7 @@ readBack prims ty val =
     TC.TCon (TC.TC (TC.TCTuple _)) [] ->
       pure Unit
     TC.TCon (TC.TC (TC.TCTuple _)) ts ->
-      Tuple <$> sequence [ do v <- evalSel val (TupleSel n Nothing)
+      Tuple <$> sequence [ do v <- evalSel C.Concrete val (TupleSel n Nothing)
                               a <- readBack prims t v
                               return a
                          | (n, t) <- zip [0..] ts
@@ -316,7 +321,7 @@ readBack prims ty val =
         return Unit
       | contents == TC.TCon (TC.TC TC.TCBit) []
       , VWord _ wv <- val ->
-        do BV w v <- wv >>= asWordVal
+        do BV w v <- wv >>= asWordVal C.Concrete
            return $ Num Hex (T.pack $ showHex v "") w
       | TC.TCon (TC.TC (TC.TCNum k)) [] <- len
       , VSeq _l (enumerateSeqMap k -> vs) <- val ->

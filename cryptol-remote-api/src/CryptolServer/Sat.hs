@@ -13,10 +13,11 @@ import Data.Scientific (floatingOrInteger)
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Cryptol.Eval.Value (Value)
+import Cryptol.Eval.Concrete.Value (Value)
 import Cryptol.ModuleSystem (checkExpr, getPrimMap)
 import Cryptol.ModuleSystem.Env (DynamicEnv(..), meDynEnv, meSolverConfig)
-import Cryptol.Symbolic (ProverCommand(..), ProverResult(..), QueryType(..), SatNum(..), proverNames, satProve)
+import Cryptol.Symbolic (ProverCommand(..), ProverResult(..), QueryType(..), SatNum(..))
+import Cryptol.Symbolic.SBV (proverNames, satProve)
 import Cryptol.TypeCheck.AST (Expr, Type)
 import Cryptol.TypeCheck.Solve (defaultReplExpr)
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT

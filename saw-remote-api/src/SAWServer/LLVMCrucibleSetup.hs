@@ -1,10 +1,11 @@
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 module SAWServer.LLVMCrucibleSetup
   ( startLLVMCrucibleSetup
@@ -24,7 +25,6 @@ import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Parameterized.Some
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -40,8 +40,7 @@ import SAWScript.Crucible.LLVM.Builtins
     , crucible_return
     , crucible_precond
     , crucible_postcond )
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible (translateModule)
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (AllLLVM, LLVMModule(..), anySetupTerm, anySetupNull)
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (AllLLVM, anySetupTerm, anySetupNull, loadLLVMModule)
 import SAWScript.Options (defaultOptions)
 import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -231,11 +230,11 @@ llvmLoadModule (LLVMLoadModuleParams serverName fileName) =
      case tasks of
        (_:_) -> raise $ notAtTopLevel $ map fst tasks
        [] ->
-         liftIO (LLVM.parseBitCodeFromFile fileName) >>=
-         \case
-           Left err -> raise (cantLoadLLVMModule (LLVM.formatError err))
-           Right llvmMod ->
-             do halloc <- getHandleAlloc
-                Some mtrans <- liftIO $ Crucible.translateModule halloc llvmMod
-                setServerVal serverName (Some (CMS.LLVMModule fileName llvmMod mtrans))
-                ok
+         do let ?laxArith = False -- TODO read from config
+            halloc <- getHandleAlloc
+            loaded <- liftIO (CMS.loadLLVMModule fileName halloc)
+            case loaded of
+              Left err -> raise (cantLoadLLVMModule (LLVM.formatError err))
+              Right llvmMod ->
+                do setServerVal serverName llvmMod
+                   ok

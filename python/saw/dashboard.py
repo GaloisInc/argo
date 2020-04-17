@@ -47,7 +47,7 @@ def launch_dashboard(port : int = DEFAULT_PORT,
 
 class NoTempDirResponse(Exception):
     def __init__(self, status : int):
-        super().__init__("No temp directory location info found")
+        super().__init__(f"No temp directory location info found (status: {status})")
         self.status = status
 
 def add_to_tempdir(tempdir : str,

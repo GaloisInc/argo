@@ -36,6 +36,7 @@ import Cryptol.Parser.Position (Located(..), emptyRange)
 import Cryptol.Parser.Selector
 -- import Cryptol.Prims.Syntax
 import Cryptol.TypeCheck.AST (PrimMap)
+import Cryptol.TypeCheck.SimpType (tRebuild)
 import qualified Cryptol.TypeCheck.Type as TC
 import Cryptol.Utils.Ident
 
@@ -81,25 +82,28 @@ data Expression =
   | Sequence ![Expression]
   | Tuple ![Expression]
   | Integer !Integer
+  | IntegerModulo !Integer !Integer -- ^ value, modulus
   | Concrete !Text
   | Let ![LetBinding] !Expression
   | Application !Expression !(NonEmpty Expression)
   deriving (Eq, Ord, Show)
 
-data ExpressionTag = TagNum | TagRecord | TagSequence | TagTuple | TagUnit | TagLet | TagApp
+data ExpressionTag =
+    TagNum | TagRecord | TagSequence | TagTuple | TagUnit | TagLet | TagApp | TagIntMod
 
 instance JSON.FromJSON ExpressionTag where
   parseJSON =
     withText "tag" $
     \case
-      "bits"     -> pure TagNum
-      "unit"     -> pure TagUnit
-      "record"   -> pure TagRecord
-      "sequence" -> pure TagSequence
-      "tuple"    -> pure TagTuple
-      "let"      -> pure TagLet
-      "call"     -> pure TagApp
-      _          -> empty
+      "bits"           -> pure TagNum
+      "unit"           -> pure TagUnit
+      "record"         -> pure TagRecord
+      "sequence"       -> pure TagSequence
+      "tuple"          -> pure TagTuple
+      "let"            -> pure TagLet
+      "call"           -> pure TagApp
+      "integer modulo" -> pure TagIntMod
+      _                -> empty
 
 instance JSON.ToJSON ExpressionTag where
   toJSON TagNum      = "bits"
@@ -109,6 +113,7 @@ instance JSON.ToJSON ExpressionTag where
   toJSON TagUnit     = "unit"
   toJSON TagLet      = "let"
   toJSON TagApp      = "call"
+  toJSON TagIntMod   = "integer modulo"
 
 instance JSON.FromJSON Expression where
   parseJSON v = bool v <|> integer v <|> concrete v <|> obj v
@@ -151,6 +156,8 @@ instance JSON.FromJSON Expression where
                   Let <$> o .: "binders" <*> o .: "body"
                 TagApp ->
                   Application <$> o .: "function" <*> o .: "arguments"
+                TagIntMod ->
+                  IntegerModulo <$> o .: "integer" <*> o .: "modulus"
 
 instance ToJSON Encoding where
   toJSON Hex = String "hex"
@@ -160,6 +167,11 @@ instance JSON.ToJSON Expression where
   toJSON Unit = object [ "expression" .= TagUnit ]
   toJSON (Bit b) = JSON.Bool b
   toJSON (Integer i) = JSON.Number (fromInteger i)
+  toJSON (IntegerModulo i n) =
+    object [ "expression" .= TagIntMod
+           , "integer" .= JSON.Number (fromInteger i)
+           , "modulus" .= JSON.Number (fromInteger n)
+           ]
   toJSON (Concrete expr) = toJSON expr
   toJSON (Num enc dat w) =
     object [ "expression" .= TagNum
@@ -248,6 +260,11 @@ getExpr (Integer i) =
     ETyped
       (ELit (ECNum i DecLit))
       (TUser (UnQual (mkIdent "Integer")) [])
+getExpr (IntegerModulo i n) =
+  return $
+    ETyped
+      (ELit (ECNum i DecLit))
+      (TUser (UnQual (mkIdent "Z")) [TNum n])
 getExpr (Num enc txt w) =
   do d <- decode enc txt
      return $ ETyped
@@ -289,6 +306,11 @@ bytesToInt :: BS.ByteString -> Integer
 bytesToInt bs =
   BS.foldl' (\acc w -> (acc * 256) + toInteger w) 0 bs
 
+typeNum :: (Alternative f, Integral a) => TC.Type -> f a
+typeNum (tRebuild -> (TC.TCon (TC.TC (TC.TCNum n)) [])) =
+  pure $ fromIntegral n
+typeNum _ = empty
+
 readBack :: PrimMap -> TC.Type -> Value -> Eval Expression
 readBack prims ty val =
   let ?evalPrim = evalPrim in
@@ -315,6 +337,10 @@ readBack prims ty val =
     TC.TCon (TC.TC TC.TCInteger) [] ->
       case val of
         VInteger i -> pure (Integer i)
+        _ -> mismatchPanic
+    TC.TCon (TC.TC TC.TCIntMod) [typeNum -> Just n] ->
+      case val of
+        VInteger i -> pure (IntegerModulo i n)
         _ -> mismatchPanic
     TC.TCon (TC.TC TC.TCSeq) [TC.tNoUser -> len, TC.tNoUser -> contents]
       | len == TC.tZero ->

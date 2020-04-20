@@ -132,11 +132,11 @@ prove params = do
 
 interpretProofScript :: ProofScript -> Method SAWState (SV.ProofScript SV.SatResult)
 interpretProofScript (ProofScript ts) = go ts
-  where go [UseProver ABC]            = return $ SB.satABC
-        go [UseProver (CVC4 unints)]  = return $ SB.satWhat4_UnintCVC4 unints
-        go [UseProver RME]            = return $ SB.satRME
-        go [UseProver (Yices unints)] = return $ SB.satWhat4_UnintYices unints
-        go [UseProver (Z3 unints)]    = return $ SB.satWhat4_UnintZ3 unints
+  where go [UseProver ABC]            = return $ SB.proveABC
+        go [UseProver (CVC4 unints)]  = return $ SB.proveUnintCVC4 unints
+        go [UseProver RME]            = return $ SB.proveRME
+        go [UseProver (Yices unints)] = return $ SB.proveUnintYices unints
+        go [UseProver (Z3 unints)]    = return $ SB.proveUnintZ3 unints
         go [Trivial]                  = return $ SB.trivial
         go [AssumeUnsat]              = return $ SB.assumeUnsat
         go (BetaReduceGoal : rest)    = do

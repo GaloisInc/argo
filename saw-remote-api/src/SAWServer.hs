@@ -158,6 +158,9 @@ initialState =
                 , rwPrimsAvail = mempty
                 , rwSMTArrayMemoryModel = False
                 , rwProfilingFile = Nothing
+                , rwCrucibleAssertThenAssume = False
+                , rwLaxArith = False
+                , rwWhat4HashConsing = False
                 }
      return (SAWState emptyEnv bic [] ro rw)
 

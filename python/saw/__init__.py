@@ -264,13 +264,14 @@ class AllVerificationResults:
             raise ValueError("Can't render dashboard HTML before dashboard is initialized")
 
     def __update_dashboard__(self) -> None:
-        if designated_dashboard_path is not None:
-            dashboard.serve_self_refreshing(designated_dashboard_path,
-                                            os.path.basename(designated_dashboard_path),
-                                            self.dashboard_html(),
-                                            within_process=lambda: atexit.unregister(qed))
-        else:
-            ValueError("Attempted to update dashboard before it was initialized")
+        pass
+        # if designated_dashboard_path is not None:
+        #     dashboard.serve_self_refreshing(designated_dashboard_path,
+        #                                     os.path.basename(designated_dashboard_path),
+        #                                     self.dashboard_html(),
+        #                                     within_process=lambda: atexit.unregister(qed))
+        # else:
+        #     ValueError("Attempted to update dashboard before it was initialized")
 
     def all_ok(self) -> bool:
         # Iterate through all lemmata to determine if everything is okay

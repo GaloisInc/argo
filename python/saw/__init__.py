@@ -75,10 +75,11 @@ def connect(command_or_connection : Union[str, ServerConnection],
                                  " `dashboard_path = \"...\"` when calling `connect()`")
             else:
                 f_back = current_frame.f_back
-                filename = os.path.realpath(inspect.getfile(f_back))
-                dashboard_path = \
-                    re.sub(r'\.py$', '', posixpath.join(*filename.split(os.path.sep))) \
-                      .replace('^/', '')
+                if f_back is not None:
+                    filename = os.path.realpath(inspect.getfile(f_back))
+                    dashboard_path = \
+                        re.sub(r'\.py$', '', posixpath.join(*filename.split(os.path.sep))) \
+                          .replace('^/', '')
         designated_dashboard_path = dashboard_path
     else:
         raise ValueError("There is already a designated dashboard URL." \

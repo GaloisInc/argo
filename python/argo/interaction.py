@@ -87,10 +87,9 @@ class Interaction:
         """
         pass
 
-    @abstractmethod
     def process_error(self, exception : ArgoException) -> Exception:
         """Subclasses may override this to specialize exceptions to their own
-        domain.
+        domain. The default implementation returns the exception unchanged.
         """
         return exception
 

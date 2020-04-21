@@ -20,6 +20,7 @@ import Data.Parameterized.Some
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Crypto.Hash as Hash
+import qualified Crypto.Hash.Conduit as Hash
 
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
@@ -175,6 +176,7 @@ validateSAWState :: SAWState -> IO Bool
 validateSAWState sawState =
   checkAll
     [ CryptolServer.validateServerState cryptolState
+    , checkAll $ uncurry checkHash <$> M.assocs (view trackedFiles sawState)
     ]
   where
     checkAll [] = pure True
@@ -184,10 +186,14 @@ validateSAWState sawState =
            then checkAll cs
            else pure False
 
+    checkHash path hash =
+      do currentHash <- Hash.hashFile path
+         pure (currentHash == hash)
+
     cryptolState =
-      CryptolServer.ServerState Nothing moduleEnv
-    moduleEnv =
-      CryptolEnv.eModuleEnv . rwCryptol . view sawTopLevelRW $ sawState
+      CryptolServer.ServerState Nothing
+        (CryptolEnv.eModuleEnv . rwCryptol . view sawTopLevelRW $ sawState)
+
 
 newtype SAWEnv =
   SAWEnv { sawEnvBindings :: Map ServerName ServerVal }

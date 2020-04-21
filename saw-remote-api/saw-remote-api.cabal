@@ -44,6 +44,7 @@ common deps
                  crucible,
                  crucible-jvm,
                  cryptonite,
+                 cryptonite-conduit,
                  directory,
                  jvm-verifier,
                  lens,
@@ -76,6 +77,7 @@ library
                    SAWServer.SetupValue,
                    SAWServer.Term,
                    SAWServer.TopLevel
+                   SAWServer.TrackFile
 
 executable saw-remote-api
   import: deps, warnings

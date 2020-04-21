@@ -43,6 +43,7 @@ common deps
                  cryptol-verifier,
                  crucible,
                  crucible-jvm,
+                 cryptonite,
                  directory,
                  jvm-verifier,
                  lens,

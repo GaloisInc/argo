@@ -172,6 +172,12 @@ initialState =
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 
+-- NOTE: KWF: 2020-04-22: This function could introduce a race condition: if a
+-- file changes on disk after its hash is computed by validateSAWState, but
+-- before the function returns and its result is used to inform whether to
+-- recompute a cached result, the cached result may be used even if it is
+-- associated with stale filesystem state. See the discussion of this issue at:
+-- https://github.com/GaloisInc/argo/pull/70#discussion_r412462908
 validateSAWState :: SAWState -> IO Bool
 validateSAWState sawState =
   checkAll

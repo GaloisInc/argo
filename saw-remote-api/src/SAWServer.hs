@@ -176,7 +176,7 @@ validateSAWState :: SAWState -> IO Bool
 validateSAWState sawState =
   checkAll
     [ CryptolServer.validateServerState cryptolState
-    , checkAll $ uncurry checkHash <$> M.assocs (view trackedFiles sawState)
+    , checkAll $ map (uncurry checkHash) (M.assocs (view trackedFiles sawState))
     ]
   where
     checkAll [] = pure True

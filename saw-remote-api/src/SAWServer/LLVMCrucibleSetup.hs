@@ -53,6 +53,7 @@ import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
 import SAWServer.CryptolExpression (getTypedTermOfCExp)
 import SAWServer.Exceptions
 import SAWServer.OK
+import SAWServer.TrackFile
 import SAWServer.SetupValue ()
 
 data Contract cryptolExpr =
@@ -237,4 +238,5 @@ llvmLoadModule (LLVMLoadModuleParams serverName fileName) =
               Left err -> raise (cantLoadLLVMModule (LLVM.formatError err))
               Right llvmMod ->
                 do setServerVal serverName llvmMod
+                   trackFile fileName
                    ok

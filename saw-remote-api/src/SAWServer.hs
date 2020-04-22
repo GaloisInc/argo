@@ -19,6 +19,8 @@ import Data.Parameterized.Pair
 import Data.Parameterized.Some
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Crypto.Hash as Hash
+import qualified Crypto.Hash.Conduit as Hash
 
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
@@ -28,6 +30,7 @@ import qualified Lang.Crucible.JVM as CJ
 import Text.LLVM.AST (Type)
 import qualified Verifier.Java.Codebase as JSS
 import Verifier.SAW.CryptolEnv (CryptolEnv)
+import qualified Verifier.SAW.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
 import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule, Term)
 import Verifier.SAW.Term.Functor (mkModuleName)
@@ -47,9 +50,9 @@ import qualified Verifier.Java.SAWBackend as JavaSAW
 import qualified Verifier.LLVM.Backend.SAW as LLVMSAW
 import qualified Cryptol.Utils.Ident as Cryptol
 
-
 import Argo
 import CryptolServer.Data.Expression
+import qualified CryptolServer (validateServerState, ServerState(..))
 import SAWServer.Exceptions
 
 type SAWCont = (SAWEnv, SAWTask)
@@ -85,10 +88,11 @@ data SAWState =
     , _sawTask :: [(SAWTask, SAWEnv)]
     , _sawTopLevelRO :: TopLevelRO
     , _sawTopLevelRW :: TopLevelRW
+    , _trackedFiles :: Map FilePath (Hash.Digest Hash.SHA256)
     }
 
 instance Show SAWState where
-  show (SAWState e _ t _ _) = "(SAWState " ++ show e ++ " _sc_ " ++ show t ++ " _ro_ _rw)"
+  show (SAWState e _ t _ _ tf) = "(SAWState " ++ show e ++ " _sc_ " ++ show t ++ " _ro_ _rw" ++ show tf ++ ")"
 
 sawEnv :: Simple Lens SAWState SAWEnv
 sawEnv = lens _sawEnv (\v e -> v { _sawEnv = e })
@@ -105,16 +109,20 @@ sawTopLevelRO = lens _sawTopLevelRO (\v ro -> v { _sawTopLevelRO = ro })
 sawTopLevelRW :: Simple Lens SAWState TopLevelRW
 sawTopLevelRW = lens _sawTopLevelRW (\v rw -> v { _sawTopLevelRW = rw })
 
+trackedFiles :: Simple Lens SAWState (Map FilePath (Hash.Digest Hash.SHA256))
+trackedFiles = lens _trackedFiles (\v tf -> v { _trackedFiles = tf })
+
 
 pushTask :: SAWTask -> Method SAWState ()
 pushTask t = modifyState mod
-  where mod (SAWState env bic stack ro rw) = SAWState env bic ((t, env) : stack) ro rw
+  where mod (SAWState env bic stack ro rw tf) =
+          SAWState env bic ((t, env) : stack) ro rw tf
 
 dropTask :: Method SAWState ()
 dropTask = modifyState mod
-  where mod (SAWState _ _ [] _ _) = error "Internal error - stack underflow"
-        mod (SAWState _ sc ((_t, env):stack) ro rw) =
-          SAWState env sc stack ro rw
+  where mod (SAWState _ _ [] _ _ _) = error "Internal error - stack underflow"
+        mod (SAWState _ sc ((_t, env):stack) ro rw tf) =
+          SAWState env sc stack ro rw tf
 
 getHandleAlloc :: Method SAWState Crucible.HandleAllocator
 getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> getState
@@ -162,10 +170,35 @@ initialState =
                 , rwLaxArith = False
                 , rwWhat4HashConsing = False
                 }
-     return (SAWState emptyEnv bic [] ro rw)
+     return (SAWState emptyEnv bic [] ro rw M.empty)
 
+-- NOTE: KWF: 2020-04-22: This function could introduce a race condition: if a
+-- file changes on disk after its hash is computed by validateSAWState, but
+-- before the function returns and its result is used to inform whether to
+-- recompute a cached result, the cached result may be used even if it is
+-- associated with stale filesystem state. See the discussion of this issue at:
+-- https://github.com/GaloisInc/argo/pull/70#discussion_r412462908
 validateSAWState :: SAWState -> IO Bool
-validateSAWState _ = pure True
+validateSAWState sawState =
+  checkAll
+    [ CryptolServer.validateServerState cryptolState
+    , checkAll $ map (uncurry checkHash) (M.assocs (view trackedFiles sawState))
+    ]
+  where
+    checkAll [] = pure True
+    checkAll (c : cs) =
+      do result <- c
+         if result
+           then checkAll cs
+           else pure False
+
+    checkHash path hash =
+      do currentHash <- Hash.hashFile path
+         pure (currentHash == hash)
+
+    cryptolState =
+      CryptolServer.ServerState Nothing
+        (CryptolEnv.eModuleEnv . rwCryptol . view sawTopLevelRW $ sawState)
 
 
 newtype SAWEnv =

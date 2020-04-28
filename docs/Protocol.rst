@@ -278,6 +278,11 @@ The tag values in objects can be:
   - ``function``: A :ref:`JSON Cryptol expressions <cryptol-json-expression>`.
   - ``arguments``: A JSON array of :ref:`JSON Cryptol expressions <cryptol-json-expression>`.
 
+``integer modulo``
+  The expression is an integer with a modulus (the Cryptol ``Z`` type). Further fields are:
+  - ``integer``: A JSON number, representing the integer
+  - ``modulus``: A JSON number, representing the modulus
+
 .. _cryptol-json-type:
 
 JSON Cryptol Types

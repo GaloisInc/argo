@@ -111,3 +111,31 @@ assert(reply_7['result']['answer']['value'] ==
                  {'data': {'fifteen': {'data': 'f', 'width': 4, 'expression': 'bits', 'encoding': 'hex'},
                            'unit': {'expression': 'unit'}},
                   'expression': 'record'}]})
+
+id_8 = c.send_message("evaluate expression",
+                      {"state": state_1,
+                       "expression": {"expression": "integer modulo",
+                                      "integer": 14,
+                                      "modulus": 42}})
+reply_8 = c.wait_for_reply_to(id_8)
+assert('result' in reply_8)
+assert('answer' in reply_8['result'])
+assert('value' in reply_8['result']['answer'])
+print(reply_8)
+assert(reply_8['result']['answer']['value'] ==
+       {"expression": "integer modulo",
+        "integer": 14,
+        "modulus": 42})
+
+id_9 = c.send_message("evaluate expression",
+                      {"state": state_1,
+                       "expression": "m `{a=60}"})
+reply_9 = c.wait_for_reply_to(id_9)
+print(reply_9)
+assert('result' in reply_9)
+assert('answer' in reply_9['result'])
+assert('value' in reply_9['result']['answer'])
+assert(reply_9['result']['answer']['value'] ==
+       {"expression": "integer modulo",
+        "integer": 42,
+        "modulus": 60})

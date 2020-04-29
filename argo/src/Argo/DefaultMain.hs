@@ -21,29 +21,41 @@ defaultMain str app =
 data Options =
   Options
     { transportOpt :: TransportOpt
-    , publicityOpt :: Maybe Publicity
     }
 
 newtype Port = Port String
 
 data TransportOpt
-  = StdIONetstring               -- ^ NetStrings over standard IO
-  | SocketNetstring Port         -- ^ NetStrings over specific port (all hosts)
+  = StdIONetstring
+  -- ^ NetStrings over standard IO
+  | SocketOpt Newness (Maybe Publicity) SocketOpt
+  -- ^ NetStrings over some socket
+
+data SocketOpt
+  = SocketNetstring Port         -- ^ NetStrings over specific port (all hosts)
   | SocketNetstringDyn IPVersion -- ^ NetStrings over specific IP version (dynamic port)
 
 data Publicity
   = Public
+
+data Newness
+  = StartNew
+  | UseExisting
 
 data IPVersion
   = IPv6 | IPv4
 
 options :: String -> Opt.ParserInfo Options
 options desc =
-  Opt.info ((Options <$> transport <*> publicity) <**> Opt.helper) $
+  Opt.info ((Options <$> transport) <**> Opt.helper) $
   Opt.fullDesc <> Opt.progDesc desc
 
 transport :: Opt.Parser TransportOpt
-transport = dyn4 <|> dyn6 <|> socket <|> stdio <|> pure StdIONetstring
+transport =
+  stdio <|>
+  ((\s n p -> SocketOpt n p s) <$>
+   (dyn4 <|> dyn6 <|> socket) <*> newness <*> publicity)
+  <|> pure StdIONetstring
   where
     socket = SocketNetstring . Port <$>
              Opt.strOption (Opt.long "socket" <>
@@ -66,14 +78,11 @@ publicity =
   Opt.flag Nothing (Just Public) $
   Opt.long "public" <> Opt.help "Run the server publicly"
 
-
-validateOpts :: Options -> IO ()
-validateOpts theOpts =
-  case (transportOpt theOpts, publicityOpt theOpts) of
-    (StdIONetstring, Just Public) ->
-      die "A server on stdio cannot be public."
-    _ ->
-      pure ()
+newness :: Opt.Parser Newness
+newness =
+  Opt.flag UseExisting StartNew $
+  Opt.long "new" <>
+  Opt.help "Start a new server process even if one is already running"
 
 selectHost :: IPVersion -> Maybe Publicity -> HostName
 selectHost IPv6 Nothing = "::1"
@@ -81,18 +90,18 @@ selectHost IPv4 Nothing = "127.0.0.1"
 selectHost IPv6 (Just Public) = "::"
 selectHost IPv4 (Just Public) = "0.0.0.0"
 
-
 realMain :: App s -> Options -> IO ()
 realMain theApp opts =
-  do validateOpts opts
-     case transportOpt opts of
-       StdIONetstring ->
-         serveStdIONS theApp
-       SocketNetstring (Port p) ->
-         serveSocket (selectHost IPv4 (publicityOpt opts)) p theApp
-       SocketNetstringDyn ip ->
-         do hSetBuffering stdout NoBuffering
-            let h = selectHost ip (publicityOpt opts)
-            (a, p) <- serveSocketDynamic h theApp
-            putStrLn ("PORT " ++ show p)
-            wait a
+  case transportOpt opts of
+    StdIONetstring ->
+      serveStdIONS theApp
+    SocketOpt newnessOpt publicityOpt socketOpt ->
+      case socketOpt of
+        SocketNetstring (Port p) ->
+          serveSocket (selectHost IPv4 publicityOpt) p theApp
+        SocketNetstringDyn ip ->
+          do hSetBuffering stdout NoBuffering
+             let h = selectHost ip publicityOpt
+             (a, p) <- serveSocketDynamic h theApp
+             putStrLn ("PORT " ++ show p)
+             wait a

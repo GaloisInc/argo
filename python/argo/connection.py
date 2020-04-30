@@ -102,8 +102,8 @@ class ServerConnection:
         self.process = process
         self.port = self.process.port
 
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect(("127.0.0.1", self.port))
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        self.sock.connect(("localhost", self.port))
         self.sock.setblocking(False)
         self.buf = bytearray(b'')
         self.replies = {}

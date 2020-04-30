@@ -74,7 +74,6 @@ startListening addr =
                    (N.addrSocketType addr)
                    (N.addrProtocol   addr)
      N.setSocketOption s N.ReuseAddr 1 -- easier to restart server
-     N.setSocketOption s N.IPv6Only 0 -- serve on both IPv6 and IPv4
      N.bind s (N.addrAddress addr)
      N.listen s listenQueueDepth
      return s

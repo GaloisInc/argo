@@ -11,7 +11,7 @@ import Argo.CacheTree
 import Control.Monad.IO.Class
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Aeson (Result(..), Value(..), fromJSON, toJSON, object)
+import Data.Aeson (Result(..), Value(..), FromJSON(..), fromJSON, toJSON, object)
 import qualified Data.HashMap.Strict as HashMap
 
 data HistoryWrapper s = HistoryWrapper
@@ -141,12 +141,18 @@ missingStateField =
      "Please report this as a bug.")
     (Nothing :: Maybe ())
 
+newtype History = History [(Text, Value)]
+
+instance FromJSON History where
+  parseJSON Null = pure (History [])
+  parseJSON obj = History <$> parseJSON obj
+
 extractSteps :: Value -> Either JSONRPCException ([(Text, Value)], Value)
 extractSteps v
   | Object o      <- v
   , Just history  <- HashMap.lookup stateKey o
   = case fromJSON history of
-      Success steps ->
+      Success (History steps) ->
         let v' = Object (HashMap.delete stateKey o)
         in Right (steps, v')
       Error message -> Left (invalidStateField message history)

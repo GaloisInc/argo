@@ -3,6 +3,9 @@ module Argo.DefaultMain (defaultMain) where
 
 
 import Control.Applicative
+import Control.Monad
+import Data.Maybe
+import Data.Foldable
 import Control.Concurrent.Async (wait)
 import Control.Exception (handle, IOException)
 import Network.Socket (HostName)
@@ -94,58 +97,69 @@ getOrLockSession (Just (Session session)) publicity maybePort =
      let prefix =
            maybe id (const (<.> "public")) publicity $
            sessionsDir </> session
-         mainLockFile    = prefix <.> "lock"
-         runningLockFile = prefix <.> "session" <.> "lock"
-         portLockFile    = prefix <.> "port" <.> "lock"
+         globalLockFile  = argoDataDir </> "global.lock"
+         sessionLockFile = prefix <.> "lock"
          portFile        = prefix <.> "port"
 
      -- Only one process at a time can execute the below section:
-     withFileLock mainLockFile Exclusive $ \_ ->
-       do -- Attempt to lock the session, non-blockingly
-          lockResult <- tryLockFile runningLockFile Exclusive
-          case lockResult of
+     globalLock <- lockFile globalLockFile Exclusive
 
-            -- If another process is already locked on this session:
-            Nothing ->
-              -- With a read lock on the port file for this session...
-              withFileLock portLockFile Shared $ \_ ->
-              handle
-                -- Read the port file and parse it
-                (\(_ :: IOException) -> die $ "Could not read port file " <> portFile)
-                (do parsedPort <- fmap Port . readMay <$> readFile portFile
-                    existingPort <-
-                      maybe (die $ "Could not parse port file " <> portFile)
-                            pure
-                            parsedPort
-                    -- Make sure it matches the pre-existing session's port
-                    pure $ maybe
-                      (UseExisting existingPort)
-                      (\desiredPort ->
-                          if desiredPort == existingPort
-                          then UseExisting existingPort
-                          else MismatchesExisting existingPort desiredPort)
-                      maybePort)
+     -- Clean up previous inactive sessions
+     sessionLockFiles <-
+       map (sessionsDir </>) .
+       filter ("lock" `isExtensionOf`) <$>
+       listDirectory sessionsDir
+     for_ sessionLockFiles $ \lockFilePath ->
+       handle (\(_ :: IOException) -> pure ()) $
+         do unlocked <- fmap isJust <$>
+              withTryFileLock lockFilePath Exclusive $ \_ ->
+                removeFile (lockFilePath -<.> "port")
+            when unlocked (removeFile lockFilePath)
 
-            -- If we are the first process to try to create/get this session:
-            Just _runningLock ->  -- lock implicitly held till end of process
-              case maybePort of
+     -- Attempt to lock the session, non-blockingly
+     sessionLockResult <- tryLockFile sessionLockFile Exclusive
+     case sessionLockResult of
 
-                -- If the user specified a port:
-                Just (Port port) ->
-                  -- Write the specified port to the port file
-                  withFileLock portLockFile Exclusive $ \_ ->
-                    do writeFile portFile (show port)
-                       pure (MakeNew (Port port))
+       -- If another process is already locked on this session:
+       Nothing ->
+         -- With a read lock on the port file for this session...
+         handle
+           -- Read the port file and parse it
+           (\(_ :: IOException) -> die $ "Could not read port file " <> portFile)
+           (do parsedPort <- fmap Port . readMay <$> readFile portFile
+               unlockFile globalLock
+               existingPort <-
+                 maybe (die $ "Could not parse port file " <> portFile)
+                       pure
+                       parsedPort
+               -- Make sure it matches the pre-existing session's port
+               pure $ maybe
+                 (UseExisting existingPort)
+                 (\desiredPort ->
+                    if desiredPort == existingPort
+                    then UseExisting existingPort
+                    else MismatchesExisting existingPort desiredPort)
+                 maybePort)
 
-                -- If the user didn't specify a port:
-                Nothing ->
-                  do -- Take out a write lock on the port file for this session
-                     portLock <- lockFile portLockFile Exclusive
-                     -- Return a function that takes in a port, writes the port
-                     -- to the (already locked) port file, and unlocks it.
-                     pure . MakeNewDyn $ \(Port port) ->
-                       do writeFile portFile (show port)
-                          unlockFile portLock
+       -- If we are the first process to try to create/get this session:
+       Just _runningLock ->  -- lock implicitly held till end of process
+         case maybePort of
+
+           -- If the user specified a port:
+           Just (Port port) ->
+             -- Write the specified port to the port file
+             do writeFile portFile (show port)
+                unlockFile globalLock
+                pure (MakeNew (Port port))
+
+           -- If the user didn't specify a port:
+           Nothing ->
+             do -- Return a function that takes in a port, writes the port to
+                -- the (already locked) port file, and unlocks the main lock so
+                -- another critical section can run
+                pure . MakeNewDyn $ \(Port port) ->
+                  do writeFile portFile (show port)
+                     unlockFile globalLock
 
 realMain :: App s -> Options -> IO ()
 realMain theApp opts =

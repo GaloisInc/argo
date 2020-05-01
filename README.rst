@@ -25,6 +25,19 @@ however any other method will be fine::
 Building the project
 ~~~~~~~~~~~~~~~~~~~~
 
+To clone the project, you'll need to initialize its submodules as well::
+
+    $ git clone https://github.com/galoisinc/argo
+    $ cd argo/
+    $ git submodule init
+    $ pushd . && cd deps/abcBridge/ && git submodule init && popd
+
+Warning: at present, do *not* recursively initialize all the submodules of the
+project, as this will result in a large tree of unnecessary submodules. The only
+dependency which needs its own submodules to be initialized is `abcBridge`, as
+shown above. If you encounter mysterious build errors mentioning `abcBridge`, it
+is likely because it is missing its submodules.
+
 You might have to manually specify the GHC version when configuring this
 project. This can be achieved with ``v2-configure`` as seen below.
 
@@ -32,7 +45,6 @@ This project has multiple targets. To build them all you can specify ``all``::
 
     $ cabal v2-configure -w ghc-8.6.4
     $ cabal v2-build all
-
 
 Documentation
 -------------

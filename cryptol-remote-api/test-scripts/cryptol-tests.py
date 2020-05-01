@@ -11,7 +11,7 @@ cryptol_path = dir_path.joinpath('test-data')
 
 c = argo.ServerConnection(
       cryptol.CryptolProcess(
-          "cabal v2-exec cryptol-remote-api  --verbose=0 -- --dynamic4",
+          "cabal v2-exec cryptol-remote-api  --verbose=0",
           cryptol_path=cryptol_path))
 
 # Regression tests on nested sequences

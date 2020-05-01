@@ -14,7 +14,7 @@ module SAWServer.LLVMCrucibleSetup
   , ContractVar(..)
   , Allocated(..)
   , PointsTo(..)
-  , compileContract
+  , compileLLVMContract
   ) where
 
 import Control.Lens
@@ -25,7 +25,6 @@ import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Text (Text)
 import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
@@ -49,79 +48,13 @@ import Verifier.SAW.TypedTerm (TypedTerm)
 
 import Argo
 import SAWServer
+import SAWServer.Data.Contract
 import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
+import SAWServer.Data.SetupValue ()
 import SAWServer.CryptolExpression (getTypedTermOfCExp)
 import SAWServer.Exceptions
 import SAWServer.OK
 import SAWServer.TrackFile
-import SAWServer.SetupValue ()
-
-data Contract cryptolExpr =
-  Contract
-    { preVars       :: [ContractVar]
-    , preConds      :: [cryptolExpr]
-    , preAllocated  :: [Allocated]
-    , prePointsTos  :: [PointsTo cryptolExpr]
-    , argumentVals  :: [LLVMSetupVal cryptolExpr]
-    , postVars      :: [ContractVar]
-    , postConds     :: [cryptolExpr]
-    , postAllocated :: [Allocated]
-    , postPointsTos :: [PointsTo cryptolExpr]
-    , returnVal     :: Maybe (LLVMSetupVal cryptolExpr)
-    }
-    deriving (Functor, Foldable, Traversable)
-
-data ContractVar =
-  ContractVar
-    { contractVarServerName :: ServerName
-    , contractVarName       :: Text
-    , contractVarType       :: JSONLLVMType
-    }
-
-data Allocated =
-  Allocated
-    { allocatedServerName :: ServerName
-    , allocatedType       :: JSONLLVMType
-    }
-
-data PointsTo cryptolExpr =
-  PointsTo
-    { pointer  :: LLVMSetupVal cryptolExpr
-    , pointsTo :: LLVMSetupVal cryptolExpr
-    } deriving (Functor, Foldable, Traversable)
-
-instance FromJSON cryptolExpr => FromJSON (PointsTo cryptolExpr) where
-  parseJSON =
-    withObject "Points-to relationship" $ \o ->
-      PointsTo <$> o .: "pointer"
-               <*> o .: "points to"
-
-instance FromJSON Allocated where
-  parseJSON =
-    withObject "LLVM allocated thing" $ \o ->
-      Allocated <$> o .: "server name"
-                <*> o .: "type"
-
-instance FromJSON ContractVar where
-  parseJSON =
-    withObject "LLVM contract variable" $ \o ->
-      ContractVar <$> o .: "server name"
-                  <*> o .: "name"
-                  <*> o .: "type"
-
-instance FromJSON e => FromJSON (Contract e) where
-  parseJSON =
-    withObject "LLVM contract" $ \o ->
-    Contract <$> o .: "pre vars"
-             <*> o .: "pre conds"
-             <*> o .: "pre allocated"
-             <*> o .: "pre points tos"
-             <*> o .: "argument vals"
-             <*> o .: "post vars"
-             <*> o .: "post conds"
-             <*> o .: "post allocated"
-             <*> o .: "post points tos"
-             <*> o .: "return val"
 
 startLLVMCrucibleSetup :: StartLLVMCrucibleSetupParams -> Method SAWState OK
 startLLVMCrucibleSetup (StartLLVMCrucibleSetupParams n) =
@@ -139,8 +72,12 @@ instance FromJSON StartLLVMCrucibleSetupParams where
 data ServerSetupVal = Val (CMS.AllLLVM SetupValue)
 
 -- TODO: this is an extra layer of indirection that could be collapsed, but is easy to implement for now.
-compileContract :: BuiltinContext -> CryptolEnv -> Contract (P.Expr P.PName) ->  LLVMCrucibleSetupM ()
-compileContract bic cenv c = interpretSetup bic cenv (reverse steps)
+compileLLVMContract ::
+  BuiltinContext ->
+  CryptolEnv ->
+  Contract JSONLLVMType (P.Expr P.PName) ->
+  LLVMCrucibleSetupM ()
+compileLLVMContract bic cenv c = interpretLLVMSetup bic cenv (reverse steps)
   where
     setupFresh (ContractVar n dn ty) = SetupFresh n dn (llvmType ty)
     setupAlloc (Allocated   n    ty) = SetupAlloc n    (llvmType ty)
@@ -156,8 +93,8 @@ compileContract bic cenv c = interpretSetup bic cenv (reverse steps)
       map (\(PointsTo p v) -> SetupPointsTo p v) (postPointsTos c) ++
       [ SetupReturn v | v <- maybeToList (returnVal c) ]
 
-interpretSetup :: BuiltinContext -> CryptolEnv -> [SetupStep] -> LLVMCrucibleSetupM ()
-interpretSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty, cenv0) *> pure ()
+interpretLLVMSetup :: BuiltinContext -> CryptolEnv -> [SetupStep] -> LLVMCrucibleSetupM ()
+interpretLLVMSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty, cenv0) *> pure ()
   where
     go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= crucible_return bic defaultOptions
     -- TODO: do we really want two names here?
@@ -185,10 +122,10 @@ interpretSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty, cen
 
     getSetupVal ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
-      LLVMSetupVal (P.Expr P.PName) ->
+      CrucibleSetupVal (P.Expr P.PName) ->
       LLVMCrucibleSetupM (CMS.AllLLVM MS.SetupValue)
     getSetupVal _ NullPointer = LLVMCrucibleSetupM $ return CMS.anySetupNull
-    getSetupVal (env, _) (ServerVal n) = LLVMCrucibleSetupM $
+    getSetupVal (env, _) (ServerValue n) = LLVMCrucibleSetupM $
       resolve env n >>=
       \case
         Val x -> return x -- TODO add cases for the server values that

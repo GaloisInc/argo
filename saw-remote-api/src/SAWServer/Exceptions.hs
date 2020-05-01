@@ -5,10 +5,11 @@ module SAWServer.Exceptions (
   , notACryptolEnv
   , notAnLLVMModule
   , notAnLLVMSetup
-  , notAnLLVMSetupVal
+  , notACrucibleSetupVal
   , notAnLLVMMethodSpecIR
   , notASimpset
   , notATerm
+  , notAJVMClass
   -- * Wrong monad errors
   , notSettingUpCryptol
   , notSettingUpLLVMCrucible
@@ -73,15 +74,15 @@ notAnLLVMSetup name =
      " is not an LLVM setup script")
     (Just $ object ["name" .= name])
 
-notAnLLVMSetupVal ::
+notACrucibleSetupVal ::
   (ToJSON name, Show name) =>
-  name {- ^ the name that should have been mapped to an LLVM setup value -}->
+  name {- ^ the name that should have been mapped to a Crucible setup value -}->
   JSONRPCException
-notAnLLVMSetupVal name =
+notACrucibleSetupVal name =
   makeJSONRPCException 10040
     ("The server value with name " <>
      T.pack (show name) <>
-     " is not an LLVM setup value")
+     " is not a Crucible setup value")
     (Just $ object ["name" .= name])
 
 notAnLLVMMethodSpecIR ::
@@ -115,6 +116,17 @@ notATerm name =
     ("The server value with name " <>
      T.pack (show name) <>
      " is not a term")
+    (Just $ object ["name" .= name])
+
+notAJVMClass ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a JVM class -}->
+  JSONRPCException
+notAJVMClass name =
+  makeJSONRPCException 10080
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a JVM class")
     (Just $ object ["name" .= name])
 
 notSettingUpCryptol :: JSONRPCException

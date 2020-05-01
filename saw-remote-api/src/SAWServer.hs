@@ -65,12 +65,19 @@ instance Show SAWTask where
   show ProofScriptTask = "ProofScript"
   show (LLVMCrucibleSetup n steps) = "(LLVMCrucibleSetup" ++ show n ++ " " ++ show steps ++ ")"
 
+
+data CrucibleSetupVal cryptolExpr
+  = NullPointer
+  | ServerValue ServerName
+  | CryptolExpr cryptolExpr
+  deriving (Foldable, Functor, Traversable)
+
 data SetupStep
-  = SetupReturn (LLVMSetupVal (P.Expr P.PName)) -- ^ The return value
+  = SetupReturn (CrucibleSetupVal (P.Expr P.PName)) -- ^ The return value
   | SetupFresh ServerName Text Type -- ^ Server name to save in, debug name, fresh variable type
   | SetupAlloc ServerName Type -- ^ Server name to save in, type of allocation
-  | SetupPointsTo (LLVMSetupVal (P.Expr P.PName)) (LLVMSetupVal (P.Expr P.PName)) -- ^ Source, target
-  | SetupExecuteFunction [LLVMSetupVal (P.Expr P.PName)] -- ^ Function's arguments
+  | SetupPointsTo (CrucibleSetupVal (P.Expr P.PName)) (CrucibleSetupVal (P.Expr P.PName)) -- ^ Source, target
+  | SetupExecuteFunction [CrucibleSetupVal (P.Expr P.PName)] -- ^ Function's arguments
   | SetupPrecond (P.Expr P.PName)
   | SetupPostcond (P.Expr P.PName)
 
@@ -217,16 +224,18 @@ instance ToJSON ServerName where
 instance FromJSON ServerName where
   parseJSON = withText "name" (pure . ServerName)
 
-data LLVMCrucibleSetupTypeRepr :: * -> * where
-  UnitRepr :: LLVMCrucibleSetupTypeRepr ()
-  TypedTermRepr :: LLVMCrucibleSetupTypeRepr TypedTerm
+data CrucibleSetupTypeRepr :: * -> * where
+  UnitRepr :: CrucibleSetupTypeRepr ()
+  TypedTermRepr :: CrucibleSetupTypeRepr TypedTerm
 
 data ServerVal
   = VTerm TypedTerm
   | VSimpset Simpset
   | VType Cryptol.Schema
   | VCryptolModule CryptolModule -- from SAW, includes Term mappings
-  | VLLVMCrucibleSetup (Pair LLVMCrucibleSetupTypeRepr LLVMCrucibleSetupM)
+  | VJVMClass JSS.Class
+  -- | VJVMCrucibleSetup (Pair CrucibleSetupTypeRepr JVMSetupM)
+  | VLLVMCrucibleSetup (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
   | VLLVMModule (Some CMS.LLVMModule)
   | VLLVMMethodSpecIR (CMS.SomeLLVM CMS.CrucibleMethodSpecIR)
 
@@ -235,6 +244,8 @@ instance Show ServerVal where
   show (VSimpset ss) = "(VSimpset " ++ show ss ++ ")"
   show (VType t) = "(VType " ++ show t ++ ")"
   show (VCryptolModule _) = "VCryptolModule"
+  show (VJVMClass _) = "VJVMClass"
+  -- show (VJVMCrucibleSetup _) = "VJVMCrucibleSetup"
   show (VLLVMCrucibleSetup _) = "VLLVMCrucibleSetup"
   show (VLLVMModule (Some _)) = "VLLVMModule"
   show (VLLVMMethodSpecIR _) = "VLLVMMethodSpecIR"
@@ -257,17 +268,20 @@ instance IsServerVal CryptolModule where
 instance IsServerVal (CMS.SomeLLVM CMS.CrucibleMethodSpecIR) where
   toServerVal = VLLVMMethodSpecIR
 
-class KnownLLVMCrucibleSetupType a where
-  knownLLVMCrucibleSetupRepr :: LLVMCrucibleSetupTypeRepr a
+instance IsServerVal JSS.Class where
+  toServerVal = VJVMClass
 
-instance KnownLLVMCrucibleSetupType () where
-  knownLLVMCrucibleSetupRepr = UnitRepr
+class KnownCrucibleSetupType a where
+  knownCrucibleSetupRepr :: CrucibleSetupTypeRepr a
 
-instance KnownLLVMCrucibleSetupType TypedTerm where
-  knownLLVMCrucibleSetupRepr = TypedTermRepr
+instance KnownCrucibleSetupType () where
+  knownCrucibleSetupRepr = UnitRepr
 
-instance KnownLLVMCrucibleSetupType a => IsServerVal (LLVMCrucibleSetupM a) where
-  toServerVal x = VLLVMCrucibleSetup (Pair knownLLVMCrucibleSetupRepr x)
+instance KnownCrucibleSetupType TypedTerm where
+  knownCrucibleSetupRepr = TypedTermRepr
+
+instance KnownCrucibleSetupType a => IsServerVal (LLVMCrucibleSetupM a) where
+  toServerVal x = VLLVMCrucibleSetup (Pair knownCrucibleSetupRepr x)
 
 instance IsServerVal (Some CMS.LLVMModule) where
   toServerVal = VLLVMModule
@@ -298,6 +312,13 @@ bindCryptolVar x t =
   do modifyState $ over sawTopLevelRW $ \rw ->
        rw { rwCryptol = bindTypedTerm (Cryptol.mkIdent x, t) (rwCryptol rw) }
 
+getJVMClass :: ServerName -> Method SAWState JSS.Class
+getJVMClass n =
+  do v <- getServerVal n
+     case v of
+       VJVMClass c -> return c
+       _other -> raise (notAJVMClass n)
+
 getLLVMModule :: ServerName -> Method SAWState (Some CMS.LLVMModule)
 getLLVMModule n =
   do v <- getServerVal n
@@ -305,7 +326,7 @@ getLLVMModule n =
        VLLVMModule m -> return m
        _other -> raise (notAnLLVMModule n)
 
-getLLVMSetup :: ServerName -> Method SAWState (Pair LLVMCrucibleSetupTypeRepr LLVMCrucibleSetupM)
+getLLVMSetup :: ServerName -> Method SAWState (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
 getLLVMSetup n =
   do v <- getServerVal n
      case v of
@@ -332,9 +353,3 @@ getTerm n =
      case v of
        VTerm t -> return t
        _other -> raise (notATerm n)
-
-data LLVMSetupVal cryptolExpr
-  = NullPointer
-  | ServerVal ServerName
-  | CryptolExpr cryptolExpr
-  deriving (Foldable, Functor, Traversable)

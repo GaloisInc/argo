@@ -34,13 +34,14 @@ class ServerProcess:
 
     proc: Optional[subprocess.Popen]
 
-    def __init__(self, command: str) -> None:
+    def __init__(self, command: str, *, persist=False) -> None:
         """Start the process using the given command.
 
            :param command: The command to be executed, using a shell, to start
            the server.
         """
         self.command = command
+        self.persist = persist
         self.proc = None
         self.setup()
 
@@ -80,12 +81,20 @@ class ServerProcess:
                 raise Exception("Failed to load process, output was `" +
                                 out_line + "' but expected PORT then a port.")
 
+    def pid(self) -> Optional[int]:
+        """Return the process group id of the managed server process"""
+        if self.proc is not None:
+            return os.getpgid(self.proc.pid)
+        else:
+            return None
+
     def __del__(self) -> None:
         if self.proc is not None:
-            try:
-                os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            if not self.persist:
+                try:
+                    os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
 
 class ServerConnection:

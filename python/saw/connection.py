@@ -8,8 +8,8 @@ from saw.commands import *
 from typing import Optional, Union, Any, List
 
 
-def connect(command: str, cryptol_path: Optional[str] = None) -> SAWConnection:
-    return SAWConnection(command)
+def connect(command: str, cryptol_path: Optional[str] = None, *, persist=False) -> SAWConnection:
+    return SAWConnection(command, persist=persist)
 
 
 class SAWConnection:
@@ -17,13 +17,20 @@ class SAWConnection:
 
     most_recent_result: Optional[argo.interaction.Interaction]
 
-    def __init__(self, command_or_connection: Union[str, ac.ServerConnection]) -> None:
+    def __init__(self,
+                 command_or_connection: Union[str, ac.ServerConnection],
+                 *, persist=False) -> None:
         self.most_recent_result = None
+        self.persist = persist
         if isinstance(command_or_connection, str):
-            self.proc = ac.ServerProcess(command_or_connection)
+            self.proc = ac.ServerProcess(command_or_connection, persist=self.persist)
             self.server_connection = ac.ServerConnection(self.proc)
         else:
             self.server_connection = command_or_connection
+
+    def pid(self) -> int:
+        """Return the PID of the running server process."""
+        return self.proc.pid()
 
     def snapshot(self) -> SAWConnection:
         """Return a ``SAWConnection`` that has the same process and state as

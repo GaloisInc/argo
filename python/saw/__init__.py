@@ -51,7 +51,8 @@ def set_designated_connection(conn: connection.SAWConnection) -> None:
     designated_connection = conn
 
 def connect(command_or_connection : Union[str, ServerConnection],
-            dashboard_path : Optional[str] = None) -> None:
+            dashboard_path : Optional[str] = None,
+            *, persist=False) -> None:
     global designated_connection
     global designated_dashboard_path
     global all_verification_results
@@ -61,11 +62,21 @@ def connect(command_or_connection : Union[str, ServerConnection],
         raise ValueError("There is already an initialized list of verification" \
                          " results. Did you call `connect()` more than once?")
     atexit.register(qed) # call qed before shutting down
+
+    # Set the designated connection by starting a server process
     if designated_connection is None:
-        designated_connection = connection.SAWConnection(command_or_connection)
+        designated_connection = \
+            connection.SAWConnection(command_or_connection, persist=persist)
     else:
         raise ValueError("There is already a designated connection." \
                          " Did you call `connect()` more than once?")
+
+    # After the script quits, print the server PID
+    if persist:
+        pid = designated_connection.pid()
+        atexit.register(lambda: print(f"Persistent server process PID: {pid}"))
+
+    # Set up the dashboard path
     if designated_dashboard_path is None:
         if dashboard_path is None:
             current_frame = inspect.currentframe()
@@ -84,6 +95,8 @@ def connect(command_or_connection : Union[str, ServerConnection],
     else:
         raise ValueError("There is already a designated dashboard URL." \
                          " Did you call `connect()` more than once?")
+
+    # Print the dashboard path
     print("Dashboard:", get_designated_url(), file=sys.stderr)
 
 def cryptol_load_file(filename : str) -> None:

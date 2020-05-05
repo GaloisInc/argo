@@ -19,17 +19,21 @@ from . import exceptions
 from . import proofscript
 from . import dashboard
 
-designated_connection = None # type: Optional[connection.SAWConnection]
-designated_dashboard_path = None # type: Optional[str]
-# Script-execution-global set of all results verified so far
-all_verification_results = None # type: Optional[AllVerificationResults]
-used_server_names = set([]) # type: Set[str]
+designated_connection = None      # type: Optional[connection.SAWConnection]
+designated_dashboard_path = None  # type: Optional[str]
 
-def fresh_server_name(hint : Optional[str] = None) -> str:
-    if hint is None: hint = 'x'
+# Script-execution-global set of all results verified so far
+all_verification_results = None  # type: Optional[AllVerificationResults]
+used_server_names = set([])      # type: Set[str]
+
+
+def fresh_server_name(hint: Optional[str] = None) -> str:
+    if hint is None:
+        hint = 'x'
     name = llvm.uniquify(hint, used_server_names)
     used_server_names.add(name)
     return name
+
 
 def get_designated_connection() -> connection.SAWConnection:
     global designated_connection
@@ -37,6 +41,7 @@ def get_designated_connection() -> connection.SAWConnection:
         raise ValueError("There is not yet a designated connection.")
     else:
         return designated_connection
+
 
 def get_designated_url() -> str:
     global designated_dashboard_path
@@ -46,12 +51,14 @@ def get_designated_url() -> str:
         return "http://localhost:" + str(dashboard.DEFAULT_PORT) \
             + "/" + designated_dashboard_path
 
+
 def set_designated_connection(conn: connection.SAWConnection) -> None:
     global designated_connection
     designated_connection = conn
 
-def connect(command_or_connection : Union[str, ServerConnection],
-            dashboard_path : Optional[str] = None,
+
+def connect(command_or_connection: Union[str, ServerConnection],
+            dashboard_path: Optional[str] = None,
             *, persist=False) -> None:
     global designated_connection
     global designated_dashboard_path
@@ -59,16 +66,16 @@ def connect(command_or_connection : Union[str, ServerConnection],
     if all_verification_results is None:
         all_verification_results = AllVerificationResults()
     else:
-        raise ValueError("There is already an initialized list of verification" \
+        raise ValueError("There is already an initialized list of verification"
                          " results. Did you call `connect()` more than once?")
-    atexit.register(qed) # call qed before shutting down
+    atexit.register(qed)  # call qed before shutting down
 
     # Set the designated connection by starting a server process
     if designated_connection is None:
         designated_connection = \
             connection.SAWConnection(command_or_connection, persist=persist)
     else:
-        raise ValueError("There is already a designated connection." \
+        raise ValueError("There is already a designated connection."
                          " Did you call `connect()` more than once?")
 
     # After the script quits, print the server PID
@@ -81,53 +88,60 @@ def connect(command_or_connection : Union[str, ServerConnection],
         if dashboard_path is None:
             current_frame = inspect.currentframe()
             if current_frame is None:
-                raise ValueError("Cannot automatically assign a dashboard URL" \
-                                 " outside a file; use the explicit option" \
-                                 " `dashboard_path = \"...\"` when calling `connect()`")
+                raise ValueError("Cannot automatically assign a dashboard URL"
+                                 " outside a file; use the explicit option"
+                                 " `dashboard_path = \"...\"` when calling "
+                                 "`connect()`")
             else:
                 f_back = current_frame.f_back
                 if f_back is not None:
                     filename = os.path.realpath(inspect.getfile(f_back))
                     dashboard_path = \
-                        re.sub(r'\.py$', '', posixpath.join(*filename.split(os.path.sep))) \
+                        re.sub(r'\.py$', '',
+                               posixpath.join(*filename.split(os.path.sep))) \
                           .replace('^/', '')
         designated_dashboard_path = dashboard_path
     else:
-        raise ValueError("There is already a designated dashboard URL." \
+        raise ValueError("There is already a designated dashboard URL."
                          " Did you call `connect()` more than once?")
 
     # Print the dashboard path
     print("Dashboard:", get_designated_url(), file=sys.stderr)
 
-def cryptol_load_file(filename : str) -> None:
+
+def cryptol_load_file(filename: str) -> None:
     get_designated_connection().cryptol_load_file(filename)
     return None
 
+
 @dataclass
 class LLVMModule:
-    bitcode_file : str
-    server_name : str
+    bitcode_file: str
+    server_name: str
 
-def llvm_load_module(bitcode_file : str) -> LLVMModule:
+
+def llvm_load_module(bitcode_file: str) -> LLVMModule:
     name = fresh_server_name(bitcode_file)
     get_designated_connection().llvm_load_module(name, bitcode_file).result()
     return LLVMModule(bitcode_file, name)
 
+
 class VerificationResult(metaclass=ABCMeta):
-    server_name : str
-    assumptions : List[Any]   # really, List[VerificationResult],
-    contract : llvm.Contract  # but mypy doesn't allow recursive types
-    _unique_id : uuid.UUID
+    server_name: str
+    assumptions: List[Any]   # really, List[VerificationResult],
+    contract: llvm.Contract  # but mypy doesn't allow recursive types
+    _unique_id: uuid.UUID
 
     def __bool__(self) -> bool:
         pass
 
+
 @dataclass
 class VerificationSucceeded(VerificationResult):
     def __init__(self,
-                 server_name : str,
-                 assumptions : List[VerificationResult],
-                 contract : llvm.Contract) -> None:
+                 server_name: str,
+                 assumptions: List[VerificationResult],
+                 contract: llvm.Contract) -> None:
         self.server_name = server_name
         self.assumptions = assumptions
         self.contract = contract
@@ -136,15 +150,16 @@ class VerificationSucceeded(VerificationResult):
     def __bool__(self) -> bool:
         return True
 
+
 @dataclass
 class VerificationFailed(VerificationResult):
-    exception : exceptions.VerificationError
+    exception: exceptions.VerificationError
 
     def __init__(self,
-                 server_name : str,
-                 assumptions : List[VerificationResult],
-                 contract : llvm.Contract,
-                 exception : exceptions.VerificationError) -> None:
+                 server_name: str,
+                 assumptions: List[VerificationResult],
+                 contract: llvm.Contract,
+                 exception: exceptions.VerificationError) -> None:
         self.server_name = server_name
         self.assumptions = assumptions
         self.contract = contract
@@ -154,22 +169,24 @@ class VerificationFailed(VerificationResult):
     def __bool__(self) -> bool:
         return False
 
+
 @dataclass
 class AssumptionFailed(VerificationFailed):
     def __init__(self,
-                 server_name : str,
-                 assumptions : List[VerificationResult],
-                 contract : llvm.Contract,
-                 exception : exceptions.VerificationError) -> None:
+                 server_name: str,
+                 assumptions: List[VerificationResult],
+                 contract: llvm.Contract,
+                 exception: exceptions.VerificationError) -> None:
         super().__init__(server_name,
                          assumptions,
                          contract,
                          exception)
 
+
 class AllVerificationResults:
-    __results : Dict[uuid.UUID, VerificationResult]
-    __qed_called : bool
-    __proceeding_normally : bool
+    __results: Dict[uuid.UUID, VerificationResult]
+    __qed_called: bool
+    __proceeding_normally: bool
 
     def __init__(self) -> None:
         self.__results = {}
@@ -177,7 +194,7 @@ class AllVerificationResults:
         self.__qed_called = False
         self.__proceeding_normally = True
 
-    def __add_result__(self, result : VerificationResult) -> None:
+    def __add_result__(self, result: VerificationResult) -> None:
         self.__results[result._unique_id] = result
         self.__update_dashboard__()
 
@@ -192,7 +209,7 @@ class AllVerificationResults:
                 color = "red"
                 bgcolor = "lightpink"
             # Determine the node attributes
-            node_attrs : Dict[str, str] = {
+            node_attrs: Dict[str, str] = {
                 'label': result.contract.__class__.__name__,
                 'color': color,
                 'bgcolor': bgcolor,
@@ -236,7 +253,8 @@ class AllVerificationResults:
 
     def errors_html(self) -> str:
         # Generate an HTML representation of all the errors so far
-        out = '<div style="padding: 20pt; font-family: Courier; text-align: left">'
+        out = '<div style="padding: 20pt; '\
+            'font-family: Courier; text-align: left">'
         if not self.all_ok():
             out += '<h2>Errors:</h2>'
         for _, result in self.__results.items():
@@ -251,7 +269,7 @@ class AllVerificationResults:
         return out
 
     def dashboard_html(self) -> str:
-        progress : str
+        progress: str
         if self.__qed_called:
             progress = '<span style="font-weight: normal">'
             if self.all_ok():
@@ -264,7 +282,7 @@ class AllVerificationResults:
         else:
             progress = '<i style="font-weight: normal">(running...)</i>'
         if designated_dashboard_path is not None:
-            proof_name : str = os.path.basename(designated_dashboard_path)
+            proof_name: str = os.path.basename(designated_dashboard_path)
             return \
                 '<center><h1 style="font-family: Courier">' \
                 + proof_name + ': ' + progress \
@@ -296,7 +314,7 @@ class AllVerificationResults:
                 ok = False
         return ok
 
-    def __qed__(self, complete : bool) -> None:
+    def __qed__(self, complete: bool) -> None:
         self.__qed_called = True
         self.__proceeding_normally = \
             self.__proceeding_normally and complete
@@ -308,22 +326,25 @@ class AllVerificationResults:
             print("Verification succeeded.", file=sys.stderr)
             sys.exit(0)
 
-def llvm_verify(module : LLVMModule,
-                function : str,
-                contract : llvm.Contract,
-                lemmas : Optional[List[VerificationResult]] = None,
-                check_sat : bool = False,
-                script : Optional[proofscript.ProofScript] = None,
-                lemma_name_hint : Optional[str] = None) -> VerificationResult:
 
-    if lemmas is None: lemmas = []
-    if script is None: script = proofscript.ProofScript([proofscript.abc])
+def llvm_verify(module: LLVMModule,
+                function: str,
+                contract: llvm.Contract,
+                lemmas: Optional[List[VerificationResult]] = None,
+                check_sat: bool = False,
+                script: Optional[proofscript.ProofScript] = None,
+                lemma_name_hint: Optional[str] = None) -> VerificationResult:
+
+    if lemmas is None:
+        lemmas = []
+    if script is None:
+        script = proofscript.ProofScript([proofscript.abc])
 
     lemma_name_hint = contract.__class__.__name__ + "_" + function
     name = llvm.uniquify(lemma_name_hint, used_server_names)
     used_server_names.add(name)
 
-    result : VerificationResult
+    result: VerificationResult
     conn = get_designated_connection()
     conn_snapshot = conn.snapshot()
     abort_proof = False
@@ -373,8 +394,10 @@ def llvm_verify(module : LLVMModule,
 
     # Abort the proof if we failed to assume a failed verification, otherwise
     # return the result of the verification
-    if abort_proof: all_verification_results.__qed__(False)
+    if abort_proof:
+        all_verification_results.__qed__(False)
     return result
+
 
 @atexit.register
 def qed() -> None:

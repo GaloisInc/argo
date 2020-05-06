@@ -32,6 +32,10 @@ class SAWConnection:
         """Return the PID of the running server process."""
         return self.proc.pid()
 
+    def running(self) -> bool:
+        """Return whether the underlying server process is still running."""
+        return self.proc.running()
+
     def snapshot(self) -> SAWConnection:
         """Return a ``SAWConnection`` that has the same process and state as
         the current connection. The new connection's state will be

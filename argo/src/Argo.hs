@@ -69,6 +69,7 @@ import qualified Data.Text.IO as T
 import GHC.Stack
 import Network.Wai (strictRequestBody)
 import System.IO
+import System.IO.Silently
 import Web.Scotty hiding (raise, params, get, put)
 
 
@@ -338,28 +339,39 @@ instance JSON.ToJSON Request where
       "id"      .= view requestID     req <>
       "params"  .= view requestParams req
 
-handleRequest :: forall s . (Text -> IO ()) -> (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
-handleRequest logger out app req =
+handleRequest ::
+  forall s.
+  (Text -> IO ()) ->
+  (BS.ByteString -> IO ()) ->
+  App s ->
+  Request ->
+  IO ()
+handleRequest logger respond app req =
   case M.lookup method $ view appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (Command, m) ->
       withRequestID $
-      do answer <- modifyMVar theState $ runMethod (m params) logger
+      do (err, (out, answer)) <-
+           hCapture [stderr] . hCapture [stdout] $
+           modifyMVar theState $ runMethod (m params) logger
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
                                     ]
-         out (JSON.encode response)
+         respond (JSON.encode response)
     Just (Query, m) ->
       withRequestID $
-      do (_, answer) <- runMethod (m params) logger =<< readMVar theState
+      do (err, (out, (_, answer))) <-
+           hCapture [stderr] . hCapture [stdout] $
+           runMethod (m params) logger =<< readMVar theState
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
                                     ]
-         out (JSON.encode response)
+         respond (JSON.encode response)
     Just (Notification, m) ->
       withoutRequestID $
+      hSilence [stderr, stdout] $
       void $ modifyMVar theState $ runMethod (m params) logger
   where
     method   = view requestMethod req

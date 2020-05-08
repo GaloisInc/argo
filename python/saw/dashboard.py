@@ -1,4 +1,10 @@
 import requests
+import uuid
+from typing import Dict
+import subprocess
+import os
+import sys
+from . import View, VerificationResult, VerificationFailed
 
 MYXINE_PORT = 1123
 
@@ -35,147 +41,160 @@ def serve_self_refreshing(path: str, title: str, content: str) -> None:
                   data=wrapped_content.encode("utf-8"))
 
 
-# class AllVerificationResults:
-#     __results: Dict[uuid.UUID, VerificationResult]
-#     __qed_called: bool
-#     __proceeding_normally: bool
+class Dashboard(View):
+    __results: Dict[uuid.UUID, VerificationResult]
+    __path: str
+    __disconnected: bool = False
 
-#     def __init__(self) -> None:
-#         self.__results = {}
-#         self.__update_dashboard__()
-#         self.__qed_called = False
-#         self.__proceeding_normally = True
+    def on_failure(self, failure):
+        self.__add_result__(failure)
+        self.__update_dashboard__(False)
 
-#     def __add_result__(self, result: VerificationResult) -> None:
-#         self.__results[result._unique_id] = result
-#         self.__update_dashboard__()
+    def on_success(self, success):
+        self.__add_result__(success)
+        self.__update_dashboard__(False)
 
-#     def dot_graph(self) -> str:
-#         out = "digraph { \n"
-#         for _, result in self.__results.items():
-#             # Determine the node color
-#             if result:
-#                 color = "green"
-#                 bgcolor = "lightgreen"
-#             else:
-#                 color = "red"
-#                 bgcolor = "lightpink"
-#             # Determine the node attributes
-#             node_attrs: Dict[str, str] = {
-#                 'label': result.contract.__class__.__name__,
-#                 'color': color,
-#                 'bgcolor': bgcolor,
-#                 'fontname': "Courier",
-#                 'shape': 'rect',
-#                 'penwidth': '2',
-#             }
-#             # Render the attributes
-#             node_attr_string = ""
-#             for key, val in node_attrs.items():
-#                 node_attr_string += key + " = \"" + val + "\"; "
-#             # Render this node line
-#             out += '    "' + str(result._unique_id) \
-#                 + '" [' + node_attr_string.rstrip('; ') + "];\n"
-#             # Render each of the assumption edges
-#             for assumption in result.assumptions[:]:
-#                 edge_attrs: Dict[str, str] = {
-#                     'penwidth': '2',
-#                     'arrowType': 'open',
-#                 }
-#                 edge_attr_string = ""
-#                 for key, val in edge_attrs.items():
-#                     edge_attr_string += key + " = \"" + val + "\"; "
-#                 out += '    "' \
-#                     + str(assumption._unique_id) \
-#                     + '" -> "' \
-#                     + str(result._unique_id) \
-#                     + '" [' + edge_attr_string.rstrip('; ') + '];\n'
-#         out += "}"
-#         # print(out)
-#         return out
+    def on_finish_failure(self):
+        self.__update_dashboard__(True)
 
-#     def svg_graph(self) -> str:
-#         # Generate a GraphViz DOT representation
-#         dot_repr = self.dot_graph()
-#         # Write out & render the DOT file and open it in a web browser
-#         svg = subprocess.check_output(["dot", "-T", "svg"],
-#                                       input=dot_repr,
-#                                       text=True)
-#         return svg
+    def on_finish_success(self):
+        self.__update_dashboard__(True)
 
-#     def errors_html(self) -> str:
-#         # Generate an HTML representation of all the errors so far
-#         out = '<div style="padding: 20pt; '\
-#             'font-family: Courier; text-align: left">'
-#         if not self.all_ok():
-#             out += '<h2>Errors:</h2>'
-#         for _, result in self.__results.items():
-#             if isinstance(result, VerificationFailed):
-#                 out += '<p style="font-size: 16pt">'
-#                 out += '<b>' + result.contract.__class__.__name__ + ': </b>'
-#                 out += '<span style="color: firebrick">'
-#                 out += str(result.exception)
-#                 out += '</span>'
-#                 out += '</p>'
-#         out += '</div>'
-#         return out
+    def __init__(self, *, path: str) -> None:
+        self.__results = {}
+        self.__path = path
+        self.__update_dashboard__(True)
+        if not self.__disconnected:
+            print(f"Dashboard: http://localhost:{MYXINE_PORT}/{path}",
+                  file=sys.stderr)
 
-#     def dashboard_html(self) -> str:
-#         progress : str
-#         progress = '<div style="font-weight: normal; font-family: Courier; font-size: 20pt; padding: 20pt">'
-#         if self.__qed_called:
-#             if self.all_ok():
-#                 progress += '✅ <span style="font-size: 25pt">(successfully verified!)</span>'
-#             elif self.__proceeding_normally:
-#                 progress += '🚫 <span style="font-size: 25pt">(failed to verify)</span>'
-#             else:
-#                 progress += '🚫 <span style="font-size: 25pt">(incomplete: exception during proving)</span>'
-#             progress += '</div>'
-#         else:
-#             progress += dashboard.LOADING_SVG \
-#                 + '<br/><span style="font-size: 25pt"><i style="font-weight: normal">(running...)</i></span>'
-#         progress += "</div>"
-#         if designated_dashboard_path is not None:
-#             proof_name: str = os.path.basename(designated_dashboard_path)
-#             return \
-#                 '<center><h1 style="font-family: Courier">' \
-#                 + proof_name \
-#                 + """</h1><div height="100%>""" \
-#                 + self.svg_graph() \
-#                 + "</div>" \
-#                 + "<div>" \
-#                 + progress \
-#                 + self.errors_html() \
-#                 + "</div></center>"
-#         else:
-#             raise ValueError("Can't render dashboard HTML before dashboard is initialized")
+    def __add_result__(self, result: VerificationResult) -> None:
+        self.__results[result._unique_id] = result
 
-#     def __update_dashboard__(self) -> None:
-#         if designated_dashboard_path is not None:
-#             dashboard.serve_self_refreshing(designated_dashboard_path,
-#                                             os.path.basename(designated_dashboard_path),
-#                                             self.dashboard_html())
+    def dot_graph(self) -> str:
+        out = "digraph { \n"
+        for _, result in self.__results.items():
+            # Determine the node color
+            if result:
+                color = "green"
+                bgcolor = "lightgreen"
+            else:
+                color = "red"
+                bgcolor = "lightpink"
+            # Determine the node attributes
+            node_attrs: Dict[str, str] = {
+                'label': result.contract.__class__.__name__,
+                'color': color,
+                'bgcolor': bgcolor,
+                'fontname': "Courier",
+                'shape': 'rect',
+                'penwidth': '2',
+            }
+            # Render the attributes
+            node_attr_string = ""
+            for key, val in node_attrs.items():
+                node_attr_string += key + " = \"" + val + "\"; "
+            # Render this node line
+            out += '    "' + str(result._unique_id) \
+                + '" [' + node_attr_string.rstrip('; ') + "];\n"
+            # Render each of the assumption edges
+            for assumption in result.assumptions[:]:
+                edge_attrs: Dict[str, str] = {
+                    'penwidth': '2',
+                    'arrowType': 'open',
+                }
+                edge_attr_string = ""
+                for key, val in edge_attrs.items():
+                    edge_attr_string += key + " = \"" + val + "\"; "
+                out += '    "' \
+                    + str(assumption._unique_id) \
+                    + '" -> "' \
+                    + str(result._unique_id) \
+                    + '" [' + edge_attr_string.rstrip('; ') + '];\n'
+        out += "}"
+        # print(out)
+        return out
 
-#     def all_ok(self) -> bool:
-#         # Iterate through all lemmata to determine if everything is okay
-#         # Builds a graph of all dependencies
-#         ok = True
-#         for _, result in self.__results.items():
-#             if not result:
-#                 ok = False
-#         return ok
+    def svg_graph(self) -> str:
+        # Generate a GraphViz DOT representation
+        dot_repr = self.dot_graph()
+        # Write out & render the DOT file and open it in a web browser
+        svg = subprocess.check_output(["dot", "-T", "svg"],
+                                      input=dot_repr,
+                                      text=True)
+        return svg
 
-#     def __qed__(self, complete: bool) -> None:
-#         self.__qed_called = True
-#         self.__proceeding_normally = \
-#             self.__proceeding_normally and complete
-#         self.__update_dashboard__()
-#         if not self.all_ok():
-#             print("Verification did not succeed.", file=sys.stderr)
-#             sys.exit(1)
-#         else:
-#             print("Verification succeeded.", file=sys.stderr)
-#             sys.exit(0)
+    def errors_html(self) -> str:
+        # Generate an HTML representation of all the errors so far
+        out = '<div style="padding: 20pt; '\
+            'font-family: Courier; text-align: left">'
+        if not self.all_ok():
+            out += '<h2>Errors:</h2>'
+        for _, result in self.__results.items():
+            if isinstance(result, VerificationFailed):
+                out += '<p style="font-size: 16pt">'
+                out += '<b>' + result.contract.__class__.__name__ + ': </b>'
+                out += '<span style="color: firebrick">'
+                out += str(result.exception)
+                out += '</span>'
+                out += '</p>'
+        out += '</div>'
+        return out
+
+    def dashboard_html(self, qed_called: bool) -> str:
+        progress: str
+        progress = '<div style="font-weight: normal; ' \
+            + 'font-family: Courier; font-size: 20pt; padding: 20pt">'
+        if qed_called:
+            if self.all_ok():
+                progress += \
+                    '✅ <span style="font-size: 25pt">' \
+                    '(successfully verified!)</span>'
+            elif self.__proceeding_normally:
+                progress += \
+                    '🚫 <span style="font-size: 25pt">'\
+                    '(failed to verify)</span>'
+            else:
+                progress += \
+                    '🚫 <span style="font-size: 25pt">' \
+                    '(incomplete: exception during proving)</span>'
+            progress += '</div>'
+        else:
+            progress += LOADING_SVG \
+                + '<br/><span style="font-size: 25pt">' \
+                '<i style="font-weight: normal">(running...)</i></span>'
+        progress += "</div>"
+        proof_name: str = os.path.basename(self.__path)
+        return \
+            '<center><h1 style="font-family: Courier">' \
+            + proof_name \
+            + """</h1><div height="100%>""" \
+            + self.svg_graph() \
+            + "</div>" \
+            + "<div>" \
+            + progress \
+            + self.errors_html() \
+            + "</div></center>"
+
+    def __update_dashboard__(self, qed_called: bool) -> None:
+        if not self.__disconnected:
+            try:
+                serve_self_refreshing(self.__path,
+                                      os.path.basename(self.__path),
+                                      self.dashboard_html(qed_called))
+            except Exception as e:
+                print(f"Dashboard error: can't connect to server: {e}",
+                      file=sys.stderr)
+                self.__disconnected = True
+
+    def all_ok(self) -> bool:
+        # Iterate through all lemmata to determine if everything is okay
+        # Builds a graph of all dependencies
+        ok = True
+        for _, result in self.__results.items():
+            if not result:
+                ok = False
+        return ok
 
 # # Set up the dashboard path
 # if designated_dashboard_path is None:
@@ -198,14 +217,3 @@ def serve_self_refreshing(path: str, title: str, content: str) -> None:
 # else:
 #     raise ValueError("There is already a designated dashboard URL."
 #                      " Did you call `connect()` more than once?")
-
-# # Print the dashboard path
-# print("Dashboard:", get_designated_url(), file=sys.stderr)
-
-# def get_designated_url() -> str:
-#     global designated_dashboard_path
-#     if designated_dashboard_path is None:
-#         raise ValueError("There is not yet a designated dashboard URL")
-#     else:
-#         return "http://localhost:" + str(dashboard.MYXINE_PORT) \
-#             + "/" + designated_dashboard_path

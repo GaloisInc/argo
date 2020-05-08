@@ -1,177 +1,219 @@
-import http.server
-import http.client
-import socketserver
-import socket
-import random
-import functools
-import tempfile
+import requests
+import uuid
+from typing import Dict
+import subprocess
 import os
 import sys
-import signal
-import types
-import time
-import hashlib
-import math
-import subprocess
-import multiprocessing
-from pathlib import Path
-from typing import Optional, Any, Type, Callable
+from . import View, VerificationResult, VerificationFailed
 
-DEFAULT_PORT = 27182
-DEFAULT_LOCATION_FILENAME = '.__LOCATION__'
-DEFAULT_CONTENT_DIRECTORY= '.__CONTENT__'
+MYXINE_PORT = 1123
 
-class TempDirHandler(http.server.SimpleHTTPRequestHandler):
-    # Suppress logging output
-    def log_message(*args : Any, **kwargs : Any) -> Any:
-        pass
+# Loading SVG is licensed for free reuse from https://icons8.com/preloaders/
+LOADING_SVG = \
+    """<svg xmlns:svg="http://www.w3.org/2000/svg"
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    version="1.0" width="35pt" height="35pt" viewBox="0 0 128 128"
+    xml:space="preserve">
+    <g><path d="M59.6 0h8v40h-8V0z" fill="#000"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#ccc" transform="rotate(30 64 64)"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#ccc" transform="rotate(60 64 64)"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#ccc" transform="rotate(90 64 64)"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#ccc" transform="rotate(120 64 64)"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#b2b2b2" transform="rotate(150 64 64)"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#999" transform="rotate(180 64 64)"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#7f7f7f" transform="rotate(210 64 64)"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#666" transform="rotate(240 64 64)"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#4c4c4c" transform="rotate(270 64 64)"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#333" transform="rotate(300 64 64)"/>
+    <path d="M59.6 0h8v40h-8V0z" fill="#191919" transform="rotate(330 64 64)"/>
+    <animateTransform attributeName="transform" type="rotate"
+    values="0 64 64;30 64 64;60 64 64;90 64 64;120 64 64;150 64 64;180 64 64;210 64 64;240 64 64;270 64 64;300 64 64;330 64 64"
+    calcMode="discrete" dur="1320ms" repeatCount="indefinite">
+    </animateTransform></g></svg>"""
 
-# Serving files from an arbitrary base path
-# Source: https://stackoverflow.com/a/46332163/568988
-def handle_dir(directory: str) -> Any:
-    return functools.partial(TempDirHandler, directory=directory)
 
-def launch_dashboard(port : int = DEFAULT_PORT,
-                     location_filename : str = DEFAULT_LOCATION_FILENAME,
-                     within_process : Optional[Callable[[], None]] = None) -> None:
-    if within_process is not None: within_process()
-    if os.fork() != 0: return
-    if within_process is not None: within_process()
-    with tempfile.TemporaryDirectory() as tempdir:
-        with socketserver.TCPServer(("", port), handle_dir(tempdir)) as httpd:
-            # Store the location of the tempdir in itself
-            print(tempdir, end='', flush=True,
-                  file=open(os.path.join(tempdir, location_filename), 'w'))
-            # Serve all files in the temporary directory:
-            httpd.serve_forever()
+def serve_self_refreshing(path: str, title: str, content: str) -> None:
+    url = 'http://localhost:' + str(MYXINE_PORT) + '/' + path.strip('/')
+    wrapped_content = '<div id="content">' + content + '</div>'
+    requests.post(url=url,
+                  params={'title': title},
+                  data=wrapped_content.encode("utf-8"))
 
-class NoTempDirResponse(Exception):
-    def __init__(self, status : int):
-        super().__init__(f"No temp directory location info found (status: {status})")
-        self.status = status
 
-def add_to_tempdir(tempdir : str,
-                   path : str,
-                   content : str) -> None:
-    temp_path = os.path.join(tempdir, path)
-    (dirs, filename) = os.path.split(temp_path)
-    os.makedirs(dirs, exist_ok=True)
-    print(content, end='', flush=True, file=open(temp_path, 'w'))
-    Path(temp_path).touch(exist_ok=True)
+class Dashboard(View):
+    __results: Dict[uuid.UUID, VerificationResult]
+    __path: str
+    __disconnected: bool = False
 
-def serve_temp(path : str, content : str,
-               port : int = DEFAULT_PORT,
-               location_filename : str = DEFAULT_LOCATION_FILENAME,
-               within_process : Optional[Callable[[], None]] = None) -> None:
-    attempted_server = False
-    success = False
-    while not success:
-        # See if a server is already running at our port
-        try:
-            conn = http.client.HTTPConnection("127.0.0.1", port=port)
-            conn.request("GET", location_filename)
-            response = conn.getresponse()
-            status = response.status
+    def on_failure(self, failure):
+        self.__add_result__(failure)
+        self.__update_dashboard__(False)
 
-            # Any running version of our server should tell us where its tempdir is
-            if status != 200: raise NoTempDirResponse(status)
-            tempdir = response.read().decode("utf-8")
+    def on_success(self, success):
+        self.__add_result__(success)
+        self.__update_dashboard__(False)
 
-            # Write the string to the specified path in the tempdir
-            add_to_tempdir(tempdir, path, content)
+    def on_finish_failure(self):
+        self.__update_dashboard__(True)
 
-            # It worked!
-            success = True
+    def on_finish_success(self):
+        self.__update_dashboard__(True)
 
-        # If not, start a server
-        except ConnectionRefusedError:
-            if not attempted_server:
-                # Serve all files in the temporary directory, forever:
-                proc = multiprocessing.Process(target=launch_dashboard,
-                                               args=(port, location_filename, within_process))
-                proc.start()
+    def __init__(self, *, path: str) -> None:
+        self.__results = {}
+        self.__path = path
+        self.__update_dashboard__(True)
+        if not self.__disconnected:
+            print(f"Dashboard: http://localhost:{MYXINE_PORT}/{path}",
+                  file=sys.stderr)
 
-                # Try to connect to new server after a slight pause
-                attempted_server = True
-                time.sleep(0.1)
+    def __add_result__(self, result: VerificationResult) -> None:
+        self.__results[result._unique_id] = result
+
+    def dot_graph(self) -> str:
+        out = "digraph { \n"
+        for _, result in self.__results.items():
+            # Determine the node color
+            if result:
+                color = "green"
+                bgcolor = "lightgreen"
             else:
-                raise ValueError("Could not start dashboard server")
+                color = "red"
+                bgcolor = "lightpink"
+            # Determine the node attributes
+            node_attrs: Dict[str, str] = {
+                'label': result.contract.__class__.__name__,
+                'color': color,
+                'bgcolor': bgcolor,
+                'fontname': "Courier",
+                'shape': 'rect',
+                'penwidth': '2',
+            }
+            # Render the attributes
+            node_attr_string = ""
+            for key, val in node_attrs.items():
+                node_attr_string += key + " = \"" + val + "\"; "
+            # Render this node line
+            out += '    "' + str(result._unique_id) \
+                + '" [' + node_attr_string.rstrip('; ') + "];\n"
+            # Render each of the assumption edges
+            for assumption in result.assumptions[:]:
+                edge_attrs: Dict[str, str] = {
+                    'penwidth': '2',
+                    'arrowType': 'open',
+                }
+                edge_attr_string = ""
+                for key, val in edge_attrs.items():
+                    edge_attr_string += key + " = \"" + val + "\"; "
+                out += '    "' \
+                    + str(assumption._unique_id) \
+                    + '" -> "' \
+                    + str(result._unique_id) \
+                    + '" [' + edge_attr_string.rstrip('; ') + '];\n'
+        out += "}"
+        # print(out)
+        return out
 
-def self_refreshing_html(title : str, body_path : str) -> str: \
-return """
-<!DOCTYPE html>
-<html>
-    <head>
-        <meta charset="UTF-8">
-        <title>""" + title + """</title>
-    </head>
+    def svg_graph(self) -> str:
+        # Generate a GraphViz DOT representation
+        dot_repr = self.dot_graph()
+        # Write out & render the DOT file and open it in a web browser
+        svg = subprocess.check_output(["dot", "-T", "svg"],
+                                      input=dot_repr,
+                                      text=True)
+        return svg
 
-    <body>
-    </body>
+    def errors_html(self) -> str:
+        # Generate an HTML representation of all the errors so far
+        out = '<div style="padding: 20pt; '\
+            'font-family: Courier; text-align: left">'
+        if not self.all_ok():
+            out += '<h2>Errors:</h2>'
+        for _, result in self.__results.items():
+            if isinstance(result, VerificationFailed):
+                out += '<p style="font-size: 16pt">'
+                out += '<b>' + result.contract.__class__.__name__ + ': </b>'
+                out += '<span style="color: firebrick">'
+                out += str(result.exception)
+                out += '</span>'
+                out += '</p>'
+        out += '</div>'
+        return out
 
-    <script type="text/javascript">
-     window.onload = function() {
-         reload();
-     }
+    def dashboard_html(self, qed_called: bool) -> str:
+        progress: str
+        progress = '<div style="font-weight: normal; ' \
+            + 'font-family: Courier; font-size: 20pt; padding: 20pt">'
+        if qed_called:
+            if self.all_ok():
+                progress += \
+                    '✅ <span style="font-size: 25pt">' \
+                    '(successfully verified!)</span>'
+            elif self.__proceeding_normally:
+                progress += \
+                    '🚫 <span style="font-size: 25pt">'\
+                    '(failed to verify)</span>'
+            else:
+                progress += \
+                    '🚫 <span style="font-size: 25pt">' \
+                    '(incomplete: exception during proving)</span>'
+            progress += '</div>'
+        else:
+            progress += LOADING_SVG \
+                + '<br/><span style="font-size: 25pt">' \
+                '<i style="font-weight: normal">(running...)</i></span>'
+        progress += "</div>"
+        proof_name: str = os.path.basename(self.__path)
+        return \
+            '<center><h1 style="font-family: Courier">' \
+            + proof_name \
+            + """</h1><div height="100%>""" \
+            + self.svg_graph() \
+            + "</div>" \
+            + "<div>" \
+            + progress \
+            + self.errors_html() \
+            + "</div></center>"
 
-     var refreshTimer;
+    def __update_dashboard__(self, qed_called: bool) -> None:
+        if not self.__disconnected:
+            try:
+                serve_self_refreshing(self.__path,
+                                      os.path.basename(self.__path),
+                                      self.dashboard_html(qed_called))
+            except Exception as e:
+                print(f"Dashboard error: can't connect to server: {e}",
+                      file=sys.stderr)
+                self.__disconnected = True
 
-     function reload() {
-         var xhttp = new XMLHttpRequest();
-         xhttp.onreadystatechange = function() {
-             if (this.readyState == 4 && this.status == 200) {
-                 var response = xhttp.responseText;
-                 // console.log(response);
-                 document.body.innerHTML = response;
-                 var content = document.getElementById('content')
-                 var title = content.getAttribute('data-page-title');
-                 var nextRefresh = parseInt(content.getAttribute('data-next-refresh'));
-                 if (nextRefresh != NaN) {
-                     clearInterval(refreshTimer);
-                     refreshTimer = setInterval(reload, nextRefresh);
-                 }
-                 document.title = title;
-             }
-         };
+    def all_ok(self) -> bool:
+        # Iterate through all lemmata to determine if everything is okay
+        # Builds a graph of all dependencies
+        ok = True
+        for _, result in self.__results.items():
+            if not result:
+                ok = False
+        return ok
 
-         // Assembling the request URL:
-         var port = window.location.port;
-         var colon = (port == "") ? "" : ":";
-         var url = "http://localhost".concat(colon, port, "/", \"""" + body_path + """\");
-         // console.log(url);
-
-         // Sending the request:
-         xhttp.open("GET", url, true);
-         xhttp.send();
-     }
-    </script>
-</html>
-"""
-
-def hash_str(s : str) -> str:
-    return hashlib.sha256(s.encode()).hexdigest()
-
-def serve_self_refreshing(path : str,
-                          title : str,
-                          content : str,
-                          refresh_interval : float = 0.5,
-                          content_directory : str = DEFAULT_CONTENT_DIRECTORY,
-                          within_process : Optional[Callable[[], None]] = None) -> None:
-    refresh_interval_millis = math.floor(refresh_interval * 1000)
-    body_path = os.path.join(content_directory, hash_str(path))
-    html_frame = self_refreshing_html(title, body_path)
-    wrapped_content = \
-        """<div id="content" data-next-refresh=\"""" \
-        + str(refresh_interval_millis) \
-        + """\" data-page-title=\"""" \
-        + title + """\">""" \
-        + content \
-        + """</div>"""
-    path = os.path.join(path, "index.html")
-    serve_temp(body_path, wrapped_content, within_process=within_process)
-    serve_temp(path, html_frame, within_process=within_process)
-
-if __name__ == "__main__":
-    try: port = int(sys.argv[1])
-    except IndexError: port = DEFAULT_PORT
-    launch_dashboard(port=port)
+# # Set up the dashboard path
+# if designated_dashboard_path is None:
+#     if dashboard_path is None:
+#         current_frame = inspect.currentframe()
+#         if current_frame is None:
+#             raise ValueError("Cannot automatically assign a dashboard URL"
+#                              " outside a file; use the explicit option"
+#                              " `dashboard_path = \"...\"` when calling "
+#                              "`connect()`")
+#         else:
+#             f_back = current_frame.f_back
+#             if f_back is not None:
+#                 filename = os.path.realpath(inspect.getfile(f_back))
+#                 dashboard_path = \
+#                     re.sub(r'\.py$', '',
+#                            posixpath.join(*filename.split(os.path.sep))) \
+#                       .replace('^/', '')
+#     designated_dashboard_path = dashboard_path
+# else:
+#     raise ValueError("There is already a designated dashboard URL."
+#                      " Did you call `connect()` more than once?")

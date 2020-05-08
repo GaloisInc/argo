@@ -88,6 +88,13 @@ class ServerProcess:
         else:
             return None
 
+    def running(self) -> bool:
+        """Check whether the process is still running."""
+        if self.proc.poll() is None:
+            return True
+        else:
+            return False
+
     def __del__(self) -> None:
         if self.proc is not None:
             if not self.persist:

@@ -337,6 +337,12 @@ class Contract:
 
         return name
 
+    def definition_lineno(self) -> Optional[int]:
+        return self.__definition_lineno
+
+    def definition_filename(self) -> Optional[str]:
+        return self.__definition_filename
+
     def to_json(self) -> Any:
         if self.__cached_json is not None:
             return self.__cached_json

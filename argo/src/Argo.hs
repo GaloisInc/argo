@@ -69,6 +69,7 @@ import qualified Data.Text.IO as T
 import GHC.Stack
 import Network.Wai (strictRequestBody)
 import System.IO
+import System.IO.Silently
 import Web.Scotty hiding (raise, params, get, put)
 
 
@@ -338,29 +339,43 @@ instance JSON.ToJSON Request where
       "id"      .= view requestID     req <>
       "params"  .= view requestParams req
 
-handleRequest :: forall s . (Text -> IO ()) -> (BS.ByteString -> IO ()) -> App s -> Request -> IO ()
-handleRequest logger out app req =
+handleRequest ::
+  forall s.
+  (Text -> IO ()) ->
+  (BS.ByteString -> IO ()) ->
+  App s ->
+  Request ->
+  IO ()
+handleRequest logger respond app req =
   case M.lookup method $ view appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (Command, m) ->
       withRequestID $
-      do answer <- modifyMVar theState $ runMethod (m params) logger
+      do (out, err, answer) <-
+           captureOutErr $
+           modifyMVar theState $ runMethod (m params) logger
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
                                     ]
-         out (JSON.encode response)
+         respond (JSON.encode response)
+         tryPutOutErr out err
     Just (Query, m) ->
       withRequestID $
-      do (_, answer) <- runMethod (m params) logger =<< readMVar theState
+      do (out, err, (_, answer)) <-
+           captureOutErr $
+           runMethod (m params) logger =<< readMVar theState
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
                                     ]
-         out (JSON.encode response)
+         respond (JSON.encode response)
+         tryPutOutErr out err
     Just (Notification, m) ->
       withoutRequestID $
-      void $ modifyMVar theState $ runMethod (m params) logger
+      do (out, err, _) <- captureOutErr $
+           void $ modifyMVar theState $ runMethod (m params) logger
+         tryPutOutErr out err
   where
     method   = view requestMethod req
     params   = view requestParams req
@@ -379,6 +394,16 @@ handleRequest logger out app req =
 
     requireID   = maybe (throwIO invalidRequest) return reqID
     requireNoID = maybe (return ()) (const (throwIO invalidRequest)) reqID
+
+    captureOutErr :: IO a -> IO (String, String, a)
+    captureOutErr action =
+      do (err, (out, res)) <- hCapture [stderr] . hCapture [stdout] $ action
+         pure (out, err, res)
+
+    tryPutOutErr :: String -> String -> IO ()
+    tryPutOutErr out err =
+      do void $ try @IOException (hPutStr stdout out)
+         void $ try @IOException (hPutStr stderr err)
 
 
 -- | Given an IO action, return an atomic-ified version of that same action,

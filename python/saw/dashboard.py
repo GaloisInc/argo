@@ -37,7 +37,10 @@ def serve_self_refreshing(path: str, title: str, content: str) -> None:
     url = 'http://localhost:' + str(MYXINE_PORT) + '/' + path.strip('/')
     wrapped_content = '<div id="content">' + content + '</div>'
     requests.post(url=url,
-                  params={'title': title},
+                  params={
+                      'title': title,
+                      'refresh': 'set',
+                  },
                   data=wrapped_content.encode("utf-8"))
 
 
@@ -122,7 +125,15 @@ class Dashboard(View):
         svg = subprocess.check_output(["dot", "-T", "svg"],
                                       input=dot_repr,
                                       text=True)
-        return svg
+        cleaned = []
+        lines = svg.split('\n').__iter__()
+        for line in lines:
+            if line.startswith('<svg'):
+                cleaned.append(line)
+                break
+        for line in lines:
+            cleaned.append(line)
+        return '\n'.join(cleaned)
 
     def errors_html(self) -> str:
         # Generate an HTML representation of all the errors so far
@@ -168,7 +179,7 @@ class Dashboard(View):
         return \
             '<center><h1 style="font-family: Courier">' \
             + proof_name \
-            + """</h1><div height="100%>""" \
+            + """</h1><div height="100%">""" \
             + self.svg_graph() \
             + "</div>" \
             + "<div>" \

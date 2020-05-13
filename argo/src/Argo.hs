@@ -347,35 +347,27 @@ handleRequest ::
   Request ->
   IO ()
 handleRequest logger respond app req =
-  case M.lookup method $ view appMethods app of
+  tryOutErr $ case M.lookup method $ view appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (Command, m) ->
       withRequestID $
-      do (out, err, answer) <-
-           captureOutErr $
-           modifyMVar theState $ runMethod (m params) logger
+      do answer <- modifyMVar theState $ runMethod (m params) logger
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
                                     ]
          respond (JSON.encode response)
-         tryPutOutErr out err
     Just (Query, m) ->
       withRequestID $
-      do (out, err, (_, answer)) <-
-           captureOutErr $
-           runMethod (m params) logger =<< readMVar theState
+      do (_, answer) <- runMethod (m params) logger =<< readMVar theState
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
                                     ]
          respond (JSON.encode response)
-         tryPutOutErr out err
     Just (Notification, m) ->
       withoutRequestID $
-      do (out, err, _) <- captureOutErr $
-           void $ modifyMVar theState $ runMethod (m params) logger
-         tryPutOutErr out err
+      void $ modifyMVar theState $ runMethod (m params) logger
   where
     method   = view requestMethod req
     params   = view requestParams req
@@ -395,15 +387,17 @@ handleRequest logger respond app req =
     requireID   = maybe (throwIO invalidRequest) return reqID
     requireNoID = maybe (return ()) (const (throwIO invalidRequest)) reqID
 
-    captureOutErr :: IO a -> IO (String, String, a)
-    captureOutErr action =
-      do (err, (out, res)) <- hCapture [stderr] . hCapture [stdout] $ action
-         pure (out, err, res)
-
-    tryPutOutErr :: String -> String -> IO ()
-    tryPutOutErr out err =
-      do void $ try @IOException (hPutStr stdout out)
-         void $ try @IOException (hPutStr stderr err)
+    tryOutErr :: IO a -> IO a
+    tryOutErr action =
+      do (err, (out, res)) <- hCapture [stderr] . hCapture [stdout] $
+           try @SomeException action
+         tryPutOutErr out err
+         either throwIO pure res
+      where
+        tryPutOutErr :: String -> String -> IO ()
+        tryPutOutErr out err =
+          do void $ try @IOException (hPutStr stdout out)
+             void $ try @IOException (hPutStr stderr err)
 
 
 -- | Given an IO action, return an atomic-ified version of that same action,

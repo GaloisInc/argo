@@ -6,7 +6,7 @@ import re
 import socket
 import subprocess
 import signal
-import sys # pylint: disable=unused-import
+import sys  # pylint: disable=unused-import
 from typing import Any, Dict, List, Mapping, Optional, Union
 from mypy_extensions import TypedDict
 
@@ -14,10 +14,10 @@ from . import netstring
 
 
 # Must be boxed separately to enable sharing of connections
-class IDSource: # pylint: disable=too-few-public-methods
+class IDSource:  # pylint: disable=too-few-public-methods
     """A source of unique identifiers for JSON RPC requests."""
 
-    next_id : int
+    next_id: int
 
     def __init__(self) -> None:
         self.next_id = 0
@@ -27,17 +27,21 @@ class IDSource: # pylint: disable=too-few-public-methods
         self.next_id += 1
         return self.next_id
 
+
 class ServerProcess:
     """A wrapper around a server process, responsible for setting it up and
        killing it when finished."""
 
-    proc : Optional[subprocess.Popen]
+    proc: Optional[subprocess.Popen]
 
-    def __init__(self, command : str) -> None:
+    def __init__(self, command: str, *, persist=False) -> None:
         """Start the process using the given command.
 
-           :param command: The command to be executed, using a shell, to start the server."""
+           :param command: The command to be executed, using a shell, to start
+           the server.
+        """
         self.command = command
+        self.persist = persist
         self.proc = None
         self.setup()
 
@@ -54,7 +58,8 @@ class ServerProcess:
         """Start a process, if one is not already running, using the
            environment determined by ``get_environment``."""
         if self.proc is None or self.proc.poll() is not None:
-            # To debug, consider setting stderr to sys.stdout instead (to see server log messages).
+            # To debug, consider setting stderr to sys.stdout instead (to see
+            # server log messages).
             self.proc = subprocess.Popen(
                 self.command,
                 shell=True,
@@ -73,15 +78,30 @@ class ServerProcess:
             if match:
                 self.port = int(match.group(1))
             else:
-                raise Exception("Failed to load process, output was `" + \
+                raise Exception("Failed to load process, output was `" +
                                 out_line + "' but expected PORT then a port.")
+
+    def pid(self) -> Optional[int]:
+        """Return the process group id of the managed server process"""
+        if self.proc is not None:
+            return os.getpgid(self.proc.pid)
+        else:
+            return None
+
+    def running(self) -> bool:
+        """Check whether the process is still running."""
+        if self.proc.poll() is None:
+            return True
+        else:
+            return False
 
     def __del__(self) -> None:
         if self.proc is not None:
-            try:
-                os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            if not self.persist:
+                try:
+                    os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
 
 class ServerConnection:
@@ -95,15 +115,15 @@ class ServerConnection:
        answer received (if any). Furthermore, it has a means of
        sending messages to the server.
     """
-    replies : Dict[int, Any]
+    replies: Dict[int, Any]
 
-    def __init__(self, process : ServerProcess) -> None:
+    def __init__(self, process: ServerProcess) -> None:
         """:param process: The ``ServerProcess`` used for the connection."""
         self.process = process
         self.port = self.process.port
 
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect(("127.0.0.1", self.port))
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        self.sock.connect(("localhost", self.port))
         self.sock.setblocking(False)
         self.buf = bytearray(b'')
         self.replies = {}
@@ -149,14 +169,14 @@ class ServerConnection:
             self.replies[the_reply['id']] = the_reply
             reply_bytes = self._get_one_reply()
 
-    def send_message(self, method : str, params : dict) -> int:
+    def send_message(self, method: str, params: dict) -> int:
         """Send a message to the server with the given JSONRPC method and
            parameters. The return value is the unique request ID that
            was used for the message, which can be used to find
            replies.
         """
         request_id = self.get_id()
-        msg = {'jsonrpc':'2.0',
+        msg = {'jsonrpc': '2.0',
                'method': method,
                'id': request_id,
                'params': params}
@@ -165,14 +185,14 @@ class ServerConnection:
         self.sock.send(msg_bytes)
         return request_id
 
-    def wait_for_reply_to(self, request_id : int) -> Any:
+    def wait_for_reply_to(self, request_id: int) -> Any:
         """Block until a reply is received for the given
            ``request_id``. Return the reply."""
         self._process_replies()
         while request_id not in self.replies:
             try:
-                #self.sock.setblocking(True)
+                # self.sock.setblocking(True)
                 self._process_replies()
             finally:
                 self.sock.setblocking(False)
-        return self.replies.pop(request_id) # deletes reply whilst returning it
+        return self.replies.pop(request_id)  # delete reply whilst returning it

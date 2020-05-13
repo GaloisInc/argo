@@ -347,12 +347,11 @@ handleRequest ::
   Request ->
   IO ()
 handleRequest logger respond app req =
-  case M.lookup method $ view appMethods app of
+  tryOutErr $ case M.lookup method $ view appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (Command, m) ->
       withRequestID $
-      do answer <- tryOutErr $
-           modifyMVar theState $ runMethod (m params) logger
+      do answer <- modifyMVar theState $ runMethod (m params) logger
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
@@ -360,8 +359,7 @@ handleRequest logger respond app req =
          respond (JSON.encode response)
     Just (Query, m) ->
       withRequestID $
-      do (_, answer) <- tryOutErr $
-           runMethod (m params) logger =<< readMVar theState
+      do (_, answer) <- runMethod (m params) logger =<< readMVar theState
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
@@ -369,8 +367,7 @@ handleRequest logger respond app req =
          respond (JSON.encode response)
     Just (Notification, m) ->
       withoutRequestID $
-      do tryOutErr $
-           void $ modifyMVar theState $ runMethod (m params) logger
+      void $ modifyMVar theState $ runMethod (m params) logger
   where
     method   = view requestMethod req
     params   = view requestParams req

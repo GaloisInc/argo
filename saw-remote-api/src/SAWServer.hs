@@ -94,22 +94,22 @@ data SAWState =
 instance Show SAWState where
   show (SAWState e _ t _ _ tf) = "(SAWState " ++ show e ++ " _sc_ " ++ show t ++ " _ro_ _rw" ++ show tf ++ ")"
 
-sawEnv :: Simple Lens SAWState SAWEnv
+sawEnv :: Lens' SAWState SAWEnv
 sawEnv = lens _sawEnv (\v e -> v { _sawEnv = e })
 
-sawBIC :: Simple Lens SAWState BuiltinContext
+sawBIC :: Lens' SAWState BuiltinContext
 sawBIC = lens _sawBIC (\v bic -> v { _sawBIC = bic })
 
-sawTask :: Simple Lens SAWState [(SAWTask, SAWEnv)]
+sawTask :: Lens' SAWState [(SAWTask, SAWEnv)]
 sawTask = lens _sawTask (\v t -> v { _sawTask = t })
 
-sawTopLevelRO :: Simple Lens SAWState TopLevelRO
+sawTopLevelRO :: Lens' SAWState TopLevelRO
 sawTopLevelRO = lens _sawTopLevelRO (\v ro -> v { _sawTopLevelRO = ro })
 
-sawTopLevelRW :: Simple Lens SAWState TopLevelRW
+sawTopLevelRW :: Lens' SAWState TopLevelRW
 sawTopLevelRW = lens _sawTopLevelRW (\v rw -> v { _sawTopLevelRW = rw })
 
-trackedFiles :: Simple Lens SAWState (Map FilePath (Hash.Digest Hash.SHA256))
+trackedFiles :: Lens' SAWState (Map FilePath (Hash.Digest Hash.SHA256))
 trackedFiles = lens _trackedFiles (\v tf -> v { _trackedFiles = tf })
 
 

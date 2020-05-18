@@ -10,7 +10,7 @@ Build tools
 Requirements:
 
 * cabal-install 2.4.1.0 or 3.0.0
-* GHC-8.6.4
+* GHC-8.6.4 or GHC-8.8.3
 * Python 3.7
 
 Any easy to way get GHC and cabal-install installed is to use `ghcup`_;

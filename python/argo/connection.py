@@ -6,9 +6,7 @@ import re
 import socket
 import subprocess
 import signal
-import sys  # pylint: disable=unused-import
-from typing import Any, Dict, List, Mapping, Optional, Union
-from mypy_extensions import TypedDict
+from typing import Any, Dict, Mapping, Optional, Union
 
 from . import netstring
 
@@ -90,7 +88,7 @@ class ServerProcess:
 
     def running(self) -> bool:
         """Check whether the process is still running."""
-        if self.proc.poll() is None:
+        if self.proc is not None and self.proc.poll() is None:
             return True
         else:
             return False

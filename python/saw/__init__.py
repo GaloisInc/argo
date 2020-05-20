@@ -62,11 +62,15 @@ class VerificationSucceeded(VerificationResult):
     def __init__(self,
                  server_name: str,
                  assumptions: List[VerificationResult],
-                 contract: llvm.Contract) -> None:
+                 contract: llvm.Contract,
+                 stdout: str,
+                 stderr: str) -> None:
         self.server_name = server_name
         self.assumptions = assumptions
         self.contract = contract
         self._unique_id = uuid.uuid4()
+        self.stdout = stdout
+        self.stderr = stderr
 
     def __bool__(self) -> bool:
         return True
@@ -150,16 +154,53 @@ class View:
            do this."""
         pass
 
+    def on_abort(self) -> None:
+        """If the proof is aborted due to inability to assume a lemma, do
+        this."""
+        pass
 
+
+class DebugLog(View):
+    """A view on the verification results that logs the stdout/stderr of the
+    method to stdout/stderr, or specified file handles."""
+
+    def __init__(self, *, out=sys.stdout, err=sys.stderr):
+        self.out = out
+        self.err = err
+
+    def on_failure(self, failure) -> None:
+        if self.out is not None:
+            print(failure.exception.stdout, file=self.out, end='')
+        if self.err is not None:
+            print(failure.exception.stderr, file=self.err, end='')
+
+    def on_success(self, success) -> None:
+        if self.out is not None:
+            print(success.stdout, file=self.out, end='')
+        if self.err is not None:
+            print(success.stderr, file=self.err, end='')
+
+        
 class LogResults(View):
     """A view on the verification results that logs failures and successes in a
        human-readable text format to stdout, or a given file handle."""
 
     def __init__(self, file=sys.stdout):
         self.file = file
-        self.all_ok = True
+        self.successes = []
+        self.failures = []
 
-    def __result_attributes(result):
+    def format_failure(self, failure) -> str:
+        filename, lineno, lemma_name = self.__result_attributes(failure)
+        return (f"⚠️  Failed to verify: {lemma_name}"
+                f" (defined at {filename}:{lineno}):\n{failure.exception}")
+
+    def format_success(self, success) -> str:
+        filename, lineno, lemma_name = self.__result_attributes(success)
+        return (f"✅  Verified: {lemma_name}"
+                f" (defined at {filename}:{lineno})")
+
+    def __result_attributes(self, result):
         lineno = result.contract.definition_lineno()
         if lineno is None:
             lineno = "<unknown line>"
@@ -169,25 +210,24 @@ class LogResults(View):
         lemma_name = result.contract.lemma_name()
         return (filename, lineno, lemma_name)
 
-    def on_failure(self, result) -> None:
-        filename, lineno, lemma_name = LogResults.__result_attributes(result)
-        print(f"Failed to verify: {lemma_name}"
-              f" (defined at {filename}:{lineno}): {result.exception}",
-              file=self.file)
+    def on_failure(self, failure) -> None:
+        self.failures.append(failure)
+        print(self.format_failure(failure), file=self.file)
 
-    def on_success(self, result) -> None:
-        filename, lineno, lemma_name = LogResults.__result_attributes(result)
-        print(f"Verified: {lemma_name}"
-              f" (defined at {filename}:{lineno})",
-              file=self.file)
+    def on_success(self, success) -> None:
+        self.successes.append(success)
+        print(self.format_success(success), file=self.file)
 
     def on_finish_success(self) -> None:
-        print("All verified!", file=self.file)
+        print("✅  All verified!", file=self.file)
 
     def on_finish_failure(self) -> None:
-        print("Some lemmas failed to verify.", file=self.file)
+        print("🛑  Some lemmas failed to verify.", file=self.file)
 
+    def on_abort(self) -> None:
+        print("🛑  Aborting proof script.", file=self.file)
 
+        
 def view(v: View) -> None:
     """Add a view to the global list of views. Future verification results will
        be handed to this view, and its on_finish() handler will be called at
@@ -235,16 +275,20 @@ def llvm_verify(module: LLVMModule,
     conn_snapshot = conn.snapshot()
     abort_proof = False
     try:
-        conn.llvm_verify(module.server_name,
-                         function,
-                         [l.server_name for l in lemmas],
-                         check_sat,
-                         contract.to_json(),
-                         script.to_json(),
-                         name).result()
+        res = conn.llvm_verify(module.server_name,
+                               function,
+                               [l.server_name for l in lemmas],
+                               check_sat,
+                               contract.to_json(),
+                               script.to_json(),
+                               name)
+        stdout = res.stdout()
+        stderr = res.stderr()
         result = VerificationSucceeded(server_name=name,
                                        assumptions=lemmas,
-                                       contract=contract)
+                                       contract=contract,
+                                       stdout=stdout,
+                                       stderr=stderr)
     # If the verification did not succeed...
     except exceptions.VerificationError as err:
         # roll back to snapshot because the current connection's
@@ -278,14 +322,14 @@ def llvm_verify(module: LLVMModule,
         else:
             view.on_failure(result)
 
+    # Note when any failure occurs
+    global __global_success
+    __global_success = __global_success and result
+
     # Abort the proof if we failed to assume a failed verification, otherwise
     # return the result of the verification
     if abort_proof:
         sys.exit(1)
-
-    # Note when any failure occurs
-    global __global_success
-    __global_success = __global_success and result
 
     return result
 

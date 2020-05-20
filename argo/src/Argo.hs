@@ -152,12 +152,12 @@ data App s =
       }
 
 -- | Focus on the state var in an 'App'
-appState :: Simple Lens (App s) (MVar s)
+appState :: Lens' (App s) (MVar s)
 appState = lens _appState (\a s -> a { _appState = s })
 
 -- | Focus on the 'Method's in an 'App'
 appMethods ::
-  Simple Lens (App s) (Map Text (MethodType, JSON.Value -> Method s JSON.Value))
+  Lens' (App s) (Map Text (MethodType, JSON.Value -> Method s JSON.Value))
 appMethods = lens _appMethods (\a s -> a { _appMethods = s })
 
 -- | Construct an application from an initial state and a mapping from method
@@ -324,13 +324,13 @@ data Request =
           }
   deriving (Show)
 
-requestMethod :: Simple Lens Request Text
+requestMethod :: Lens' Request Text
 requestMethod = lens _requestMethod (\r m -> r { _requestMethod = m })
 
-requestID :: Simple Lens Request (Maybe RequestID)
+requestID :: Lens' Request (Maybe RequestID)
 requestID = lens _requestID (\r i -> r { _requestID = i })
 
-requestParams :: Simple Lens Request JSON.Value
+requestParams :: Lens' Request JSON.Value
 requestParams = lens _requestParams (\r m -> r { _requestParams = m })
 
 suchThat :: HasCallStack => JSON.Parser a -> (a -> Bool) -> JSON.Parser a

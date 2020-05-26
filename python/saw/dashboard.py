@@ -4,7 +4,7 @@ from typing import Dict
 import subprocess
 import os
 import sys
-from . import View, VerificationResult, VerificationFailed
+from . import View, VerificationResult, VerificationFailed, VerificationSucceeded
 
 MYXINE_PORT = 1123
 
@@ -48,18 +48,18 @@ class Dashboard(View):
     __path: str
     __disconnected: bool = False
 
-    def on_failure(self, failure):
+    def on_failure(self, failure: VerificationFailed) -> None:
         self.__add_result__(failure)
         self.__update_dashboard__(False)
 
-    def on_success(self, success):
+    def on_success(self, success: VerificationSucceeded) -> None:
         self.__add_result__(success)
         self.__update_dashboard__(False)
 
-    def on_finish_failure(self):
+    def on_finish_failure(self) -> None:
         self.__update_dashboard__(True)
 
-    def on_finish_success(self):
+    def on_finish_success(self) -> None:
         self.__update_dashboard__(True)
 
     def __init__(self, *, path: str) -> None:
@@ -161,14 +161,10 @@ class Dashboard(View):
                 progress += \
                     '✅ <span style="font-size: 25pt">' \
                     '(successfully verified!)</span>'
-            elif self.__proceeding_normally:
+            else:
                 progress += \
                     '🚫 <span style="font-size: 25pt">'\
                     '(failed to verify)</span>'
-            else:
-                progress += \
-                    '🚫 <span style="font-size: 25pt">' \
-                    '(incomplete: exception during proving)</span>'
         else:
             progress += LOADING_SVG \
                 + '<br/><span style="font-size: 25pt">' \

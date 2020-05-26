@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Optional, Set, Union, Dict, Tuple, Any, Callable
+from typing import List, Optional, Set, Union, Dict, Tuple, Any, Callable, IO
 import webbrowser
 import subprocess
 import uuid
@@ -53,8 +53,8 @@ class VerificationResult(metaclass=ABCMeta):
     contract: llvm.Contract  # but mypy doesn't allow recursive types
     _unique_id: uuid.UUID
 
-    def __bool__(self) -> bool:
-        pass
+    @abstractmethod
+    def is_success(self) -> bool: ...
 
 
 @dataclass
@@ -72,7 +72,7 @@ class VerificationSucceeded(VerificationResult):
         self.stdout = stdout
         self.stderr = stderr
 
-    def __bool__(self) -> bool:
+    def is_success(self) -> bool:
         return True
 
 
@@ -91,7 +91,7 @@ class VerificationFailed(VerificationResult):
         self.exception = exception
         self._unique_id = uuid.uuid4()
 
-    def __bool__(self) -> bool:
+    def is_success(self) -> bool:
         return False
 
 
@@ -122,14 +122,15 @@ def connect(command_or_connection: Union[str, ServerConnection],
 
     # After the script quits, print the server PID
     if persist:
-        def print_if_still_running():
-            try:
-                pid = __designated_connection.pid()
-                if __designated_connection.running():
-                    message = f"Created persistent server process: PID {pid}"
-                    print(message)
-            except ProcessLookupError:
-                pass
+        def print_if_still_running() -> None:
+            if __designated_connection is not None:
+                try:
+                    pid = __designated_connection.pid()
+                    if __designated_connection.running():
+                        message = f"Created persistent server process: PID {pid}"
+                        print(message)
+                except ProcessLookupError:
+                    pass
         atexit.register(print_if_still_running)
 
 
@@ -185,7 +186,7 @@ class LogResults(View):
     """A view on the verification results that logs failures and successes in a
        human-readable text format to stdout, or a given file handle."""
 
-    def __init__(self, file=sys.stdout):
+    def __init__(self, file:IO[str]=sys.stdout):
         self.file = file
         self.successes = []
         self.failures = []
@@ -200,8 +201,9 @@ class LogResults(View):
         return (f"✅  Verified: {lemma_name}"
                 f" (defined at {filename}:{lineno})")
 
-    def __result_attributes(self, result):
-        lineno = result.contract.definition_lineno()
+    @staticmethod
+    def __result_attributes(result: VerificationResult) -> Tuple[str, Union[int, str], str]:
+        lineno: Optional[Union[int, str]] = result.contract.definition_lineno()
         if lineno is None:
             lineno = "<unknown line>"
         filename = result.contract.definition_filename()
@@ -210,11 +212,11 @@ class LogResults(View):
         lemma_name = result.contract.lemma_name()
         return (filename, lineno, lemma_name)
 
-    def on_failure(self, failure) -> None:
+    def on_failure(self, result: VerificationFailed) -> None:
         self.failures.append(failure)
         print(self.format_failure(failure), file=self.file)
 
-    def on_success(self, success) -> None:
+    def on_success(self, result: VerificationSucceeded) -> None:
         self.successes.append(success)
         print(self.format_success(success), file=self.file)
 
@@ -317,9 +319,9 @@ def llvm_verify(module: LLVMModule,
     # Log or otherwise process the verification result
     global __designated_views
     for view in __designated_views:
-        if result:
+        if isinstance(result, VerificationSucceeded):
             view.on_success(result)
-        else:
+        elif isinstance(result, VerificationFailed):
             view.on_failure(result)
 
     # Note when any failure occurs
@@ -335,7 +337,7 @@ def llvm_verify(module: LLVMModule,
 
 
 @atexit.register
-def script_exit():
+def script_exit() -> None:
     global __designated_views
     for view in __designated_views:
         if __global_success:

@@ -35,10 +35,10 @@ data LoadedModule = LoadedModule
   , _loadedPath :: FilePath        -- ^ Working on this file.
   }
 
-loadedName :: Simple Lens LoadedModule (Maybe ModName)
+loadedName :: Lens' LoadedModule (Maybe ModName)
 loadedName = lens _loadedName (\v n -> v { _loadedName = n })
 
-loadedPath :: Simple Lens LoadedModule FilePath
+loadedPath :: Lens' LoadedModule FilePath
 loadedPath = lens _loadedPath (\v n -> v { _loadedPath = n })
 
 
@@ -47,10 +47,10 @@ data ServerState =
               , _moduleEnv :: ModuleEnv
               }
 
-loadedModule :: Simple Lens ServerState (Maybe LoadedModule)
+loadedModule :: Lens' ServerState (Maybe LoadedModule)
 loadedModule = lens _loadedModule (\v n -> v { _loadedModule = n })
 
-moduleEnv :: Simple Lens ServerState ModuleEnv
+moduleEnv :: Lens' ServerState ModuleEnv
 moduleEnv = lens _moduleEnv (\v n -> v { _moduleEnv = n })
 
 initialState :: IO ServerState

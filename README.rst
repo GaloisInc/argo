@@ -10,7 +10,7 @@ Build tools
 Requirements:
 
 * cabal-install 2.4.1.0 or 3.0.0
-* GHC-8.6.4
+* GHC-8.6.4 or GHC-8.8.3
 * Python 3.7
 
 Any easy to way get GHC and cabal-install installed is to use `ghcup`_;
@@ -46,15 +46,15 @@ This project has multiple targets. To build them all you can specify ``all``::
     $ cabal v2-configure -w ghc-8.6.4
     $ cabal v2-build all
 
+Development
+-----------
+
 Documentation
 -------------
 
 The protocol and the Python bindings are described in Sphinx-buildable
 ReStructuredText format in the [docs](docs/) subdirectory. Use ``make html``
 in that directory to build readable HTML output.
-
-Usage
------
 
 Python
 ~~~~~~
@@ -103,6 +103,18 @@ in the repository as the library's source rather than copying them to
 a central location in the virtual environment. This means that they
 can be edited in-place and tested immediately, with no reinstallation
 step. If you'd prefer to just install them, then omit the ``-e`` flag.
+
+Working on the Python bindings
+==============================
+
+To run the ``mypy`` type checker, enter the virtual environment and then run::
+
+    mypy argo saw cryptol
+
+from the ``python`` subdirectory.
+
+Testing the Python bindings
+===========================
 
 To test out the Python bindings, load the test file in a Python
 REPL. We recommend ``ipython3``, because it provides easy access to

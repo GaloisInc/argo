@@ -32,7 +32,7 @@ class ServerProcess:
 
     proc: Optional[subprocess.Popen]
 
-    def __init__(self, command: str, *, persist=False) -> None:
+    def __init__(self, command: str, *, persist: bool=False) -> None:
         """Start the process using the given command.
 
            :param command: The command to be executed, using a shell, to start

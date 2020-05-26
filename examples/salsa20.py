@@ -4,12 +4,13 @@ import os.path
 from cryptol.cryptoltypes import to_cryptol
 from saw.llvm import Contract, LLVMArrayType, uint8_t, uint32_t, void
 from saw import *
-from saw import dashboard
+from saw.dashboard import Dashboard
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 connect("cabal -v0 v2-run exe:saw-remote-api")
 view(DebugLog(err=None))
 view(LogResults())
+view(Dashboard(path=__file__))
 
 bcname = os.path.join(dir_path, 'salsa20.bc')
 cryname = os.path.join(dir_path, 'Salsa20.cry')
@@ -57,7 +58,7 @@ class QuarterRoundContract(Contract):
 
     def post(self):
         self.points_to(self.y0_p,
-                       self.cryptol("(@)")(self.cryptol("quarterround")([self.y0, self.y1, self.y2, self.y3]),
+                       self.cryptol("(@)")(self.cryptol("quarterround")([self.y0, self.y2, self.y2, self.y3]),
                                            self.cryptol("0")))
         self.points_to(self.y1_p,
                        self.cryptol("(@)")(self.cryptol("quarterround")([self.y0, self.y1, self.y2, self.y3]),

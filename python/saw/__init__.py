@@ -279,7 +279,6 @@ def llvm_verify(module: LLVMModule,
     result: VerificationResult
     conn = __get_designated_connection()
     conn_snapshot = conn.snapshot()
-    abort_proof = False
 
     global __global_success
     global __designated_views
@@ -322,7 +321,6 @@ def llvm_verify(module: LLVMModule,
                                       assumptions=lemmas,
                                       contract=contract,
                                       exception=err)
-            abort_proof = True
     # If something else went wrong...
     except Exception as err:
         __global_success = False
@@ -342,7 +340,7 @@ def llvm_verify(module: LLVMModule,
 
     # Abort the proof if we failed to assume a failed verification, otherwise
     # return the result of the verification
-    if abort_proof:
+    if isinstance(result, AssumptionFailed):
         raise result.exception from None
 
     return result

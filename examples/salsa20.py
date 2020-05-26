@@ -58,7 +58,7 @@ class QuarterRoundContract(Contract):
 
     def post(self):
         self.points_to(self.y0_p,
-                       self.cryptol("(@)")(self.cryptol("quarterround")([self.y0, self.y2, self.y2, self.y3]),
+                       self.cryptol("(@)")(self.cryptol("quarterround")([self.y0, self.y1, self.y2, self.y3]),
                                            self.cryptol("0")))
         self.points_to(self.y1_p,
                        self.cryptol("(@)")(self.cryptol("quarterround")([self.y0, self.y1, self.y2, self.y3]),

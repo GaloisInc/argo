@@ -8,7 +8,7 @@ from saw.commands import *
 from typing import Optional, Union, Any, List
 
 
-def connect(command: str, cryptol_path: Optional[str] = None, *, persist=False) -> SAWConnection:
+def connect(command: str, cryptol_path: Optional[str] = None, *, persist: bool = False) -> SAWConnection:
     return SAWConnection(command, persist=persist)
 
 
@@ -19,7 +19,7 @@ class SAWConnection:
 
     def __init__(self,
                  command_or_connection: Union[str, ac.ServerConnection],
-                 *, persist=False) -> None:
+                 *, persist: bool = False) -> None:
         self.most_recent_result = None
         self.persist = persist
         if isinstance(command_or_connection, str):
@@ -28,7 +28,7 @@ class SAWConnection:
         else:
             self.server_connection = command_or_connection
 
-    def pid(self) -> int:
+    def pid(self) -> Optional[int]:
         """Return the PID of the running server process."""
         return self.proc.pid()
 

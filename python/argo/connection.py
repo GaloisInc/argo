@@ -34,7 +34,7 @@ class ServerProcess:
 
     proc: Optional[subprocess.Popen]
 
-    def __init__(self, command: str, *, persist=False) -> None:
+    def __init__(self, command: str, *, persist: bool=False) -> None:
         """Start the process using the given command.
 
            :param command: The command to be executed, using a shell, to start
@@ -90,7 +90,7 @@ class ServerProcess:
 
     def running(self) -> bool:
         """Check whether the process is still running."""
-        if self.proc.poll() is None:
+        if self.proc is None or self.proc.poll() is None:
             return True
         else:
             return False

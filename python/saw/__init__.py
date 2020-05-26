@@ -146,6 +146,10 @@ class View:
         """When a verification attempt succeeds, do this."""
         pass
 
+    def on_python_exception(self, exception: Exception) -> None:
+        """When some Python exception occurs, do this."""
+        pass
+
     def on_finish_success(self) -> None:
         """After all verifications are finished successfully, do this."""
         pass
@@ -165,17 +169,17 @@ class DebugLog(View):
     """A view on the verification results that logs the stdout/stderr of the
     method to stdout/stderr, or specified file handles."""
 
-    def __init__(self, *, out=sys.stdout, err=sys.stderr):
+    def __init__(self, *, out: IO[str] = sys.stdout, err: IO[str] = sys.stderr) -> None:
         self.out = out
         self.err = err
 
-    def on_failure(self, failure) -> None:
+    def on_failure(self, failure: VerificationFailed) -> None:
         if self.out is not None:
             print(failure.exception.stdout, file=self.out, end='')
         if self.err is not None:
             print(failure.exception.stderr, file=self.err, end='')
 
-    def on_success(self, success) -> None:
+    def on_success(self, success: VerificationSucceeded) -> None:
         if self.out is not None:
             print(success.stdout, file=self.out, end='')
         if self.err is not None:
@@ -186,17 +190,17 @@ class LogResults(View):
     """A view on the verification results that logs failures and successes in a
        human-readable text format to stdout, or a given file handle."""
 
-    def __init__(self, file:IO[str]=sys.stdout):
+    def __init__(self, file: IO[str] = sys.stdout):
         self.file = file
-        self.successes = []
-        self.failures = []
+        self.successes: List[VerificationSucceeded] = []
+        self.failures: List[VerificationFailed] = []
 
-    def format_failure(self, failure) -> str:
+    def format_failure(self, failure: VerificationFailed) -> str:
         filename, lineno, lemma_name = self.__result_attributes(failure)
         return (f"⚠️  Failed to verify: {lemma_name}"
                 f" (defined at {filename}:{lineno}):\n{failure.exception}")
 
-    def format_success(self, success) -> str:
+    def format_success(self, success: VerificationSucceeded) -> str:
         filename, lineno, lemma_name = self.__result_attributes(success)
         return (f"✅  Verified: {lemma_name}"
                 f" (defined at {filename}:{lineno})")
@@ -213,12 +217,12 @@ class LogResults(View):
         return (filename, lineno, lemma_name)
 
     def on_failure(self, result: VerificationFailed) -> None:
-        self.failures.append(failure)
-        print(self.format_failure(failure), file=self.file)
+        self.failures.append(result)
+        print(self.format_failure(result), file=self.file)
 
     def on_success(self, result: VerificationSucceeded) -> None:
-        self.successes.append(success)
-        print(self.format_success(success), file=self.file)
+        self.successes.append(result)
+        print(self.format_success(result), file=self.file)
 
     def on_finish_success(self) -> None:
         print("✅  All verified!", file=self.file)
@@ -276,6 +280,10 @@ def llvm_verify(module: LLVMModule,
     conn = __get_designated_connection()
     conn_snapshot = conn.snapshot()
     abort_proof = False
+
+    global __global_success
+    global __designated_views
+    
     try:
         res = conn.llvm_verify(module.server_name,
                                function,
@@ -315,9 +323,14 @@ def llvm_verify(module: LLVMModule,
                                       contract=contract,
                                       exception=err)
             abort_proof = True
+    # If something else went wrong...
+    except Exception as err:
+        __global_success = False
+        for view in __designated_views:
+            view.on_python_exception(err)
+        raise err from None
 
     # Log or otherwise process the verification result
-    global __designated_views
     for view in __designated_views:
         if isinstance(result, VerificationSucceeded):
             view.on_success(result)
@@ -325,13 +338,12 @@ def llvm_verify(module: LLVMModule,
             view.on_failure(result)
 
     # Note when any failure occurs
-    global __global_success
-    __global_success = __global_success and result
+    __global_success = __global_success and result.is_success()
 
     # Abort the proof if we failed to assume a failed verification, otherwise
     # return the result of the verification
     if abort_proof:
-        sys.exit(1)
+        raise result.exception from None
 
     return result
 

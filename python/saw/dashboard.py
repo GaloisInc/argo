@@ -1,6 +1,6 @@
 import requests
 import uuid
-from typing import Dict
+from typing import Dict, Optional
 import subprocess
 import os
 import sys
@@ -47,6 +47,7 @@ class Dashboard(View):
     __results: Dict[uuid.UUID, VerificationResult]
     __path: str
     __disconnected: bool = False
+    __python_exception: Optional[Exception] = None
 
     def on_failure(self, failure: VerificationFailed) -> None:
         self.__add_result__(failure)
@@ -62,10 +63,14 @@ class Dashboard(View):
     def on_finish_success(self) -> None:
         self.__update_dashboard__(True)
 
+    def on_python_exception(self, exception: Exception) -> None:
+        self.__python_exception = exception
+        self.__update_dashboard__(True)
+
     def __init__(self, *, path: str) -> None:
         self.__results = {}
         self.__path = path
-        self.__update_dashboard__(True)
+        self.__update_dashboard__(False)
         if not self.__disconnected:
             print(f"Dashboard: http://localhost:{MYXINE_PORT}/{path}",
                   file=sys.stderr)
@@ -77,7 +82,7 @@ class Dashboard(View):
         out = "digraph { \n"
         for _, result in self.__results.items():
             # Determine the node color
-            if result:
+            if result.is_success():
                 color = "green"
                 bgcolor = "lightgreen"
             else:
@@ -88,7 +93,7 @@ class Dashboard(View):
                 'label': result.contract.__class__.__name__,
                 'color': color,
                 'bgcolor': bgcolor,
-                'fontname': "Courier",
+                'fontname': "monospace",
                 'shape': 'rect',
                 'penwidth': '2',
             }
@@ -137,34 +142,46 @@ class Dashboard(View):
 
     def errors_html(self) -> str:
         # Generate an HTML representation of all the errors so far
-        out = '<div style="padding: 20pt; '\
-            'font-family: Courier; text-align: left">'
+        out = ""
         if not self.all_ok():
-            out += '<h2>Errors:</h2>'
-        for _, result in self.__results.items():
-            if isinstance(result, VerificationFailed):
+            out += '<div style="padding: 20pt; '\
+                'font-family: monospace; text-align: left; background: #FEE">'
+            out += '<h1>Errors:</h1>'
+            for _, result in self.__results.items():
+                if isinstance(result, VerificationFailed):
+                    out += '<p style="font-size: 16pt">'
+                    out += '<b>' + result.contract.__class__.__name__ + ': </b>'
+                    out += '<span style="color: firebrick">'
+                    out += '<pre>' + str(result.exception) + '</pre>'
+                    out += '</span>'
+                    out += '</p>'
+            if self.__python_exception is not None:
                 out += '<p style="font-size: 16pt">'
-                out += '<b>' + result.contract.__class__.__name__ + ': </b>'
+                out += '<b>Script Exception (see terminal for stack trace): </b>'
                 out += '<span style="color: firebrick">'
-                out += str(result.exception)
+                out += '<pre>' + str(self.__python_exception.__repr__()) + '</pre>'
                 out += '</span>'
                 out += '</p>'
-        out += '</div>'
+            out += '</div>'
         return out
 
     def dashboard_html(self, qed_called: bool) -> str:
         progress: str
         progress = '<div style="font-weight: normal; ' \
-            + 'font-family: Courier; font-size: 20pt; padding: 20pt">'
+            + 'font-family: monospace; font-size: 20pt; padding: 20pt">'
         if qed_called:
             if self.all_ok():
                 progress += \
                     '✅ <span style="font-size: 25pt">' \
                     '(successfully verified!)</span>'
+            elif self.__python_exception is None:
+                progress += \
+                    '🚫 <span style="font-size: 25pt">' \
+                    '(failed to verify)</span>'
             else:
                 progress += \
-                    '🚫 <span style="font-size: 25pt">'\
-                    '(failed to verify)</span>'
+                    '🛑 <span style="font-size: 25pt">' \
+                    '(exception in script)</span>'
         else:
             progress += LOADING_SVG \
                 + '<br/><span style="font-size: 25pt">' \
@@ -172,12 +189,11 @@ class Dashboard(View):
         progress += "</div>"
         proof_name: str = os.path.basename(self.__path)
         return \
-            '<center><h1 style="font-family: Courier">' \
+            '<center><h1 style="font-family: monospace">' \
             + proof_name \
-            + """</h1><div height="100%">""" \
+            + """</h1><div height="100%" style="display: inline-block">""" \
             + self.svg_graph() \
             + "</div>" \
-            + "<div>" \
             + progress \
             + self.errors_html() \
             + "</div></center>"
@@ -196,9 +212,11 @@ class Dashboard(View):
     def all_ok(self) -> bool:
         # Iterate through all lemmata to determine if everything is okay
         # Builds a graph of all dependencies
+        if self.__python_exception is not None:
+            return False
         ok = True
         for _, result in self.__results.items():
-            if not result:
+            if not result.is_success():
                 ok = False
         return ok
 

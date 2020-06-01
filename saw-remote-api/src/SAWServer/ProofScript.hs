@@ -152,4 +152,4 @@ interpretProofScript (ProofScript ts) = go ts
           ss <- getSimpset sn
           m <- go rest
           return (SB.simplifyGoal ss >> m)
-        go _ = fail "malformed proof script"
+        go _ = error "malformed proof script"

@@ -10,7 +10,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 print("This is " + dir_path)
 
-c = saw.connect("cabal new-exec --verbose=0 saw-remote-api -- --dynamic4")
+c = saw.connect("cabal new-exec --verbose=0 saw-remote-api")
 
 cry_file = os.path.join(dir_path, 'Foo.cry')
 c.cryptol_load_file(cry_file)

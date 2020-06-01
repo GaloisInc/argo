@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from saw import *
+from saw.dashboard import Dashboard
 from saw.llvm import uint32_t, Contract, void
 
 import os
@@ -29,7 +30,9 @@ class Swap(Contract):
         self.points_to(self.y_pointer, self.x)
         self.returns(void)
 
-connect("saw-remote-api --dynamic4")
+connect("cabal -v0 v2-run exe:saw-remote-api")
+view(DebugLog(err=None))
+view(LogResults())
 
 mod = llvm_load_module(swap_bc)
 

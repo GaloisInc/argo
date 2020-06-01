@@ -8,7 +8,7 @@ from saw.proofscript import *
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
 print("Starting server")
-c = saw.connect("cabal new-exec --verbose=0 saw-remote-api -- --dynamic4")
+c = saw.connect("cabal new-exec --verbose=0 saw-remote-api")
 
 bcname = os.path.join(dir_path, 'salsa20.bc')
 cryname = os.path.join(dir_path, 'Salsa20.cry')

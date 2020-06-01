@@ -6,21 +6,33 @@ from abc import abstractmethod
 from typing import Any, Dict, Tuple
 from typing_extensions import Protocol
 
+
 class HasProtocolState(Protocol):
     def protocol_state(self) -> Any: ...
-    server_connection : ServerConnection
+    server_connection: ServerConnection
+
 
 class ArgoException(Exception):
-    message : str
-    data : Dict[str, Any]
-    code : int
-
+    message: str
+    data: Dict[str, Any]
+    code: int
+    stdout: str
+    stderr: str
     """A Python representation of the underlying JSON RPC error."""
-    def __init__(self, code : int, message : str, data : Any) -> None:
+
+    def __init__(self,
+                 code: int,
+                 message: str,
+                 data: Any,
+                 stdout: str,
+                 stderr: str) -> None:
         super().__init__(message)
         self.message = message
         self.data = data
         self.code = code
+        self.stdout = stdout
+        self.stderr = stderr
+
 
 class Interaction:
     """A representation of a concrete interaction with the
@@ -34,10 +46,11 @@ class Interaction:
     associated with the resquest.
 
     """
-    _method : str
-    _params : Dict[str, Any]
+    _method: str
+    _params: Dict[str, Any]
 
-    def __init__(self, method : str, params : Dict[str, Any], connection : HasProtocolState) -> None:
+    def __init__(self, method: str, params: Dict[str, Any],
+                 connection: HasProtocolState) -> None:
 
         self.connection = connection
         self._raw_response = None
@@ -50,7 +63,7 @@ class Interaction:
             server_connection. \
             send_message(self._method, self._params)
 
-    def add_param(self, name : str, val : Any) -> None:
+    def add_param(self, name: str, val: Any) -> None:
         self._params[name] = val
 
     def raw_result(self) -> Any:
@@ -81,13 +94,27 @@ class Interaction:
         pass
 
     @abstractmethod
-    def process_result(self, result : Any) -> Any:
+    def stdout(self) -> str:
+        """Subclasses should implement this method to report the stdout yielded
+        by the interaction. This should be obtained from the result of
+        ``self.raw_result()``."""
+        pass
+
+    @abstractmethod
+    def stderr(self) -> str:
+        """Subclasses should implement this method to report the stderr yielded
+        by the interaction. This should be obtained from the result of
+        ``self.raw_result()``."""
+        pass
+
+    @abstractmethod
+    def process_result(self, result: Any) -> Any:
         """Subclasses should override this, to transform a JSON-encoded result
         into the application-specific result.
         """
         pass
 
-    def process_error(self, exception : ArgoException) -> Exception:
+    def process_error(self, exception: ArgoException) -> Exception:
         """Subclasses may override this to specialize exceptions to their own
         domain. The default implementation returns the exception unchanged.
         """
@@ -95,7 +122,8 @@ class Interaction:
 
 
 class Command(Interaction):
-    """A higher-level interface to a JSON RPC command that follows Argo conventions.
+    """A higher-level interface to a JSON RPC command that follows Argo
+    conventions.
 
     In particular, for a non-error result, the actual result should be
     in the `answer` field of the `result` dictionary, and the
@@ -106,31 +134,46 @@ class Command(Interaction):
     corresponding command's appropriate representation.
     """
 
-    def _result_and_state(self) -> Tuple[Any, Any]:
+    def _result_and_state_and_out_err(self) -> Tuple[Any, Any, str, str]:
         res = self.raw_result()
         if 'error' in res:
             msg = res['error']['message']
             if 'data' in res['error']:
-                msg += " " + str(res['error']['data'])
+                msg += " " + str(res['error']['data']['data'])
             exception = ArgoException(res['error']['code'],
                                       msg,
-                                      res['error'].get('data'))
+                                      res['error'].get('data').get('data'),
+                                      res['error']['data']['stdout'],
+                                      res['error']['data']['stderr'])
             raise self.process_error(exception)
         elif 'result' in res:
-            return (res['result']['answer'], res['result']['state'])
+            return (res['result']['answer']['answer'],
+                    res['result']['answer']['state'],
+                    res['result']['stdout'],
+                    res['result']['stderr'])
         else:
             raise ValueError("Invalid result type from JSON RPC")
 
     def state(self) -> Any:
         """Return the protocol state after the command is complete."""
-        return self._result_and_state()[1]
+        return self._result_and_state_and_out_err()[1]
 
     def result(self) -> Any:
         """Return the result of the command."""
-        return self.process_result(self._result_and_state()[0])
+        return self.process_result(self._result_and_state_and_out_err()[0])
+
+    def stdout(self) -> str:
+        """Return the stdout printed during the execution of the command."""
+        return self._result_and_state_and_out_err()[2]
+
+    def stderr(self) -> str:
+        """Return the stderr printed during the execution of the command."""
+        return self._result_and_state_and_out_err()[3]
+
 
 class Query(Interaction):
-    """A higher-level interface to a JSON RPC query that follows Argo conventions.
+    """A higher-level interface to a JSON RPC query that follows Argo
+    conventions.
 
     In particular, for a non-error result, the actual result should be
     in the ``answer`` field of the ``result`` dictionary. Because queries
@@ -143,24 +186,38 @@ class Query(Interaction):
     """
 
     def state(self) -> Any:
-        """Return the state prior to the query, because queries don't change the
-        state.
+        """Return the state prior to the query, because queries don't change
+        the state.
         """
         return self.init_state
 
-    def _result(self) -> Any:
+    def _result_and_out_err(self) -> Tuple[Any, str, str]:
         res = self.raw_result()
         if 'error' in res:
             msg = res['error']['message']
             if 'data' in res['error']:
-                msg += " " + str(res['error']['data'])
+                msg += " " + str(res['error']['data']['data'])
             exception = ArgoException(res['error']['code'],
                                       msg,
-                                      res['error'].get('data'))
+                                      res['error'].get('data').get('data'),
+                                      res['error']['data']['stdout'],
+                                      res['error']['data']['stderr'])
             raise self.process_error(exception)
         elif 'result' in res:
-            return res['result']['answer']
+            return (res['result']['answer']['answer'],
+                    res['result']['stdout'],
+                    res['result']['stderr'])
+        else:
+            raise ValueError("Invalid result type from JSON RPC")
 
     def result(self) -> Any:
         """Return the result of the query."""
-        return self.process_result(self._result())
+        return self.process_result(self._result_and_out_err()[0])
+
+    def stdout(self) -> str:
+        """Return the stdout printed during the execution of the command."""
+        return self._result_and_out_err()[1]
+
+    def stderr(self) -> str:
+        """Return the stderr printed during the execution of the command."""
+        return self._result_and_out_err()[2]

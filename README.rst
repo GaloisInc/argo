@@ -10,7 +10,7 @@ Build tools
 Requirements:
 
 * cabal-install 2.4.1.0 or 3.0.0
-* GHC-8.6.4
+* GHC-8.6.4 or GHC-8.8.3
 * Python 3.7
 
 Any easy to way get GHC and cabal-install installed is to use `ghcup`_;
@@ -25,6 +25,19 @@ however any other method will be fine::
 Building the project
 ~~~~~~~~~~~~~~~~~~~~
 
+To clone the project, you'll need to initialize its submodules as well::
+
+    $ git clone https://github.com/galoisinc/argo
+    $ cd argo/
+    $ git submodule init
+    $ pushd . && cd deps/abcBridge/ && git submodule init && popd
+
+Warning: at present, do *not* recursively initialize all the submodules of the
+project, as this will result in a large tree of unnecessary submodules. The only
+dependency which needs its own submodules to be initialized is `abcBridge`, as
+shown above. If you encounter mysterious build errors mentioning `abcBridge`, it
+is likely because it is missing its submodules.
+
 You might have to manually specify the GHC version when configuring this
 project. This can be achieved with ``v2-configure`` as seen below.
 
@@ -33,6 +46,8 @@ This project has multiple targets. To build them all you can specify ``all``::
     $ cabal v2-configure -w ghc-8.6.4
     $ cabal v2-build all
 
+Development
+-----------
 
 Documentation
 -------------
@@ -40,9 +55,6 @@ Documentation
 The protocol and the Python bindings are described in Sphinx-buildable
 ReStructuredText format in the [docs](docs/) subdirectory. Use ``make html``
 in that directory to build readable HTML output.
-
-Usage
------
 
 Python
 ~~~~~~
@@ -92,6 +104,18 @@ a central location in the virtual environment. This means that they
 can be edited in-place and tested immediately, with no reinstallation
 step. If you'd prefer to just install them, then omit the ``-e`` flag.
 
+Working on the Python bindings
+==============================
+
+To run the ``mypy`` type checker, enter the virtual environment and then run::
+
+    mypy argo saw cryptol
+
+from the ``python`` subdirectory.
+
+Testing the Python bindings
+===========================
+
 To test out the Python bindings, load the test file in a Python
 REPL. We recommend ``ipython3``, because it provides easy access to
 docstrings and tab completion. Here's an example command line and
@@ -99,7 +123,7 @@ Python session to give you an idea of what's currently implemented,
 with commentary in the form of Python comments::
 
     $ ipython3 -i cryptol-api_test.py
-    Python 3.7.2 (default, Jan 16 2019, 19:49:22) 
+    Python 3.7.2 (default, Jan 16 2019, 19:49:22)
     Type 'copyright', 'credits' or 'license' for more information
     IPython 6.4.0 -- An enhanced Interactive Python. Type '?' for help.
 
@@ -114,7 +138,7 @@ with commentary in the form of Python comments::
     Docstring:   <no docstring>
 
     In [2]: c.protocol_state()
-    Out[2]: 
+    Out[2]:
     [['change directory', {'directory': '/home/dtc/Projects/proto/proto/python'}],
      ['load module', {'file': 'Foo.cry'}]]
 
@@ -165,7 +189,7 @@ with commentary in the form of Python comments::
     Type:        CryptolFunctionHandle
     String form: <cryptol.CryptolFunctionHandle object at 0x7fa16e87b748>
     File:        ~/Projects/proto/proto/python/cryptol/__init__.py
-    Docstring:  
+    Docstring:
     Cryptol type: {n} (fin n) => [n] -> [n] -> Bit
     Unsigned carry.  Returns true if the unsigned addition of the given
     bitvector arguments would result in an unsigned overflow.
@@ -175,7 +199,7 @@ with commentary in the form of Python comments::
     Type:        CryptolFunctionHandle
     String form: <cryptol.CryptolFunctionHandle object at 0x7fa16e7bb6a0>
     File:        ~/Projects/proto/proto/python/cryptol/__init__.py
-    Docstring:  
+    Docstring:
     Cryptol type: {n} (fin n) => [n] -> [n] -> Bit
     Unsigned carry.  Returns true if the unsigned addition of the given
     bitvector arguments would result in an unsigned overflow.
@@ -205,8 +229,8 @@ To use the stdio version:
 
 1. ``M-x proto-test-start``
 
-2. At the prompt for ``Command:``, run the server with
-   ``cabal v2-exec saw-remote-api`` or ``cabal v2-exec cryptol-remote-api``.
+2. At the prompt for ``Command:``, run the server with ``cabal v2-exec -v0
+   saw-remote-api`` or ``cabal v2-exec -v0 cryptol-remote-api``.
 
 If this leaves a confusing error message in Emacs, the output was
 probably corrupted by ``cabal-install`` stating that nothing needs
@@ -216,7 +240,7 @@ up-to-date, and try again.
 
 To use the socket version:
 
-1. At a shell, run ``cabal v2-exec cryptol-remote-api -- --socket 10006``
+1. At a shell, run ``cabal v2-exec cryptol-remote-api -- --port 10006``
    (or pick your favorite port instead of 10006)
 
 2. In Emacs, ``M-x proto-test-start-socket``. When prompted, enter

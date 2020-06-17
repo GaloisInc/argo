@@ -33,13 +33,16 @@ import qualified Data.LLVM.BitCode as LLVM
 import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
 import SAWScript.Crucible.LLVM.Builtins
     ( crucible_alloc
+    , crucible_alloc_aligned
+    , crucible_alloc_readonly
+    , crucible_alloc_readonly_aligned
     , crucible_execute_func
     , crucible_fresh_var
     , crucible_points_to
     , crucible_return
     , crucible_precond
     , crucible_postcond )
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (AllLLVM, anySetupTerm, anySetupNull, loadLLVMModule)
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS
 import SAWScript.Options (defaultOptions)
 import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -80,7 +83,7 @@ compileLLVMContract ::
 compileLLVMContract bic cenv c = interpretLLVMSetup bic cenv (reverse steps)
   where
     setupFresh (ContractVar n dn ty) = SetupFresh n dn (llvmType ty)
-    setupAlloc (Allocated   n    ty) = SetupAlloc n    (llvmType ty)
+    setupAlloc (Allocated n ty mut align) = SetupAlloc n (llvmType ty) mut align
     steps =
       map setupFresh (preVars c) ++
       map SetupPrecond (preConds c) ++
@@ -103,9 +106,14 @@ interpretLLVMSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty,
          (env, cenv) <- get
          put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
          save name (Val (CMS.anySetupTerm t))
-    go (SetupAlloc name ty) =
-      lift (crucible_alloc bic defaultOptions ty) >>=
-      save name . Val
+    go (SetupAlloc name ty True Nothing) =
+      lift (crucible_alloc bic defaultOptions ty) >>= save name . Val
+    go (SetupAlloc name ty False Nothing) =
+      lift (crucible_alloc_readonly bic defaultOptions ty) >>= save name . Val
+    go (SetupAlloc name ty True (Just align)) =
+      lift (crucible_alloc_aligned bic defaultOptions align ty) >>= save name . Val
+    go (SetupAlloc name ty False (Just align)) =
+      lift (crucible_alloc_readonly_aligned bic defaultOptions align ty) >>= save name . Val
     go (SetupPointsTo src tgt) = get >>= \env -> lift $
       do ptr <- getSetupVal env src
          tgt' <- getSetupVal env tgt
@@ -124,7 +132,20 @@ interpretLLVMSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty,
       (Map ServerName ServerSetupVal, CryptolEnv) ->
       CrucibleSetupVal (P.Expr P.PName) ->
       LLVMCrucibleSetupM (CMS.AllLLVM MS.SetupValue)
-    getSetupVal _ NullPointer = LLVMCrucibleSetupM $ return CMS.anySetupNull
+    getSetupVal _ NullValue = LLVMCrucibleSetupM $ return CMS.anySetupNull
+    getSetupVal env (ArrayValue elts) =
+      do elts' <- mapM (getSetupVal env) elts
+         LLVMCrucibleSetupM $ return $ CMS.anySetupArray elts'
+    getSetupVal env (FieldLValue base fld) =
+      do base' <- getSetupVal env base
+         LLVMCrucibleSetupM $ return $ CMS.anySetupField base' fld
+    getSetupVal env (ElementLValue base idx) =
+      do base' <- getSetupVal env base
+         LLVMCrucibleSetupM $ return $ CMS.anySetupElem base' idx
+    getSetupVal _ (GlobalInitializer name) =
+      LLVMCrucibleSetupM $ return $ CMS.anySetupGlobalInitializer name
+    getSetupVal _ (GlobalLValue name) =
+      LLVMCrucibleSetupM $ return $ CMS.anySetupGlobal name
     getSetupVal (env, _) (ServerValue n) = LLVMCrucibleSetupM $
       resolve env n >>=
       \case

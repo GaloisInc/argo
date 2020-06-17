@@ -41,6 +41,8 @@ data Allocated ty =
   Allocated
     { allocatedServerName :: ServerName
     , allocatedType       :: ty
+    , allocatedMutable    :: Bool
+    , allocatedAlignment  :: Maybe Int
     }
 
 data PointsTo cryptolExpr =
@@ -60,6 +62,8 @@ instance FromJSON ty => FromJSON (Allocated ty) where
     withObject "allocated thing" $ \o ->
       Allocated <$> o .: "server name"
                 <*> o .: "type"
+                <*> o .: "mutable"
+                <*> o .: "alignment"
 
 instance FromJSON ty => FromJSON (ContractVar ty) where
   parseJSON =

@@ -57,6 +57,8 @@ import SAWServer.Exceptions
 
 type SAWCont = (SAWEnv, SAWTask)
 
+type CryptolAST = P.Expr P.PName
+
 data SAWTask
   = ProofScriptTask
   | LLVMCrucibleSetup ServerName [SetupStep]
@@ -66,20 +68,27 @@ instance Show SAWTask where
   show (LLVMCrucibleSetup n steps) = "(LLVMCrucibleSetup" ++ show n ++ " " ++ show steps ++ ")"
 
 
-data CrucibleSetupVal cryptolExpr
-  = NullPointer
+data CrucibleSetupVal e
+  = NullValue
+  | ArrayValue [CrucibleSetupVal e]
+  -- | TupleValue [CrucibleSetupVal e]
+  -- | RecordValue [(String, CrucibleSetupVal e)]
+  | FieldLValue (CrucibleSetupVal e) String
+  | ElementLValue (CrucibleSetupVal e) Int
+  | GlobalInitializer String
+  | GlobalLValue String
   | ServerValue ServerName
-  | CryptolExpr cryptolExpr
+  | CryptolExpr e
   deriving (Foldable, Functor, Traversable)
 
 data SetupStep
-  = SetupReturn (CrucibleSetupVal (P.Expr P.PName)) -- ^ The return value
+  = SetupReturn (CrucibleSetupVal CryptolAST) -- ^ The return value
   | SetupFresh ServerName Text Type -- ^ Server name to save in, debug name, fresh variable type
-  | SetupAlloc ServerName Type -- ^ Server name to save in, type of allocation
-  | SetupPointsTo (CrucibleSetupVal (P.Expr P.PName)) (CrucibleSetupVal (P.Expr P.PName)) -- ^ Source, target
-  | SetupExecuteFunction [CrucibleSetupVal (P.Expr P.PName)] -- ^ Function's arguments
-  | SetupPrecond (P.Expr P.PName)
-  | SetupPostcond (P.Expr P.PName)
+  | SetupAlloc ServerName Type Bool (Maybe Int) -- ^ Server name to save in, type of allocation, mutability, alignment
+  | SetupPointsTo (CrucibleSetupVal CryptolAST) (CrucibleSetupVal CryptolAST) -- ^ Source, target
+  | SetupExecuteFunction [CrucibleSetupVal CryptolAST] -- ^ Function's arguments
+  | SetupPrecond CryptolAST -- ^ Function's precondition
+  | SetupPostcond CryptolAST -- ^ Function's postcondition
 
 instance Show SetupStep where
   show _ = "⟨SetupStep⟩" -- TODO

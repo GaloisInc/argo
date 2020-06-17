@@ -76,6 +76,7 @@ library
                    SAWServer.OK,
                    SAWServer.ProofScript,
                    SAWServer.SaveTerm,
+                   SAWServer.SetOption,
                    SAWServer.Term,
                    SAWServer.TopLevel,
                    SAWServer.TrackFile,

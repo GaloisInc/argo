@@ -15,6 +15,7 @@ import SAWServer.LLVMCrucibleSetup
 import SAWServer.LLVMVerify
 import SAWServer.ProofScript
 import SAWServer.SaveTerm
+import SAWServer.SetOption
 
 
 main :: IO ()
@@ -41,4 +42,5 @@ sawMethods =
   -- General
   , ("SAW/make simpset",         Command, method makeSimpset)
   , ("SAW/prove",                Command, method prove)
+  , ("SAW/set option",           Command, method setOption)
   ]

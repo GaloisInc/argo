@@ -6,6 +6,7 @@ module SAWServer.Exceptions (
   , notAnLLVMModule
   , notAnLLVMSetup
   , notACrucibleSetupVal
+  , notAJVMMethodSpecIR
   , notAnLLVMMethodSpecIR
   , notASimpset
   , notATerm
@@ -127,6 +128,17 @@ notAJVMClass name =
     ("The server value with name " <>
      T.pack (show name) <>
      " is not a JVM class")
+    (Just $ object ["name" .= name])
+
+notAJVMMethodSpecIR ::
+  (ToJSON name, Show name) =>
+  name {- ^ the name that should have been mapped to a method specification IR -}->
+  JSONRPCException
+notAJVMMethodSpecIR name =
+  makeJSONRPCException 10090
+    ("The server value with name " <>
+     T.pack (show name) <>
+     " is not a JVM method specification")
     (Just $ object ["name" .= name])
 
 notSettingUpCryptol :: JSONRPCException

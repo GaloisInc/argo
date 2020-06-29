@@ -29,6 +29,7 @@ import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
+import qualified Text.LLVM.AST as LLVM
 import qualified Data.LLVM.BitCode as LLVM
 import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
 import SAWScript.Crucible.LLVM.Builtins
@@ -96,7 +97,7 @@ compileLLVMContract bic cenv c = interpretLLVMSetup bic cenv (reverse steps)
       map (\(PointsTo p v) -> SetupPointsTo p v) (postPointsTos c) ++
       [ SetupReturn v | v <- maybeToList (returnVal c) ]
 
-interpretLLVMSetup :: BuiltinContext -> CryptolEnv -> [SetupStep] -> LLVMCrucibleSetupM ()
+interpretLLVMSetup :: BuiltinContext -> CryptolEnv -> [SetupStep LLVM.Type] -> LLVMCrucibleSetupM ()
 interpretLLVMSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty, cenv0) *> pure ()
   where
     go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= crucible_return bic defaultOptions

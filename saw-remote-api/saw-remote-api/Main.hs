@@ -38,6 +38,7 @@ sawMethods =
   -- LLVM
   , ("SAW/LLVM/load module",     Command, method llvmLoadModule)
   , ("SAW/LLVM/verify",          Command, method llvmVerify)
+  , ("SAW/LLVM/verify assembly", Command, method llvmVerifyX86)
   , ("SAW/LLVM/assume",          Command, method llvmAssume)
   -- General
   , ("SAW/make simpset",         Command, method makeSimpset)

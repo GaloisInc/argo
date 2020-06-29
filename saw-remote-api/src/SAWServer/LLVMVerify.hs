@@ -2,6 +2,7 @@
 
 module SAWServer.LLVMVerify
   ( llvmVerify
+  , llvmVerifyX86
   , llvmAssume
   ) where
 
@@ -9,6 +10,7 @@ import Prelude hiding (mod)
 import Control.Lens
 
 import SAWScript.Crucible.LLVM.Builtins
+import SAWScript.Crucible.LLVM.X86
 import SAWScript.Options (defaultOptions)
 import SAWScript.Value (rwCryptol)
 
@@ -38,6 +40,25 @@ llvmVerify (VerifyParams modName fun lemmaNames checkSat contract script lemmaNa
             proofScript <- interpretProofScript script
             setup <- compileLLVMContract bic cenv <$> traverse getExpr contract
             res <- tl $ crucible_llvm_verify bic defaultOptions mod fun lemmas checkSat setup proofScript
+            dropTask
+            setServerVal lemmaName res
+            ok
+
+llvmVerifyX86 :: X86VerifyParams JSONLLVMType -> Method SAWState OK
+llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat contract script lemmaName) =
+  do tasks <- view sawTask <$> getState
+     case tasks of
+       (_:_) -> raise $ notAtTopLevel $ map fst tasks
+       [] ->
+         do pushTask (LLVMCrucibleSetup lemmaName [])
+            state <- getState
+            mod <- getLLVMModule modName
+            let bic = view  sawBIC state
+                cenv = rwCryptol (view sawTopLevelRW state)
+                allocs = map (\(X86Alloc name size) -> (name, size)) globals
+            proofScript <- interpretProofScript script
+            setup <- compileLLVMContract bic cenv <$> traverse getExpr contract
+            res <- tl $ crucible_llvm_verify_x86 bic defaultOptions mod objName fun allocs checkSat setup -- TODO: proofScript
             dropTask
             setServerVal lemmaName res
             ok

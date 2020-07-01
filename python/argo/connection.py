@@ -142,7 +142,6 @@ class ServerConnection:
         try:
             arrived = self.sock.recv(4096)
             while arrived != b'':
-                print(arrived)
                 self.buf.extend(arrived)
                 arrived = self.sock.recv(4096)
             return None

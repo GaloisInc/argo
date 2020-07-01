@@ -19,8 +19,9 @@ import CryptolServer.Exceptions
 
 runModuleCmd :: ModuleCmd a -> Method ServerState a
 runModuleCmd cmd =
-    do s   <- getState
-       out <- liftIO $ cmd (theEvalOpts, view moduleEnv s)
+    do s <- getState
+       reader <- getFileReader
+       out <- liftIO $ cmd (theEvalOpts, reader, view moduleEnv s)
        case out of
          (Left x, warns) ->
            raise (cryptolError x warns)

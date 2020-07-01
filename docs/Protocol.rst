@@ -60,10 +60,11 @@ always an object. While each message may specify its own arguments,
 every message has a parameter field named ``state``.
 
 When the first message is sent from the client to the server, the
-``state`` parameter should be initialized to the empty JSON array
-``[]``. Replies from the server may contain a new state that should be
-used in subsequent requests, so that state changes executed by the
-request are visible.
+``state`` parameter should be initialized to the JSON null value
+``null``. Replies from the server may contain a new state that should
+be used in subsequent requests, so that state changes executed by the
+request are visible. Prior versions of this protocol represented the
+initial state as the empty array ``[]``, but this is now deprecated.
 
 In particular, per JSON-RPC, non-error replies are always a JSON
 object that contains a ``result`` field. The result field always
@@ -78,11 +79,10 @@ resulted in a new server state.
   The new state, to be sent in subsequent requests. If this field is
   missing, then the client should re-use the state from their request.
 
-While the state representations returned from the server presently
-have a predictable relationship to the commands that gave rise to
-them, their precise structure is considered an implementation detail
+The precise structure of states is considered an implementation detail
 that could change at any time. Please treat them as opaque tokens that
-may be saved and re-used, but not created by the client directly.
+may be saved and re-used within a given server process, but not
+created by the client directly.
 
 
 Cryptol
@@ -336,6 +336,9 @@ Types are represented as JSON objects. The ``type`` field contains one of the fo
 
 ``Integer``
   The type is the integer type. There are no further fields.
+
+``Rational``
+  The type is the rational number type. There are no further fields.
 
 ``Z``
   The type is integers modulo another value. The field ``modulus``

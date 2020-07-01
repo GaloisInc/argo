@@ -9,9 +9,7 @@ import System.Environment (lookupEnv)
 import System.FilePath (splitSearchPath)
 
 import Argo
-import Argo.CacheTree
 import Argo.DefaultMain
-import Argo.HistoryWrapper
 
 
 import CryptolServer
@@ -28,8 +26,7 @@ main :: IO ()
 main =
   do paths <- getSearchPaths
      initSt <- setSearchPath paths <$> initialState
-     cache  <- newCache initSt
-     theApp <- mkApp (HistoryWrapper cache) (historyWrapper validateServerState cryptolMethods)
+     theApp <- mkApp (const (pure initSt)) cryptolMethods
      defaultMain description theApp
 
 description :: String

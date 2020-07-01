@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -25,6 +26,8 @@ module Argo
   , getState
   , modifyState
   , setState
+  -- * File I/O in methods that respects caching
+  , getFileReader
   -- * "printf"-style debugging in methods
   , getDebugLogger
   , debugLog
@@ -58,7 +61,10 @@ import qualified Data.Aeson as JSON
 import Data.Aeson ((.:), (.:!), (.=))
 import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
 import Data.Binary.Builder
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.HashMap.Strict as HM
+import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (maybeToList)
@@ -72,8 +78,12 @@ import System.IO
 import System.IO.Silently
 import Web.Scotty hiding (raise, params, get, put)
 
+import qualified Crypto.Hash.SHA1 as SHA1 (hash)
 
+import Argo.ServerState
 import Argo.Netstring
+
+type AppServerState = ServerState (Text, JSON.Object)
 
 -- | We only support JSON-RPC 2.0.
 jsonRPCVersion :: Text
@@ -83,13 +93,14 @@ jsonRPCVersion = "2.0"
 -- each of which is a function from the JSON value representing its parameters
 -- to a JSON value representing its response.
 newtype Method state result
-  = Method (ReaderT (Text -> IO ()) (StateT state IO) result)
+  = Method (ReaderT (Text -> IO (), FilePath -> IO B.ByteString) (StateT state IO) result)
   deriving (Functor, Applicative, Monad, MonadIO)
 
-runMethod :: Method state result -> (Text -> IO ()) -> state -> IO (state, result)
-runMethod (Method m) log s = swap <$> runStateT (runReaderT m log) s
-  where
-    swap (a, b) = (b, a)
+runMethod :: Method state result -> (FilePath -> IO B.ByteString) -> (Text -> IO ()) -> state -> IO (state, result)
+runMethod (Method m) reader log s = flop <$> runStateT (runReaderT m (log, reader)) s
+  where flop (x, y) = (y, x)
+
+
 
 -- | A 'Method' may be one of three different sorts
 data MethodType
@@ -110,20 +121,22 @@ method ::
   (JSON.Value -> Method state JSON.Value)
 method f p =
   case JSON.fromJSON @params p of
-    JSON.Error msg ->
-      raise (invalidParams msg p)
-    JSON.Success params ->
-      JSON.toJSON <$> f params
+    JSON.Error msg -> raise $ invalidParams msg p
+    JSON.Success params -> JSON.toJSON <$> f params
 
 -- | Get the logger from the server
 getDebugLogger :: Method state (Text -> IO ())
-getDebugLogger = Method ask
+getDebugLogger = Method (asks fst)
 
 -- | Log a message for debugging
 debugLog :: Text -> Method state ()
 debugLog message =
   do logger <- getDebugLogger
      liftIO $ logger message
+
+-- | Get the file reader from the server
+getFileReader :: Method state (FilePath -> IO B.ByteString)
+getFileReader = Method (asks snd)
 
 -- | Get the state of the server
 getState :: Method state state
@@ -145,13 +158,13 @@ raise = liftIO . throwIO
 
 -- | An application is a state and a mapping from names to methods.
 data App s =
-  App { _appState :: MVar s
+  App { _serverState :: MVar (ServerState (Text, JSON.Object) s)
       , _appMethods :: Map Text (MethodType, JSON.Value -> Method s JSON.Value)
       }
 
 -- | Focus on the state var in an 'App'
-appState :: Lens' (App s) (MVar s)
-appState = lens _appState (\a s -> a { _appState = s })
+serverState :: Lens' (App s) (MVar (ServerState (Text, JSON.Object) s))
+serverState = lens _serverState (\a s -> a { _serverState = s })
 
 -- | Focus on the 'Method's in an 'App'
 appMethods ::
@@ -161,12 +174,12 @@ appMethods = lens _appMethods (\a s -> a { _appMethods = s })
 -- | Construct an application from an initial state and a mapping from method
 -- names to methods.
 mkApp ::
-  s {- ^ the initial state -} ->
+  ((FilePath -> IO B.ByteString) -> IO s) {- ^ how to get the initial state -} ->
   [(Text, MethodType, JSON.Value -> Method s JSON.Value)]
   {- ^ method names paired with their implementations -} ->
   IO (App s)
-mkApp initState methods =
-  App <$> newMVar initState
+mkApp initAppState methods =
+  App <$> (newMVar =<< initialState initAppState)
       <*> pure (M.fromList [ (k, (v1, v2)) | (k, v1, v2) <- methods])
 
 -- | JSON RPC exceptions should be thrown by method implementations when
@@ -247,6 +260,14 @@ internalError =
                    , errorID   = Nothing
                    }
 
+-- | The provided State ID is not one that the server has previously sent.
+unknownStateID :: StateID -> JSONRPCException
+unknownStateID sid =
+  JSONRPCException { errorCode = 20
+                   , message = "Unknown state ID"
+                   , errorData = Just $ JSON.toJSON sid
+                   , errorID = Nothing}
+
 -- | Construct a 'JSONRPCException' from an error code, error text, and perhaps
 -- some data item to attach
 makeJSONRPCException :: JSON.ToJSON a => Integer -> Text -> Maybe a -> JSONRPCException
@@ -258,14 +279,6 @@ makeJSONRPCException c m d =
     , errorID = Nothing
     }
 
-{-
-A JSON-RPC request ID is:
-
-    An identifier established by the Client that MUST contain a
-    String, Number, or NULL value if included. If it is not included
-    it is assumed to be a notification. The value SHOULD normally not
-    be Null [1] and Numbers SHOULD NOT contain fractional parts
--}
 
 {- | Request IDs come from clients, and are used to match responses
 with commands.
@@ -297,7 +310,7 @@ data Request =
           -- distinct, we have both a null constructor and wrap it in a Maybe.
           -- When the request ID is not present, the request is a notification
           -- and the field is Nothing.
-          , _requestParams :: !JSON.Value
+          , _requestParams :: !JSON.Object
           -- ^ The parameters to the method, if any exist
           }
   deriving (Show)
@@ -308,8 +321,9 @@ requestMethod = lens _requestMethod (\r m -> r { _requestMethod = m })
 requestID :: Lens' Request (Maybe RequestID)
 requestID = lens _requestID (\r i -> r { _requestID = i })
 
-requestParams :: Lens' Request JSON.Value
+requestParams :: Lens' Request JSON.Object
 requestParams = lens _requestParams (\r m -> r { _requestParams = m })
+
 
 suchThat :: HasCallStack => JSON.Parser a -> (a -> Bool) -> JSON.Parser a
 suchThat parser pred =
@@ -339,6 +353,17 @@ instance JSON.ToJSON Request where
       "id"      .= view requestID     req <>
       "params"  .= view requestParams req
 
+rerunStep ::
+  forall s.
+  Maybe RequestID -> App s -> (Text -> IO ()) ->
+  s -> (Text, JSON.Object) -> (FilePath -> IO B.ByteString) -> IO s
+rerunStep reqID app logger startState (method, params) fileReader =
+  case M.lookup method $ view appMethods app of
+    Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
+    Just (_, m) ->
+      fst <$> runMethod (m $ JSON.Object params) fileReader logger startState
+
+
 handleRequest ::
   forall s.
   (Text -> IO ()) ->
@@ -351,7 +376,24 @@ handleRequest logger respond app req =
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (Command, m) ->
       withRequestID $
-      do answer <- modifyMVar theState $ runMethod (m params) logger
+      do stateID <- getStateID req
+         answer <- withMVar theState $
+           \contents ->
+             stateRecipe contents stateID >>=
+             \case
+               Nothing ->
+                 throwIO $ unknownStateID stateID
+               Just r ->
+                 do initAppState <- getAppState (rerunStep reqID app logger) contents r
+                    let r' = (method, view requestParams req) : r
+                    let fileReader = freshStateReader contents r'
+                    (newAppState, result) <- runMethod (m params) fileReader logger initAppState
+                    sid' <- newStateID
+                    modifyIORef' (view stateRecipes contents) $
+                      set (at sid') (Just r')
+                    modifyIORef' (view appStateCache contents) $
+                      set (at r') (Just newAppState)
+                    return $ addStateID result sid'
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
@@ -359,7 +401,17 @@ handleRequest logger respond app req =
          respond (JSON.encode response)
     Just (Query, m) ->
       withRequestID $
-      do (_, answer) <- runMethod (m params) logger =<< readMVar theState
+      do stateID <- getStateID req
+         answer <- withMVar theState $
+           \contents ->
+             stateRecipe contents stateID >>=
+             \case
+               Nothing -> throwIO $ unknownStateID stateID
+               Just r ->
+                 do theAppState <- getAppState (rerunStep reqID app logger) contents r
+                    let fileReader = B.readFile -- No caching of this state
+                    (_, result) <- runMethod (m params) fileReader logger theAppState
+                    return $ addStateID result stateID
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
                                     , "result" .= answer
@@ -367,12 +419,27 @@ handleRequest logger respond app req =
          respond (JSON.encode response)
     Just (Notification, m) ->
       withoutRequestID $
-      void $ modifyMVar theState $ runMethod (m params) logger
+      void $
+      do stateID <- getStateID req
+         withMVar theState $
+           \contents ->
+             stateRecipe contents stateID >>=
+             \case
+               Nothing -> throwIO $ unknownStateID stateID
+               Just r ->
+                 do theAppState <- getAppState (rerunStep reqID app logger) contents r
+                    runMethod (m params) B.readFile logger theAppState
   where
     method   = view requestMethod req
-    params   = view requestParams req
+    params   = JSON.Object $ view requestParams req
     reqID    = view requestID req
-    theState = view appState app
+    theState = view serverState app
+
+    addStateID :: JSON.Value -> StateID -> JSON.Value
+    addStateID answer sid =
+      JSON.object [ "answer" .= answer
+                  , "state" .= sid
+                  ]
 
     withRequestID :: IO a -> IO a
     withRequestID act =
@@ -414,6 +481,20 @@ synchronized f =
 -- line for itself, and no newlines are otherwise allowed.
 serveStdIO :: App s -> IO ()
 serveStdIO = serveHandles (Just stderr) stdin stdout
+
+getStateID :: Request -> IO StateID
+getStateID req =
+  case view (requestParams . at "state") req of
+    Just sid ->
+      case JSON.fromJSON sid of
+        JSON.Success i -> pure i
+        JSON.Error msg -> noStateID msg
+    Nothing -> noStateID "No state field in parameters"
+  where
+    noStateID msg =
+      throwIO $
+        invalidParams msg $ JSON.Object $ view requestParams req
+
 
 -- | Serve an application, listening for input on one handle and
 -- sending output to another. Each request must be on a line for

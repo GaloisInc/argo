@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SAWServer
@@ -13,6 +14,7 @@ import Control.Lens
 import Control.Monad.ST
 import Data.Aeson (FromJSON(..), ToJSON(..), fromJSON, withText, (.:), withObject)
 import qualified Data.Aeson as JSON
+import Data.ByteString (ByteString)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Parameterized.Pair
@@ -127,8 +129,9 @@ dropTask = modifyState mod
 getHandleAlloc :: Method SAWState Crucible.HandleAllocator
 getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> getState
 
-initialState :: IO SAWState
-initialState =
+initialState :: (FilePath -> IO ByteString) -> IO SAWState
+initialState readFile =
+  let ?fileReader = readFile in
   do sc <- mkSharedContext
      CryptolSAW.scLoadPreludeModule sc
      JavaSAW.scLoadJavaModule sc

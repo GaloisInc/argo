@@ -15,6 +15,8 @@ import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
 
+import GHC.IO.Exception
+
 import qualified Crypto.Hash.SHA1 as SHA1 (hash)
 
 newtype StateID = StateID (Maybe UUID) deriving (Eq, Ord, Show, Hashable)
@@ -128,11 +130,28 @@ recipeFile server recipe filename =
   do hashes <- readIORef $ view stateFiles server
      theHash <-
        case view (at (recipe, filename)) hashes of
-         Nothing -> error "TODO exn"
+         Nothing ->
+           ioError $
+           IOError { ioe_handle = Nothing
+                   , ioe_type = NoSuchThing
+                   , ioe_location = "restoring " ++ filename
+                   , ioe_description = "No such cached file " ++ filename
+                   , ioe_errno = Nothing
+                   , ioe_filename = Just filename
+                   }
          Just h -> pure h
      fileContents <- readIORef $ view stateFileContents server
      case view (at theHash) fileContents of
-       Nothing -> error "TODO not found"
+       Nothing ->
+         ioError $
+         IOError { ioe_handle = Nothing
+                 , ioe_type = NoSuchThing
+                 , ioe_location = "restoring " ++ filename
+                 , ioe_description = "No contents for cached file " ++ filename
+                 , ioe_errno = Nothing
+                 , ioe_filename = Just filename
+                 }
+
        Just bs -> pure bs
 
 

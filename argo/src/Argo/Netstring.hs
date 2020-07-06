@@ -36,6 +36,7 @@ data BadNetstring
 
 instance Exception BadNetstring
 
+-- | A ByteString together with a header that provides its length.
 newtype Netstring
   = Netstring ByteString
   deriving (Eq, Ord)

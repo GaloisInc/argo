@@ -63,8 +63,6 @@ import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
 import Data.Binary.Builder
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.HashMap.Strict as HM
-import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (maybeToList)
@@ -77,8 +75,6 @@ import Network.Wai (strictRequestBody)
 import System.IO
 import System.IO.Silently
 import Web.Scotty hiding (raise, params, get, put)
-
-import qualified Crypto.Hash.SHA1 as SHA1 (hash)
 
 import Argo.ServerState
 import Argo.Netstring
@@ -158,12 +154,12 @@ raise = liftIO . throwIO
 
 -- | An application is a state and a mapping from names to methods.
 data App s =
-  App { _serverState :: MVar (ServerState (Text, JSON.Object) s)
+  App { _serverState :: MVar (AppServerState s)
       , _appMethods :: Map Text (MethodType, JSON.Value -> Method s JSON.Value)
       }
 
 -- | Focus on the state var in an 'App'
-serverState :: Lens' (App s) (MVar (ServerState (Text, JSON.Object) s))
+serverState :: Lens' (App s) (MVar (AppServerState s))
 serverState = lens _serverState (\a s -> a { _serverState = s })
 
 -- | Focus on the 'Method's in an 'App'
@@ -366,6 +362,7 @@ rerunStep reqID app logger startState (method, params) fileReader =
 
 handleRequest ::
   forall s.
+  HasCallStack =>
   (Text -> IO ()) ->
   (BS.ByteString -> IO ()) ->
   App s ->
@@ -379,20 +376,14 @@ handleRequest logger respond app req =
       do stateID <- getStateID req
          answer <- withMVar theState $
            \contents ->
-             stateRecipe contents stateID >>=
+             getAppState (rerunStep reqID app logger) contents stateID >>=
              \case
-               Nothing ->
-                 throwIO $ unknownStateID stateID
-               Just r ->
-                 do initAppState <- getAppState (rerunStep reqID app logger) contents r
-                    let r' = (method, view requestParams req) : r
-                    let fileReader = freshStateReader contents r'
+               Nothing -> throwIO $ unknownStateID stateID
+               Just initAppState ->
+                 do let r = (method, view requestParams req)
+                    let fileReader = freshStateReader contents stateID
                     (newAppState, result) <- runMethod (m params) fileReader logger initAppState
-                    sid' <- newStateID
-                    modifyIORef' (view stateRecipes contents) $
-                      set (at sid') (Just r')
-                    modifyIORef' (view appStateCache contents) $
-                      set (at r') (Just newAppState)
+                    sid' <- saveNewState contents stateID r newAppState
                     return $ addStateID result sid'
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
@@ -404,13 +395,14 @@ handleRequest logger respond app req =
       do stateID <- getStateID req
          answer <- withMVar theState $
            \contents ->
-             stateRecipe contents stateID >>=
+             getAppState (rerunStep reqID app logger) contents stateID >>=
              \case
                Nothing -> throwIO $ unknownStateID stateID
-               Just r ->
-                 do theAppState <- getAppState (rerunStep reqID app logger) contents r
-                    let fileReader = B.readFile -- No caching of this state
+               Just theAppState ->
+                 do let fileReader = B.readFile -- No caching of this state
                     (_, result) <- runMethod (m params) fileReader logger theAppState
+                    -- Here, we return the original state ID, because
+                    -- queries don't result in new states.
                     return $ addStateID result stateID
          let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
                                     , "id" .= reqID
@@ -423,12 +415,14 @@ handleRequest logger respond app req =
       do stateID <- getStateID req
          withMVar theState $
            \contents ->
-             stateRecipe contents stateID >>=
+             getAppState (rerunStep reqID app logger) contents stateID >>=
              \case
                Nothing -> throwIO $ unknownStateID stateID
-               Just r ->
-                 do theAppState <- getAppState (rerunStep reqID app logger) contents r
-                    runMethod (m params) B.readFile logger theAppState
+               Just theAppState ->
+                 -- No reply will be sent, so there is no way of the
+                 -- client re-using any resulting state. So we don't
+                 -- cache file contents here.
+                 runMethod (m params) B.readFile logger theAppState
   where
     method   = view requestMethod req
     params   = JSON.Object $ view requestParams req
@@ -479,7 +473,7 @@ synchronized f =
 -- | One way to run a server is on stdio, listening for requests on stdin
 -- and replying on stdout. In this system, each request must be on a
 -- line for itself, and no newlines are otherwise allowed.
-serveStdIO :: App s -> IO ()
+serveStdIO :: HasCallStack => App s -> IO ()
 serveStdIO = serveHandles (Just stderr) stdin stdout
 
 getStateID :: Request -> IO StateID
@@ -500,6 +494,7 @@ getStateID req =
 -- sending output to another. Each request must be on a line for
 -- itself, and no newlines are otherwise allowed.
 serveHandles ::
+  HasCallStack =>
   Maybe Handle {- ^ Where to log debug info -} ->
   Handle {- ^ input handle    -} ->
   Handle {- ^ output handle   -} ->
@@ -539,12 +534,13 @@ serveHandles hLog hIn hOut app = init >>= loop
             Nothing -> const (return ())
 
 -- | Serve an application on stdio, with messages encoded as netstrings.
-serveStdIONS :: App s -> IO ()
+serveStdIONS :: HasCallStack => App s -> IO ()
 serveStdIONS = serveHandlesNS (Just stderr) stdin stdout
 
 -- | Serve an application on arbitrary handles, with messages
 -- encoded as netstrings.
 serveHandlesNS ::
+  HasCallStack =>
   Maybe Handle {- ^ debug log handle -} ->
   Handle       {- ^ input handle     -} ->
   Handle       {- ^ output handle    -} ->
@@ -592,6 +588,7 @@ serveHandlesNS hLog hIn hOut app =
 
 
 serveHTTP ::
+  HasCallStack =>
   App s  {- JSON-RPC app -} ->
   Int    {- port number  -} ->
   IO ()

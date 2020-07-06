@@ -39,6 +39,7 @@ common deps
     mtl                         ^>= 2.2,
     network                     ^>= 3.0.1,
     optparse-applicative        >= 0.14 && < 0.16,
+    panic,
     safe                        ^>= 0.3,
     scientific                  ^>= 0.3,
     scotty                      ^>= 0.11.3,
@@ -54,6 +55,7 @@ library
   exposed-modules:
     Argo
     Argo.DefaultMain
+    Argo.Panic
     Argo.ServerState
     Argo.Socket
     Argo.Netstring

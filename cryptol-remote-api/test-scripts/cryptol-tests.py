@@ -16,7 +16,8 @@ c = argo.ServerConnection(
 
 # Regression tests on nested sequences
 
-id_1 = c.send_message("load module", {"module name": "M", "state": []})
+id_1 = c.send_message("load module", {"module name": "M", "state": None})
+print(id_1)
 reply_1 = c.wait_for_reply_to(id_1)
 print(reply_1)
 assert('result' in reply_1)

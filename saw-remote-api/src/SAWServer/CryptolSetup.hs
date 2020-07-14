@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -30,6 +31,8 @@ cryptolLoadModule (CryptolLoadModuleParams modName) =
      cenv <- rwCryptol . view sawTopLevelRW <$> getState
      let qual = Nothing -- TODO add field to params
      let importSpec = Nothing -- TODO add field to params
+     fileReader <- getFileReader
+     let ?fileReader = fileReader
      cenv' <- liftIO $ try $ CEnv.importModule sc cenv (Right modName) qual importSpec
      case cenv' of
        Left (ex :: SomeException) -> raise $ cryptolError (show ex)
@@ -51,6 +54,8 @@ cryptolLoadFile (CryptolLoadFileParams fileName) =
      cenv <- rwCryptol . view sawTopLevelRW <$> getState
      let qual = Nothing -- TODO add field to params
      let importSpec = Nothing -- TODO add field to params
+     fileReader <- getFileReader
+     let ?fileReader = fileReader
      cenv' <- liftIO $ try $ CEnv.importModule sc cenv (Left fileName) qual importSpec
      case cenv' of
        Left (ex :: SomeException) -> raise $ cryptolError (show ex)

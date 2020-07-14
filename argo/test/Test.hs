@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
-import Data.Aeson as JSON (fromJSON, toJSON, Result(..))
+import Data.Aeson as JSON (fromJSON, toJSON, Result(..), Value(..))
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.HashMap.Strict as HM
@@ -14,16 +14,18 @@ import Test.QuickCheck.Instances.Scientific
 import Test.QuickCheck.Instances.Text
 import Test.Tasty
 import Test.Tasty.QuickCheck
+import Test.Tasty.HUnit
 
 import Argo
 import Argo.Netstring
+import Argo.ServerState
 
 
 main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "Tests for Argo" [ netstringProps, jsonRPCProps ]
+tests = testGroup "Tests for Argo" [ netstringProps, jsonRPCProps, stateIDProps ]
 
 netstringProps :: TestTree
 netstringProps =
@@ -55,4 +57,11 @@ jsonRPCProps =
         case fromJSON (toJSON rid) of
           JSON.Success v -> rid == v
           JSON.Error err -> False
+    ]
+
+stateIDProps :: TestTree
+stateIDProps =
+  testGroup "Serialization and deserialization for state IDs"
+    [ testCase "Initial state (de)serialization" $
+      JSON.Success initialStateID @?= fromJSON JSON.Null
     ]

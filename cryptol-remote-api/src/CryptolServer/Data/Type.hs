@@ -83,6 +83,8 @@ instance JSON.ToJSON JSONType where
             [ "type" .= T.pack "tuple"
             , "contents" .= map (JSONType ns) fs
             ]
+          (TCRational, []) ->
+            [ "type" .= T.pack "Rational"]
           (other, otherArgs) ->
             [ "type" .= T.pack "unknown"
             , "constructor" .= show other
@@ -136,8 +138,20 @@ instance JSON.ToJSON JSONType where
             , "type" .= JSONType ns t1
             , "is"   .= JSONType ns t2
             ]
-          (PArith, [t']) ->
-            [ "prop" .= T.pack "Arith"
+          (PRing, [t']) ->
+            [ "prop" .= T.pack "Ring"
+            , "subject" .= JSONType ns t'
+            ]
+          (PField, [t']) ->
+            [ "prop" .= T.pack "Field"
+            , "subject" .= JSONType ns t'
+            ]
+          (PRound, [t']) ->
+            [ "prop" .= T.pack "Round"
+            , "subject" .= JSONType ns t'
+            ]
+          (PIntegral, [t']) ->
+            [ "prop" .= T.pack "Integral"
             , "subject" .= JSONType ns t'
             ]
           (PCmp, [t']) ->

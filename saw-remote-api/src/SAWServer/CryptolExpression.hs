@@ -1,8 +1,10 @@
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 module SAWServer.CryptolExpression (getTypedTerm, getTypedTermOfCExp) where
 
 import Control.Lens hiding (re)
 import Control.Monad.IO.Class
+import qualified Data.ByteString as B
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 
@@ -33,15 +35,19 @@ import CryptolServer.Exceptions (cryptolError)
 getTypedTerm :: Expression -> Method SAWState TypedTerm
 getTypedTerm inputExpr =
   do cenv <- rwCryptol . view sawTopLevelRW <$> getState
+     fileReader <- getFileReader
      expr <- getExpr inputExpr
      sc <- biSharedContext . view sawBIC <$> getState
-     (t, _) <- moduleCmdResult =<< (liftIO $ getTypedTermOfCExp sc cenv expr)
+     (t, _) <- moduleCmdResult =<< (liftIO $ getTypedTermOfCExp fileReader sc cenv expr)
      return t
 
-getTypedTermOfCExp :: SharedContext -> CryptolEnv -> Expr PName -> IO (ModuleRes TypedTerm)
-getTypedTermOfCExp sc cenv expr =
-  do let env = eModuleEnv cenv
-     mres <- runModuleM (defaultEvalOpts, env) $
+getTypedTermOfCExp ::
+  (FilePath -> IO B.ByteString) ->
+  SharedContext -> CryptolEnv -> Expr PName -> IO (ModuleRes TypedTerm)
+getTypedTermOfCExp fileReader sc cenv expr =
+  do let ?fileReader = fileReader
+     let env = eModuleEnv cenv
+     mres <- runModuleM (defaultEvalOpts, B.readFile, env) $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names
@@ -67,7 +73,7 @@ getTypedTermOfCExp sc cenv expr =
        (Left err, ws) -> return (Left err, ws)
 
 liftModuleM :: ModuleEnv -> ModuleM a -> Method SAWState (a, ModuleEnv)
-liftModuleM env m = liftIO (runModuleM (defaultEvalOpts, env) m) >>= moduleCmdResult
+liftModuleM env m = liftIO (runModuleM (defaultEvalOpts, B.readFile, env) m) >>= moduleCmdResult
 
 moduleCmdResult :: ModuleRes a -> Method SAWState (a, ModuleEnv)
 moduleCmdResult (result, warnings) =

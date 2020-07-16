@@ -21,6 +21,7 @@ import Control.Lens
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Data.Aeson (FromJSON(..), withObject, (.:))
+import Data.ByteString (ByteString)
 import Data.Foldable
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -77,11 +78,13 @@ data ServerSetupVal = Val (CMS.AllLLVM SetupValue)
 
 -- TODO: this is an extra layer of indirection that could be collapsed, but is easy to implement for now.
 compileLLVMContract ::
+  (FilePath -> IO ByteString) ->
   BuiltinContext ->
   CryptolEnv ->
   Contract JSONLLVMType (P.Expr P.PName) ->
   LLVMCrucibleSetupM ()
-compileLLVMContract bic cenv c = interpretLLVMSetup bic cenv (reverse steps)
+compileLLVMContract fileReader bic cenv c =
+  interpretLLVMSetup fileReader bic cenv (reverse steps)
   where
     setupFresh (ContractVar n dn ty) = SetupFresh n dn (llvmType ty)
     setupAlloc (Allocated n ty mut align) = SetupAlloc n (llvmType ty) mut align
@@ -97,8 +100,14 @@ compileLLVMContract bic cenv c = interpretLLVMSetup bic cenv (reverse steps)
       map (\(PointsTo p v) -> SetupPointsTo p v) (postPointsTos c) ++
       [ SetupReturn v | v <- maybeToList (returnVal c) ]
 
-interpretLLVMSetup :: BuiltinContext -> CryptolEnv -> [SetupStep LLVM.Type] -> LLVMCrucibleSetupM ()
-interpretLLVMSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty, cenv0) *> pure ()
+interpretLLVMSetup ::
+  (FilePath -> IO ByteString) ->
+  BuiltinContext ->
+  CryptolEnv ->
+  [SetupStep LLVM.Type] ->
+  LLVMCrucibleSetupM ()
+interpretLLVMSetup fileReader bic cenv0 ss =
+  runStateT (traverse_ go (reverse ss)) (mempty, cenv0) *> pure ()
   where
     go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= crucible_return bic defaultOptions
     -- TODO: do we really want two names here?
@@ -154,7 +163,7 @@ interpretLLVMSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty,
                           -- are not coming from the setup monad
                           -- (e.g. surrounding context)
     getSetupVal (_, cenv) (CryptolExpr expr) = LLVMCrucibleSetupM $
-      do res <- liftIO $ getTypedTermOfCExp (biSharedContext bic) cenv expr
+      do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
          -- TODO: add warnings (snd res)
          case fst res of
            Right (t, _) -> return (CMS.anySetupTerm t)
@@ -165,7 +174,7 @@ interpretLLVMSetup bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty,
       P.Expr P.PName ->
       LLVMCrucibleSetupM TypedTerm
     getTypedTerm (_, cenv) expr = LLVMCrucibleSetupM $
-      do res <- liftIO $ getTypedTermOfCExp (biSharedContext bic) cenv expr
+      do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
          -- TODO: add warnings (snd res)
          case fst res of
            Right (t, _) -> return t

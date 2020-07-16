@@ -38,7 +38,8 @@ llvmVerify (VerifyParams modName fun lemmaNames checkSat contract script lemmaNa
             let bic = view  sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
             proofScript <- interpretProofScript script
-            setup <- compileLLVMContract bic cenv <$> traverse getExpr contract
+            fileReader <- getFileReader
+            setup <- compileLLVMContract fileReader bic cenv <$> traverse getExpr contract
             res <- tl $ crucible_llvm_verify bic defaultOptions mod fun lemmas checkSat setup proofScript
             dropTask
             setServerVal lemmaName res
@@ -57,8 +58,9 @@ llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat 
                 cenv = rwCryptol (view sawTopLevelRW state)
                 allocs = map (\(X86Alloc name size) -> (name, size)) globals
             proofScript <- interpretProofScript script
-            setup <- compileLLVMContract bic cenv <$> traverse getExpr contract
-            res <- tl $ crucible_llvm_verify_x86 bic defaultOptions mod objName fun allocs checkSat setup -- TODO: proofScript
+            fileReader <- getFileReader
+            setup <- compileLLVMContract fileReader bic cenv <$> traverse getExpr contract
+            res <- tl $ crucible_llvm_verify_x86 bic defaultOptions mod objName fun allocs checkSat setup proofScript
             dropTask
             setServerVal lemmaName res
             ok
@@ -74,7 +76,8 @@ llvmAssume (AssumeParams modName fun contract lemmaName) =
             mod <- getLLVMModule modName
             let bic = view  sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
-            setup <- compileLLVMContract bic cenv <$> traverse getExpr contract
+            fileReader <- getFileReader
+            setup <- compileLLVMContract fileReader bic cenv <$> traverse getExpr contract
             res <- tl $ crucible_llvm_unsafe_assume_spec bic defaultOptions mod fun setup
             dropTask
             setServerVal lemmaName res

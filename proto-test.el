@@ -42,7 +42,7 @@
 
 (defvar proto-test-proc nil "The process being tested.")
 (defvar proto-test--output "" "The process's output so far.")
-(defvar proto-test--state '[] "The method calls that make up the cryptol state.")
+(defvar proto-test--state json-null "The method calls that make up the cryptol state.")
 
 (defvar proto-test-receive-functions '(proto-test-record-reply proto-test--cryptol-listen)
   "A list of functions to be called with the decoded output from the process.")
@@ -491,7 +491,7 @@ Returns nil when no argument provided."
   "Quit the test process."
   (interactive)
   (setq proto-test--output "")
-  (setq proto-test--state '[])
+  (setq proto-test--state json-null)
   (when proto-test-proc
     (ignore-errors (kill-process proto-test-proc))
     (setq proto-test-proc nil)))
@@ -510,7 +510,7 @@ Returns nil when no argument provided."
   (proto-test-quit)
   (setq proto-test-proc (apply #'start-process "the-test" "the-test" (split-string prog)))
   (set-process-filter proto-test-proc 'proto-test-process-filter)
-  (setq proto-test--state '[])
+  (setq proto-test--state json-null)
   (proto-test-record-history-item (format "Launched %s" prog) "restart"))
 
 
@@ -522,7 +522,7 @@ Returns nil when no argument provided."
     (setq proto-test-proc
           (open-network-stream "proto-connection" "foo" "127.0.0.1" port-string))
     (set-process-filter proto-test-proc 'proto-test-process-filter)
-    (setq proto-test--state '[])
+    (setq proto-test--state json-null)
     (proto-test-record-history-item (format "Socket on %s" port) "restart")    ))
 
 

@@ -39,7 +39,8 @@ jvmVerify (VerifyParams className fun lemmaNames checkSat contract script lemmaN
             let bic = view  sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
             proofScript <- interpretProofScript script
-            setup <- compileJVMContract bic cenv <$> traverse getExpr contract
+            fileReader <- getFileReader
+            setup <- compileJVMContract fileReader bic cenv <$> traverse getExpr contract
             res <- tl $ crucible_jvm_verify bic defaultOptions cls fun lemmas checkSat setup proofScript
             dropTask
             setServerVal lemmaName res
@@ -56,7 +57,8 @@ jvmAssume (AssumeParams className fun contract lemmaName) =
             cls <- getJVMClass className
             let bic = view  sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
-            setup <- compileJVMContract bic cenv <$> traverse getExpr contract
+            fileReader <- getFileReader
+            setup <- compileJVMContract fileReader bic cenv <$> traverse getExpr contract
             res <- tl $ crucible_jvm_unsafe_assume_spec bic defaultOptions cls fun setup
             dropTask
             setServerVal lemmaName res

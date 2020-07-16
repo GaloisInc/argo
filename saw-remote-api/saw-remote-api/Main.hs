@@ -5,9 +5,7 @@ import qualified Data.Aeson as JSON
 import Data.Text (Text)
 
 import Argo
-import Argo.CacheTree
 import Argo.DefaultMain
-import Argo.HistoryWrapper
 
 import SAWServer
 import SAWServer.CryptolSetup
@@ -22,9 +20,7 @@ import SAWServer.SetOption
 
 main :: IO ()
 main =
-  do initSt <- initialState
-     cache  <- newCache initSt
-     theApp <- mkApp (HistoryWrapper cache) (historyWrapper validateSAWState sawMethods)
+  do theApp <- mkApp initialState sawMethods
      defaultMain description theApp
 
 description :: String

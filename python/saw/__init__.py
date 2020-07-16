@@ -185,20 +185,29 @@ class DebugLog(View):
         if self.err is not None:
             print(success.stderr, file=self.err, end='')
 
-        
+
 class LogResults(View):
     """A view on the verification results that logs failures and successes in a
        human-readable text format to stdout, or a given file handle."""
 
-    def __init__(self, file: IO[str] = sys.stdout):
+    def __init__(self, file: IO[str] = sys.stdout, verbose_failure: bool = False):
         self.file = file
+        self.verbose = verbose_failure
         self.successes: List[VerificationSucceeded] = []
         self.failures: List[VerificationFailed] = []
 
     def format_failure(self, failure: VerificationFailed) -> str:
         filename, lineno, lemma_name = self.__result_attributes(failure)
-        return (f"⚠️  Failed to verify: {lemma_name}"
-                f" (defined at {filename}:{lineno}):\n{failure.exception}")
+        message = f"⚠️  Failed to verify: {lemma_name}" + \
+                  f" (defined at {filename}:{lineno}):\n{failure.exception}"
+        if self.verbose:
+            message += '\n\tstdout:\n' + '\n'.join(
+                '\t\t' + line for line in failure.exception.stdout.split('\n')
+            )
+            message += '\n\tstderr:\n' + '\n'.join(
+                '\t\t' + line for line in failure.exception.stderr.split('\n')
+            )
+        return message
 
     def format_success(self, success: VerificationSucceeded) -> str:
         filename, lineno, lemma_name = self.__result_attributes(success)

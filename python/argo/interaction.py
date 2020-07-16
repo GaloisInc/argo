@@ -147,8 +147,8 @@ class Command(Interaction):
                                       res['error']['data']['stderr'])
             raise self.process_error(exception)
         elif 'result' in res:
-            return (res['result']['answer']['answer'],
-                    res['result']['answer']['state'],
+            return (res['result']['answer'],
+                    res['result']['state'],
                     res['result']['stdout'],
                     res['result']['stderr'])
         else:
@@ -204,7 +204,7 @@ class Query(Interaction):
                                       res['error']['data']['stderr'])
             raise self.process_error(exception)
         elif 'result' in res:
-            return (res['result']['answer']['answer'],
+            return (res['result']['answer'],
                     res['result']['stdout'],
                     res['result']['stderr'])
         else:

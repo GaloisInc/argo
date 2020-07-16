@@ -3,23 +3,35 @@ from itertools import chain
 from typing import Dict, Any, List, Iterable, Type
 from argo.interaction import ArgoException
 
-class SAWException(Exception):
-    data : Dict[str, Any]
-    code : int
 
-    def __init__(self, ae : ArgoException) -> None:
+class SAWException(Exception):
+    data: Dict[str, Any]
+    code: int
+    stdout: str
+    stderr: str
+
+    def __init__(self, ae: ArgoException) -> None:
         super().__init__(ae.message)
         self.data = ae.data
         self.code = ae.code
+        self.stdout = ae.stdout
+        self.stderr = ae.stderr
 
     # The exception gets fields for each data field in the ArgoException
-    def __getattr__(self, attr : str) -> Any:
+    def __getattr__(self, attr: str) -> Any:
         self.data.get(attr)
 
     def __dir__(self) -> Iterable[str]:
         return chain(super().__dir__(), [str(k) for k in self.data.keys()])
 
-def make_saw_exception(ae : ArgoException) -> SAWException:
+    def __str__(self) -> str:
+        lines: List[str] = []
+        for k, v in self.data.items():
+            lines.append(f"{k}: {v}")
+        return '\n'.join(lines)
+
+    
+def make_saw_exception(ae: ArgoException) -> SAWException:
     """Convert an ArgoException to its corresponding SAWException, failing with
     the original ArgoException if the code for this ArgoException does not
     correspond to a SAWException.

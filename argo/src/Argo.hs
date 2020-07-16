@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
@@ -10,6 +11,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RankNTypes #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints -Wno-name-shadowing #-}
 
 -- | An implementation of the basic primitives of JSON-RPC 2.0.
@@ -193,6 +196,10 @@ data JSONRPCException =
     , errorID :: Maybe RequestID
       -- ^ The request ID, if one is available. @Nothing@ omits
       -- it, because JSON-RPC defines a meaning for null.
+    , errorStdOut :: String
+      -- ^ The standard output of the method producing this error
+    , errorStdErr :: String
+      -- ^ The standard error of the method producing this error
     } deriving Show
 
 instance Exception JSONRPCException
@@ -207,8 +214,12 @@ instance JSON.ToJSON JSONRPCException where
           Just theID -> JSON.toJSON theID
       , "error" .=
         (JSON.object $ ["code" .= JSON.Number (fromInteger (errorCode exn))
-                       , "message" .= JSON.String (message exn)] ++
-                       (("data" .=) <$> maybeToList (errorData exn)))
+                      , "message" .= JSON.String (message exn)
+                      , "data" .= (JSON.object $
+                        ([ "stdout" .= errorStdOut exn
+                         , "stderr" .= errorStdErr exn ] ++
+                         (("data" .=) <$> maybeToList (errorData exn))))
+                      ])
       ]
 
 -- | A method was provided with incorrect parameters (from the JSON-RPC spec)
@@ -218,6 +229,8 @@ invalidParams msg params =
                    , message = T.pack ("Invalid params: " ++ msg)
                    , errorData = Just params
                    , errorID = Nothing
+                   , errorStdOut = ""
+                   , errorStdErr = ""
                    }
 
 -- | The input string could not be parsed as JSON (from the JSON-RPC spec)
@@ -227,6 +240,8 @@ parseError msg =
                    , message   = "Parse error"
                    , errorData = Just (JSON.String msg)
                    , errorID   = Nothing
+                   , errorStdOut = ""
+                   , errorStdErr = ""
                    }
 
 -- | The method called does not exist (from the JSON-RPC spec)
@@ -236,6 +251,8 @@ methodNotFound meth =
                    , message   = "Method not found"
                    , errorData = Just (JSON.toJSON meth)
                    , errorID   = Nothing
+                   , errorStdOut = ""
+                   , errorStdErr = ""
                    }
 
 -- | The request issued is not valid (from the JSON-RPC spec)
@@ -245,6 +262,8 @@ invalidRequest =
                    , message   = "Invalid request"
                    , errorData = Nothing
                    , errorID   = Nothing
+                   , errorStdOut = ""
+                   , errorStdErr = ""
                    }
 
 -- | Some unspecified bad thing happened in the server (from the JSON-RPC spec)
@@ -254,6 +273,8 @@ internalError =
                    , message   = "Internal error"
                    , errorData = Nothing
                    , errorID   = Nothing
+                   , errorStdOut = ""
+                   , errorStdErr = ""
                    }
 
 -- | The provided State ID is not one that the server has previously sent.
@@ -262,7 +283,10 @@ unknownStateID sid =
   JSONRPCException { errorCode = 20
                    , message = "Unknown state ID"
                    , errorData = Just $ JSON.toJSON sid
-                   , errorID = Nothing}
+                   , errorID = Nothing
+                   , errorStdOut = ""
+                   , errorStdErr = ""
+                   }
 
 -- | Construct a 'JSONRPCException' from an error code, error text, and perhaps
 -- some data item to attach
@@ -273,6 +297,8 @@ makeJSONRPCException c m d =
     , message = m
     , errorData = JSON.toJSON <$> d
     , errorID = Nothing
+    , errorStdOut = ""
+    , errorStdErr = ""
     }
 
 
@@ -359,6 +385,107 @@ rerunStep reqID app logger startState (method, params) fileReader =
     Just (_, m) ->
       fst <$> runMethod (m $ JSON.Object params) fileReader logger startState
 
+-- | A response to a command or query.
+--
+-- The first type parameter represents the type of state IDs used at
+-- the particular stage of the program. When a response is first
+-- constructed, the state ID does not yet exist, so the type parameter
+-- is (). It becomes 'StateID' later, once the protocol expects this
+-- to exist, and the lack of a generalized 'ToJSON' instance prevents
+-- us from forgetting the ID when we encode it.
+data Response stateID a
+  = Response { _responseID :: !RequestID
+             , _responseAnswer :: !a
+             , _responseStdOut :: !String
+             , _responseStdErr :: !String
+             , _responseStateID :: !stateID
+             } deriving (Eq, Ord, Show)
+
+responseID :: Lens' (Response stateID a) RequestID
+responseID = lens _responseID (\r m -> r { _responseID = m })
+
+responseAnswer :: Lens (Response stateID a) (Response stateID b) a b
+responseAnswer = lens _responseAnswer (\r m -> r { _responseAnswer = m })
+
+responseStdOut :: Lens' (Response stateID a) String
+responseStdOut = lens _responseStdOut (\r m -> r { _responseStdOut = m })
+
+responseStdErr :: Lens' (Response stateID a) String
+responseStdErr = lens _responseStdOut (\r m -> r { _responseStdOut = m })
+
+responseStateID :: Lens (Response stateID a) (Response stateID' a) stateID stateID'
+responseStateID = lens _responseStateID (\r sid -> r { _responseStateID = sid })
+
+instance JSON.FromJSON a => JSON.FromJSON (Response StateID a) where
+  parseJSON =
+    JSON.withObject ("JSON-RPC" <> T.unpack jsonRPCVersion <> " response") $
+    \o ->
+      (o .: "jsonrpc" `suchThat` (== jsonRPCVersion)) *>
+      (do result <- o .: "result"
+          Response
+            <$> o .: "id"
+            <*> result .: "answer"
+            <*> result .: "stdout"
+            <*> result .: "stderr"
+            <*> result .: "state")
+
+instance JSON.ToJSON a => JSON.ToJSON (Response StateID a) where
+  toJSON resp =
+    JSON.object
+      [ "jsonrpc" .= jsonRPCVersion
+      , "id"      .= view responseID resp
+      , "result"  .= JSON.object
+        [ "answer" .= view responseAnswer resp
+        , "stdout" .= view responseStdOut resp
+        , "stderr" .= view responseStdErr resp
+        , "state"  .= view responseStateID resp
+        ]
+      ]
+
+runMethodResponse ::
+  Method s a ->
+  RequestID ->
+  (FilePath -> IO B.ByteString) ->
+  (Text -> IO ()) ->
+  s ->
+  IO (s, Response () a)
+execMethodSilently ::
+  Method s a ->
+  (FilePath -> IO B.ByteString) ->
+  (Text -> IO ()) ->
+  s ->
+  IO s
+(runMethodResponse, execMethodSilently) =
+  ( \m reqID fileReader logger st ->
+      tryOutErr hCapture reqID (runMethod m fileReader logger st)
+  , \m fileReader logger st -> fst <$>
+      tryOutErr
+        (\hs a -> ("",) <$> hSilence hs a)
+        IDNull
+        (runMethod m fileReader logger st) )
+  where
+    tryOutErr ::
+      (forall a. [Handle] -> IO a -> IO (String, a)) ->
+      RequestID ->
+      IO (s, a) ->
+      IO (s, Response () a)
+    tryOutErr capturer reqID action =
+      do (err, (out, res)) <-
+           capturer [stderr] . capturer [stdout] $
+           try @SomeException (try @JSONRPCException action)
+         tryPutOutErr out err
+         either
+           (\e -> let message = Just (JSON.String (T.pack (displayException e)))
+                  in throwIO $ internalError { errorData = message })
+           (either
+              (\e -> throwIO $ e { errorStdOut = out, errorStdErr = err })
+              (\(st, answer) -> pure (st, Response reqID answer out err ())))
+           res
+      where
+        tryPutOutErr :: String -> String -> IO ()
+        tryPutOutErr out err =
+          do void $ try @IOException (hPutStr stdout out)
+             void $ try @IOException (hPutStr stderr err)
 
 handleRequest ::
   forall s.
@@ -369,45 +496,37 @@ handleRequest ::
   Request ->
   IO ()
 handleRequest logger respond app req =
-  tryOutErr $ case M.lookup method $ view appMethods app of
+  case M.lookup method $ view appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (Command, m) ->
-      withRequestID $
+      withRequestID $ \reqID ->
       do stateID <- getStateID req
-         answer <- withMVar theState $
+         response <- withMVar theState $
            \contents ->
-             getAppState (rerunStep reqID app logger) contents stateID >>=
+             getAppState (rerunStep (Just reqID) app logger) contents stateID >>=
              \case
                Nothing -> throwIO $ unknownStateID stateID
                Just initAppState ->
                  do let r = (method, view requestParams req)
                     let fileReader = freshStateReader contents stateID
-                    (newAppState, result) <- runMethod (m params) fileReader logger initAppState
+                    (newAppState, result) <- runMethodResponse (m params) reqID fileReader logger initAppState
                     sid' <- saveNewState contents stateID r newAppState
-                    return $ addStateID result sid'
-         let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
-                                    , "id" .= reqID
-                                    , "result" .= answer
-                                    ]
+                    return $ addStateID sid' result
          respond (JSON.encode response)
     Just (Query, m) ->
-      withRequestID $
+      withRequestID $ \reqID ->
       do stateID <- getStateID req
-         answer <- withMVar theState $
+         response <- withMVar theState $
            \contents ->
-             getAppState (rerunStep reqID app logger) contents stateID >>=
+             getAppState (rerunStep (Just reqID) app logger) contents stateID >>=
              \case
                Nothing -> throwIO $ unknownStateID stateID
                Just theAppState ->
                  do let fileReader = B.readFile -- No caching of this state
-                    (_, result) <- runMethod (m params) fileReader logger theAppState
+                    (_, result) <- runMethodResponse (m params) reqID fileReader logger theAppState
                     -- Here, we return the original state ID, because
                     -- queries don't result in new states.
-                    return $ addStateID result stateID
-         let response = JSON.object [ "jsonrpc" .= jsonRPCVersion
-                                    , "id" .= reqID
-                                    , "result" .= answer
-                                    ]
+                    return $ addStateID stateID result
          respond (JSON.encode response)
     Just (Notification, m) ->
       withoutRequestID $
@@ -422,23 +541,21 @@ handleRequest logger respond app req =
                  -- No reply will be sent, so there is no way of the
                  -- client re-using any resulting state. So we don't
                  -- cache file contents here.
-                 runMethod (m params) B.readFile logger theAppState
+                 (,()) <$> execMethodSilently (m params) B.readFile logger theAppState
   where
     method   = view requestMethod req
     params   = JSON.Object $ view requestParams req
     reqID    = view requestID req
     theState = view serverState app
 
-    addStateID :: JSON.Value -> StateID -> JSON.Value
-    addStateID answer sid =
-      JSON.object [ "answer" .= answer
-                  , "state" .= sid
-                  ]
+    addStateID :: StateID -> Response anyOldStateID a -> Response StateID a
+    addStateID sid answer =
+      set responseStateID sid answer
 
-    withRequestID :: IO a -> IO a
+    withRequestID :: (RequestID -> IO a) -> IO a
     withRequestID act =
       do rid <- requireID
-         catch act $ \e -> throwIO (e { errorID = Just rid })
+         catch (act rid) $ \e -> throwIO (e { errorID = Just rid })
 
     withoutRequestID :: IO a -> IO a
     withoutRequestID act =
@@ -447,18 +564,6 @@ handleRequest logger respond app req =
 
     requireID   = maybe (throwIO invalidRequest) return reqID
     requireNoID = maybe (return ()) (const (throwIO invalidRequest)) reqID
-
-    tryOutErr :: IO a -> IO a
-    tryOutErr action =
-      do (err, (out, res)) <- hCapture [stderr] . hCapture [stdout] $
-           try @SomeException action
-         tryPutOutErr out err
-         either throwIO pure res
-      where
-        tryPutOutErr :: String -> String -> IO ()
-        tryPutOutErr out err =
-          do void $ try @IOException (hPutStr stdout out)
-             void $ try @IOException (hPutStr stderr err)
 
 
 -- | Given an IO action, return an atomic-ified version of that same action,
@@ -579,7 +684,11 @@ serveHandlesNS hLog hIn hOut app =
 
     reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
     reportOtherException out exn =
-      out $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
+      out $ JSON.encode $
+      internalError { errorData = Just (JSON.String (T.pack (show exn)))
+                    , errorStdOut = "<no stdout captured: exception outside capture region>"
+                    , errorStdErr = "<no stderr captured: exception outside capture region>"
+                    }
 
     log :: Text -> IO ()
     log msg = case hLog of

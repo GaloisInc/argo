@@ -64,20 +64,31 @@ When the first message is sent from the client to the server, the
 ``null``. Replies from the server may contain a new state that should
 be used in subsequent requests, so that state changes executed by the
 request are visible. Prior versions of this protocol represented the
-initial state as the empty array ``[]``, but this is now deprecated.
+initial state as the empty array ``[]``, but this is now deprecated
+and will be removed.
 
 In particular, per JSON-RPC, non-error replies are always a JSON
 object that contains a ``result`` field. The result field always
-contains an ``answer`` field, and contains ``state`` when the request
-resulted in a new server state.
+contains an ``answer`` field and a ``state`` field, as well as
+``stdout`` and ``stderr``.
 
 ``answer``
   The value returned as a response to the request (the precise
   contents depend on which request was sent)
 
 ``state``
-  The new state, to be sent in subsequent requests. If this field is
-  missing, then the client should re-use the state from their request.
+  The state, to be sent in subsequent requests. If the server did not
+  modify its state in response to the command, then this state may be
+  the same as the one sent by the client.
+
+``stdout`` and ``stderr``
+  These fields contain the contents of the Unix ``stdout`` and
+  ``stderr`` file descriptors. They are intended as a stopgap measure
+  for clients who are still in the process of obtaining structured
+  information from the libraries on which they depend, so that
+  information is not completely lost to users. However, the server may
+  or may not cache this information and resend it. Applications are
+  encouraged to used structured data and send it deliberately as the answer.
 
 The precise structure of states is considered an implementation detail
 that could change at any time. Please treat them as opaque tokens that

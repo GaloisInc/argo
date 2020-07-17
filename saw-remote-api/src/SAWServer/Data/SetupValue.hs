@@ -8,26 +8,31 @@ import Data.Aeson (FromJSON(..), withObject, withText, (.:))
 
 import SAWServer
 
-data SetupValTag = SV | C
+data SetupValTag
+  = TagServerValue
+  | TagCryptol
+  | TagArrayValue
+  | TagFieldLValue
+  | TagElemLValue
+  | TagGlobalInit
+  | TagGlobalLValue
 
 instance FromJSON SetupValTag where
   parseJSON =
     withText "tag for setup value"$
     \case
-      "saved" -> pure SV
-      "Cryptol" -> pure C
+      "saved" -> pure TagServerValue
+      "Cryptol" -> pure TagCryptol
+      "array value" -> pure TagArrayValue
+      "field lvalue" -> pure TagFieldLValue
+      "element lvalue" -> pure TagElemLValue
+      "global initializer" -> pure TagGlobalInit
+      "global lvalue" -> pure TagGlobalLValue
       _ -> empty
 
 instance FromJSON cryptolExpr => FromJSON (CrucibleSetupVal cryptolExpr) where
   parseJSON v =
-    nullValue v <|>
-    (withObject "array value" $ \o -> ArrayValue <$> o .: "elements") v <|>
-    -- (withObject "tuple value" $ \o -> TupleValue <$> o .: "elements") v <|>
-    (withObject "field lvalue" $ \o -> FieldLValue <$> o .: "base" <*> o .: "field") v <|>
-    (withObject "element lvalue" $ \o -> ElementLValue <$> o .: "base" <*> o .: "index") v <|>
-    (withObject "global initializer" $ \o -> GlobalInitializer <$> o .: "name") v <|>
-    (withObject "global lvalue" $ \o -> GlobalLValue <$> o .: "name") v <|>
-    fromObject v
+    nullValue v <|> fromObject v
 
     where
       nullValue = withText "setup value text" $
@@ -37,5 +42,10 @@ instance FromJSON cryptolExpr => FromJSON (CrucibleSetupVal cryptolExpr) where
       fromObject = withObject "saved value or Cryptol expression" $ \o ->
         o .: "setup value" >>=
         \case
-          SV -> ServerValue <$> o .: "name"
-          C -> CryptolExpr <$> o .: "expression"
+          TagServerValue -> ServerValue <$> o .: "name"
+          TagCryptol -> CryptolExpr <$> o .: "expression"
+          TagArrayValue -> ArrayValue <$> o .: "elements"
+          TagFieldLValue -> FieldLValue <$> o .: "base" <*> o .: "field"
+          TagElemLValue -> ElementLValue <$> o .: "base" <*> o .: "index"
+          TagGlobalInit -> GlobalInitializer <$> o .: "name"
+          TagGlobalLValue -> GlobalLValue <$> o .: "name"

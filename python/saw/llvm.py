@@ -123,7 +123,10 @@ class Allocated(SetupTerm):
     def to_json(self) -> Any:
         if self.name is None:
             self.name = self.spec.get_fresh_name()
-        return {"server name": self.name, "type": self.type.to_json()}
+        return {"server name": self.name,
+                "type": self.type.to_json(),
+                "mutable": True,
+                "alignment": 8}
 
     def to_ref_json(self) -> Any:
         if self.name is None:

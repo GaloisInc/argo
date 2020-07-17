@@ -21,6 +21,7 @@ optional-packages:
   deps/saw-script/deps/jvm-verifier/
   deps/saw-script/deps/llvm-pretty/
   deps/saw-script/deps/llvm-pretty-bc-parser/
+  deps/saw-script/deps/parameterized-utils/
   deps/saw-script/deps/saw-core-aig/
   deps/saw-script/deps/saw-core-sbv/
   deps/saw-script/deps/saw-core/

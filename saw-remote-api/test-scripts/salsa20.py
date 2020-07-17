@@ -74,10 +74,22 @@ qr_contract = {
     ],
     "pre conds": [],
     "pre allocated": [
-        {"server name": "y0p", "type": uint32_t.to_json()},
-        {"server name": "y1p", "type": uint32_t.to_json()},
-        {"server name": "y2p", "type": uint32_t.to_json()},
-        {"server name": "y3p", "type": uint32_t.to_json()}
+        {"server name": "y0p",
+         "type": uint32_t.to_json(),
+         "mutable": True,
+         "alignment": None},
+        {"server name": "y1p",
+         "type": uint32_t.to_json(),
+         "mutable": True,
+         "alignment": None},
+        {"server name": "y2p",
+         "type": uint32_t.to_json(),
+         "mutable": True,
+         "alignment": None},
+        {"server name": "y3p",
+         "type": uint32_t.to_json(),
+         "mutable": True,
+         "alignment": None}
     ],
     "pre points tos": [ {"pointer": y0p, "points to": y0},
                         {"pointer": y1p, "points to": y1},
@@ -101,7 +113,10 @@ def oneptr_update_contract(ty, res):
         ],
         "pre conds": [],
         "pre allocated": [
-            {"server name": "yp", "type": ty.to_json()}
+            {"server name": "yp",
+             "type": ty.to_json(),
+             "mutable": True,
+             "alignment": None}
         ],
         "pre points tos": [ {"pointer": yp, "points to": y} ],
         "argument vals": [yp],
@@ -131,9 +146,18 @@ expand_contract = {
     ],
     "pre conds": [],
     "pre allocated": [
-        {"server name": "kp",  "type": LLVMArrayType(uint8_t, 32).to_json()},
-        {"server name": "np",  "type": LLVMArrayType(uint8_t, 16).to_json()},
-        {"server name": "ksp", "type": LLVMArrayType(uint8_t, 64).to_json()}
+        {"server name": "kp",
+         "type": LLVMArrayType(uint8_t, 32).to_json(),
+         "mutable": True,
+         "alignment": None},
+        {"server name": "np",
+         "type": LLVMArrayType(uint8_t, 16).to_json(),
+         "mutable": True,
+         "alignment": None},
+        {"server name": "ksp",
+         "type": LLVMArrayType(uint8_t, 64).to_json(),
+         "mutable": True,
+         "alignment": None}
     ],
     "pre points tos": [ {"pointer": kp, "points to": k},
                         {"pointer": np, "points to": n} ],
@@ -158,9 +182,18 @@ def crypt_contract(size : int):
         ],
         "pre conds": [],
         "pre allocated": [
-            {"server name": "kp", "type": LLVMArrayType(uint8_t, 32).to_json()},
-            {"server name": "vp", "type": LLVMArrayType(uint8_t, 8).to_json()},
-            {"server name": "mp", "type": LLVMArrayType(uint8_t, size).to_json()}
+            {"server name": "kp",
+             "type": LLVMArrayType(uint8_t, 32).to_json(),
+             "mutable": True,
+             "alignment": None},
+            {"server name": "vp",
+             "type": LLVMArrayType(uint8_t, 8).to_json(),
+             "mutable": True,
+             "alignment": None},
+            {"server name": "mp",
+             "type": LLVMArrayType(uint8_t, size).to_json(),
+             "mutable": True,
+             "alignment": None}
         ],
         "pre points tos": [ {"pointer": kp, "points to": k},
                             {"pointer": vp, "points to": v},

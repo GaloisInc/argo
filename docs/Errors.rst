@@ -64,9 +64,9 @@ Server value errors (``10000``–``10099``)
 - ``10050``: “The server value with name \____\_ is not an LLVM method
    specification”
    ``{ name: String }``
-- ``10080``: “The server value with name \____\_ is not an JVM class”
+- ``10080``: “The server value with name \____\_ is not a JVM class”
    ``{ name: String }``
-- ``10090``: “The server value with name \____\_ is not an JVM method
+- ``10090``: “The server value with name \____\_ is not a JVM method
    specification”
    ``{ name: String }``
 

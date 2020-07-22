@@ -30,8 +30,14 @@ contract = {
     ],
     "pre conds": [],
     "pre allocated": [
-        {"server name": "xp", "type": uint32_t},
-        {"server name": "yp", "type": uint32_t}
+        {"server name": "xp",
+         "type": uint32_t,
+         "mutable": True,
+         "alignment": None},
+        {"server name": "yp",
+         "type": uint32_t,
+         "mutable": True,
+         "alignment": None}
     ],
     "pre points tos": [{"pointer": xp, "points to": x},
                        {"pointer": yp, "points to": y}],

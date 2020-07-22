@@ -2,71 +2,32 @@
 
 module SAWServer.LLVMVerify
   ( llvmVerify
+  , llvmVerifyX86
   , llvmAssume
-  , LLVMVerifyParams(..)
-  , LLVMAssumeParams(..)
   ) where
 
 import Prelude hiding (mod)
 import Control.Lens
-import Data.Aeson (FromJSON(..), withObject, (.:))
 
 import SAWScript.Crucible.LLVM.Builtins
+import SAWScript.Crucible.LLVM.X86
 import SAWScript.Options (defaultOptions)
 import SAWScript.Value (rwCryptol)
 
 import Argo
 import CryptolServer.Data.Expression
 import SAWServer
+import SAWServer.Data.Contract
+import SAWServer.Data.LLVMType
 import SAWServer.Exceptions
 import SAWServer.LLVMCrucibleSetup
 import SAWServer.OK
 import SAWServer.ProofScript
 import SAWServer.TopLevel
+import SAWServer.VerifyCommon
 
-data LLVMVerifyParams =
-  LLVMVerifyParams
-    { verifyModule       :: ServerName
-    , verifyFunctionName :: String
-    , verifyLemmas       :: [ServerName] --[SomeLLVM MS.CrucibleMethodSpecIR]
-    , verifyCheckSat     :: Bool
-    -- TODO: might want to be able to save contracts and refer to them by name?
-    , verifyContract     :: Contract Expression -- ServerName
-    -- TODO: might want to be able to save proof scripts and refer to them by name?
-    , verifyScript       :: ProofScript
-    , verifyLemmaName    :: ServerName
-    }
-
-instance FromJSON LLVMVerifyParams where
-  parseJSON =
-    withObject "SAW/LLVM/verify params" $ \o ->
-    LLVMVerifyParams <$> o .: "module"
-                     <*> o .: "function"
-                     <*> o .: "lemmas"
-                     <*> o .: "check sat"
-                     <*> o .: "contract"
-                     <*> o .: "script"
-                     <*> o .: "lemma name"
-
-data LLVMAssumeParams =
-  LLVMAssumeParams
-    { assumeModule       :: ServerName
-    , assumeFunctionName :: String
-    -- TODO: might want to be able to save contracts and refer to them by name?
-    , assumeContract     :: Contract Expression -- ServerName
-    , assumeLemmaName    :: ServerName
-    }
-
-instance FromJSON LLVMAssumeParams where
-  parseJSON =
-    withObject "SAW/LLVM/assume params" $ \o ->
-    LLVMAssumeParams <$> o .: "module"
-                     <*> o .: "function"
-                     <*> o .: "contract"
-                     <*> o .: "lemma name"
-
-llvmVerify :: LLVMVerifyParams -> Method SAWState OK
-llvmVerify (LLVMVerifyParams modName fun lemmaNames checkSat contract script lemmaName) =
+llvmVerifyAssume :: ContractMode -> VerifyParams JSONLLVMType -> Method SAWState OK
+llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract script lemmaName) =
   do tasks <- view sawTask <$> getState
      case tasks of
        (_:_) -> raise $ notAtTopLevel $ map fst tasks
@@ -74,19 +35,30 @@ llvmVerify (LLVMVerifyParams modName fun lemmaNames checkSat contract script lem
          do pushTask (LLVMCrucibleSetup lemmaName [])
             state <- getState
             mod <- getLLVMModule modName
-            lemmas <- mapM getLLVMMethodSpecIR lemmaNames
-            let bic = view  sawBIC state
+            let bic = view sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
-            proofScript <- interpretProofScript script
             fileReader <- getFileReader
-            setup <- compileContract fileReader bic cenv <$> traverse getExpr contract
-            res <- tl $ crucible_llvm_verify bic defaultOptions mod fun lemmas checkSat setup proofScript
+            setup <- compileLLVMContract fileReader bic cenv <$> traverse getExpr contract
+            res <- case mode of
+              VerifyContract -> do
+                lemmas <- mapM getLLVMMethodSpecIR lemmaNames
+                proofScript <- interpretProofScript script
+                tl $ crucible_llvm_verify bic defaultOptions mod fun lemmas checkSat setup proofScript
+              AssumeContract ->
+                tl $ crucible_llvm_unsafe_assume_spec bic defaultOptions mod fun setup
             dropTask
             setServerVal lemmaName res
             ok
 
-llvmAssume :: LLVMAssumeParams -> Method SAWState OK
-llvmAssume (LLVMAssumeParams modName fun contract lemmaName) =
+llvmVerify :: VerifyParams JSONLLVMType -> Method SAWState OK
+llvmVerify = llvmVerifyAssume VerifyContract
+
+llvmAssume :: AssumeParams JSONLLVMType -> Method SAWState OK
+llvmAssume (AssumeParams modName fun contract lemmaName) =
+  llvmVerifyAssume AssumeContract (VerifyParams modName fun [] False contract (ProofScript []) lemmaName)
+
+llvmVerifyX86 :: X86VerifyParams JSONLLVMType -> Method SAWState OK
+llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat contract script lemmaName) =
   do tasks <- view sawTask <$> getState
      case tasks of
        (_:_) -> raise $ notAtTopLevel $ map fst tasks
@@ -96,9 +68,11 @@ llvmAssume (LLVMAssumeParams modName fun contract lemmaName) =
             mod <- getLLVMModule modName
             let bic = view  sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
+                allocs = map (\(X86Alloc name size) -> (name, size)) globals
+            proofScript <- interpretProofScript script
             fileReader <- getFileReader
-            setup <- compileContract fileReader bic cenv <$> traverse getExpr contract
-            res <- tl $ crucible_llvm_unsafe_assume_spec bic defaultOptions mod fun setup
+            setup <- compileLLVMContract fileReader bic cenv <$> traverse getExpr contract
+            res <- tl $ crucible_llvm_verify_x86 bic defaultOptions mod objName fun allocs checkSat setup proofScript
             dropTask
             setServerVal lemmaName res
             ok

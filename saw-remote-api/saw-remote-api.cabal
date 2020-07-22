@@ -47,11 +47,11 @@ common deps
                  cryptonite,
                  cryptonite-conduit,
                  directory,
+                 jvm-parser,
                  jvm-verifier,
                  lens,
                  llvm-pretty,
                  llvm-pretty-bc-parser,
-                 llvm-verifier,
                  mtl,
                  parameterized-utils,
                  saw-core,
@@ -67,18 +67,24 @@ library
   exposed-modules: SAWServer,
                    SAWServer.CryptolExpression,
                    SAWServer.CryptolSetup,
+                   SAWServer.Data.Contract,
+                   SAWServer.Data.JVMType,
                    SAWServer.Data.LLVMType,
+                   SAWServer.Data.SetupValue,
                    SAWServer.Exceptions,
+                   SAWServer.JVMCrucibleSetup,
+                   SAWServer.JVMVerify,
                    SAWServer.LLVMCrucibleSetup,
                    SAWServer.LLVMVerify,
                    SAWServer.NoParams,
                    SAWServer.OK,
                    SAWServer.ProofScript,
                    SAWServer.SaveTerm,
-                   SAWServer.SetupValue,
+                   SAWServer.SetOption,
                    SAWServer.Term,
-                   SAWServer.TopLevel
-                   SAWServer.TrackFile
+                   SAWServer.TopLevel,
+                   SAWServer.TrackFile,
+                   SAWServer.VerifyCommon
 
 executable saw-remote-api
   import: deps, warnings

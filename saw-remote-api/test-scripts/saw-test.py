@@ -30,7 +30,7 @@ contract = {
     "post conds": [],
     "post allocated": [],
     "post points tos": [],
-    "return val": "null"
+    "return val": {"setup value": "null value"}
 }
 
 prover = ProofScript([abc]).to_json()

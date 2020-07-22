@@ -13,14 +13,13 @@ import qualified Data.Text as T
 
 import Text.LLVM.AST (FloatType(..), Type'(..), Type, Ident(..), PrimType(..))
 
-newtype JSONIdent = JSONIdent { getIdent :: Ident }
+newtype JSONLLVMIdent = JSONLLVMIdent { getIdent :: Ident }
 
-instance JSON.FromJSON JSONIdent where
+instance JSON.FromJSON JSONLLVMIdent where
    parseJSON =
-     withText "identifier" $ pure . JSONIdent . Ident . T.unpack
+     withText "LLVM identifier" $ pure . JSONLLVMIdent . Ident . T.unpack
 
-
-newtype JSONLLVMType = JSONLLVMType { getLLVMType :: Type' JSONIdent }
+newtype JSONLLVMType = JSONLLVMType { getLLVMType :: Type' JSONLLVMIdent }
 
 
 data LLVMTypeTag

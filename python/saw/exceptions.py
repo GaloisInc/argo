@@ -51,6 +51,8 @@ class NotAnLLVMSetupScript(ServerValueError): pass
 class NotAnLLVMSetupValue(ServerValueError): pass
 class NotAnLLVMMethodSpecification(ServerValueError): pass
 class NotAnLLVMMethodSpecIR(ServerValueError): pass
+class NotAJVMClass(ServerValueError): pass
+class NotAJVMMethodSpecIR(ServerValueError): pass
 class NotASimpset(ServerValueError): pass
 class NotATerm(ServerValueError): pass
 
@@ -82,6 +84,8 @@ error_code_table : Dict[int, Type[SAWException]] = {
     10050: NotAnLLVMMethodSpecIR,
     10060: NotASimpset,
     10070: NotATerm,
+    10080: NotAJVMClass,
+    10090: NotAJVMMethodSpecIR,
     # Setup errors:
     10100: NotSettingUpCryptol,
     10110: NotSettingUpCrucibleLLVM,

@@ -7,14 +7,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
-module SAWServer.LLVMCrucibleSetup
-  ( startLLVMCrucibleSetup
-  , llvmLoadModule
-  , Contract(..)
-  , ContractVar(..)
-  , Allocated(..)
-  , PointsTo(..)
-  , compileLLVMContract
+module SAWServer.JVMCrucibleSetup
+  ( startJVMSetup
+  , jvmLoadClass
+  , compileJVMContract
   ) where
 
 import Control.Lens
@@ -30,23 +26,15 @@ import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
-import qualified Text.LLVM.AST as LLVM
-import qualified Data.LLVM.BitCode as LLVM
+import qualified Lang.Crucible.JVM as CJ
+import qualified Language.JVM.Common as JVM
 import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
-import SAWScript.Crucible.LLVM.Builtins
-    ( crucible_alloc
-    , crucible_alloc_aligned
-    , crucible_alloc_readonly
-    , crucible_alloc_readonly_aligned
-    , crucible_execute_func
-    , crucible_fresh_var
-    , crucible_points_to
-    , crucible_return
-    , crucible_precond
-    , crucible_postcond )
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS
+import SAWScript.Crucible.JVM.Builtins
+import SAWScript.Crucible.JVM.BuiltinsJVM
+import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMS
+import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Options (defaultOptions)
-import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), biSharedContext)
+import SAWScript.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)
@@ -54,40 +42,40 @@ import Verifier.SAW.TypedTerm (TypedTerm)
 import Argo
 import SAWServer
 import SAWServer.Data.Contract
-import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
+import SAWServer.Data.JVMType
 import SAWServer.Data.SetupValue ()
 import SAWServer.CryptolExpression (getTypedTermOfCExp)
 import SAWServer.Exceptions
 import SAWServer.OK
+import SAWServer.TopLevel
 import SAWServer.TrackFile
 
-startLLVMCrucibleSetup :: StartLLVMCrucibleSetupParams -> Method SAWState OK
-startLLVMCrucibleSetup (StartLLVMCrucibleSetupParams n) =
-  do pushTask (LLVMCrucibleSetup n [])
+startJVMSetup :: StartJVMSetupParams -> Method SAWState OK
+startJVMSetup (StartJVMSetupParams n) =
+  do pushTask (JVMSetup n [])
      ok
 
-data StartLLVMCrucibleSetupParams
-  = StartLLVMCrucibleSetupParams ServerName
+data StartJVMSetupParams
+  = StartJVMSetupParams ServerName
 
-instance FromJSON StartLLVMCrucibleSetupParams where
+instance FromJSON StartJVMSetupParams where
   parseJSON =
     withObject "params for \"SAW/Crucible setup\"" $ \o ->
-    StartLLVMCrucibleSetupParams <$> o .: "name"
+    StartJVMSetupParams <$> o .: "name"
 
-data ServerSetupVal = Val (CMS.AllLLVM SetupValue)
+data ServerSetupVal = Val (SetupValue CJ.JVM)
 
 -- TODO: this is an extra layer of indirection that could be collapsed, but is easy to implement for now.
-compileLLVMContract ::
+compileJVMContract ::
   (FilePath -> IO ByteString) ->
   BuiltinContext ->
   CryptolEnv ->
-  Contract JSONLLVMType (P.Expr P.PName) ->
-  LLVMCrucibleSetupM ()
-compileLLVMContract fileReader bic cenv c =
-  interpretLLVMSetup fileReader bic cenv steps
+  Contract JavaType (P.Expr P.PName) ->
+  JVMSetupM ()
+compileJVMContract fileReader bic cenv c = interpretJVMSetup fileReader bic cenv steps
   where
-    setupFresh (ContractVar n dn ty) = SetupFresh n dn (llvmType ty)
-    setupAlloc (Allocated n ty mut align) = SetupAlloc n (llvmType ty) mut align
+    setupFresh (ContractVar n dn ty) = SetupFresh n dn ty
+    setupAlloc (Allocated n ty mut align) = SetupAlloc n ty mut align
     steps =
       map setupFresh (preVars c) ++
       map SetupPrecond (preConds c) ++
@@ -100,80 +88,83 @@ compileLLVMContract fileReader bic cenv c =
       map (\(PointsTo p v) -> SetupPointsTo p v) (postPointsTos c) ++
       [ SetupReturn v | v <- maybeToList (returnVal c) ]
 
-interpretLLVMSetup ::
+interpretJVMSetup ::
   (FilePath -> IO ByteString) ->
   BuiltinContext ->
   CryptolEnv ->
-  [SetupStep LLVM.Type] ->
-  LLVMCrucibleSetupM ()
-interpretLLVMSetup fileReader bic cenv0 ss =
-  runStateT (traverse_ go ss) (mempty, cenv0) *> pure ()
+  [SetupStep JavaType] ->
+  JVMSetupM ()
+interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty, cenv0) *> pure ()
   where
-    go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= crucible_return bic defaultOptions
+    go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= jvm_return bic opts
     -- TODO: do we really want two names here?
     go (SetupFresh name@(ServerName n) debugName ty) =
-      do t <- lift $ crucible_fresh_var bic defaultOptions (T.unpack debugName) ty
+      do t <- lift $ jvm_fresh_var bic opts (T.unpack debugName) ty
          (env, cenv) <- get
          put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
-         save name (Val (CMS.anySetupTerm t))
-    go (SetupAlloc name ty True Nothing) =
-      lift (crucible_alloc bic defaultOptions ty) >>= save name . Val
+         save name (Val (MS.SetupTerm t))
+    go (SetupAlloc name ty _ (Just _)) =
+      error "attempted to allocate a Java object with alignment information"
+    go (SetupAlloc name (JavaArray n ty) True Nothing) =
+      lift (jvm_alloc_array bic opts n ty) >>= save name . Val
+    go (SetupAlloc name (JavaClass c) True Nothing) =
+      lift (jvm_alloc_object bic opts c) >>= save name . Val
     go (SetupAlloc name ty False Nothing) =
-      lift (crucible_alloc_readonly bic defaultOptions ty) >>= save name . Val
-    go (SetupAlloc name ty True (Just align)) =
-      lift (crucible_alloc_aligned bic defaultOptions align ty) >>= save name . Val
-    go (SetupAlloc name ty False (Just align)) =
-      lift (crucible_alloc_readonly_aligned bic defaultOptions align ty) >>= save name . Val
+      error $ "cannot allocate type: " ++ show ty
     go (SetupPointsTo src tgt) = get >>= \env -> lift $
       do ptr <- getSetupVal env src
          tgt' <- getSetupVal env tgt
-         crucible_points_to True bic defaultOptions ptr tgt'
+         error "nyi: points-to"
     go (SetupExecuteFunction args) =
       get >>= \env ->
-      lift $ traverse (getSetupVal env) args >>= crucible_execute_func bic defaultOptions
+      lift $ traverse (getSetupVal env) args >>= jvm_execute_func bic opts
     go (SetupPrecond p) = get >>= \env -> lift $
-      getTypedTerm env p >>= crucible_precond
+      getTypedTerm env p >>= jvm_precond
     go (SetupPostcond p) = get >>= \env -> lift $
-      getTypedTerm env p >>= crucible_postcond
+      getTypedTerm env p >>= jvm_postcond
 
+    opts = defaultOptions
     save name val = modify' (\(env, cenv) -> (Map.insert name val env, cenv))
 
     getSetupVal ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
       CrucibleSetupVal (P.Expr P.PName) ->
-      LLVMCrucibleSetupM (CMS.AllLLVM MS.SetupValue)
-    getSetupVal _ NullValue = LLVMCrucibleSetupM $ return CMS.anySetupNull
+      JVMSetupM (MS.SetupValue CJ.JVM)
+    getSetupVal _ NullValue = JVMSetupM $ return $ MS.SetupNull ()
+                              {-
     getSetupVal env (ArrayValue elts) =
       do elts' <- mapM (getSetupVal env) elts
-         LLVMCrucibleSetupM $ return $ CMS.anySetupArray elts'
+         JVMSetupM $ return $ MS.SetupArray () elts'
     getSetupVal env (FieldLValue base fld) =
       do base' <- getSetupVal env base
-         LLVMCrucibleSetupM $ return $ CMS.anySetupField base' fld
+         JVMSetupM $ return $ MS.SetupField () base' fld
     getSetupVal env (ElementLValue base idx) =
       do base' <- getSetupVal env base
-         LLVMCrucibleSetupM $ return $ CMS.anySetupElem base' idx
+         JVMSetupM $ return $ MS.SetupElem () base' idx
     getSetupVal _ (GlobalInitializer name) =
-      LLVMCrucibleSetupM $ return $ CMS.anySetupGlobalInitializer name
+      JVMSetupM $ return $ MS.SetupGlobalInitializer () name
     getSetupVal _ (GlobalLValue name) =
-      LLVMCrucibleSetupM $ return $ CMS.anySetupGlobal name
-    getSetupVal (env, _) (ServerValue n) = LLVMCrucibleSetupM $
+      JVMSetupM $ return $ MS.SetupGlobal () name
+         -}
+    getSetupVal (env, _) (ServerValue n) = JVMSetupM $
       resolve env n >>=
       \case
         Val x -> return x -- TODO add cases for the server values that
                           -- are not coming from the setup monad
                           -- (e.g. surrounding context)
-    getSetupVal (_, cenv) (CryptolExpr expr) = LLVMCrucibleSetupM $
+    getSetupVal (_, cenv) (CryptolExpr expr) = JVMSetupM $
       do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
          -- TODO: add warnings (snd res)
          case fst res of
-           Right (t, _) -> return (CMS.anySetupTerm t)
+           Right (t, _) -> return (MS.SetupTerm t)
            Left err -> error $ "Cryptol error: " ++ show err -- TODO: report properly
+    getSetupVal _ _sv = error $ "unrecognized setup value" -- ++ show sv
 
     getTypedTerm ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
       P.Expr P.PName ->
-      LLVMCrucibleSetupM TypedTerm
-    getTypedTerm (_, cenv) expr = LLVMCrucibleSetupM $
+      JVMSetupM TypedTerm
+    getTypedTerm (_, cenv) expr = JVMSetupM $
       do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
          -- TODO: add warnings (snd res)
          case fst res of
@@ -185,26 +176,21 @@ interpretLLVMSetup fileReader bic cenv0 ss =
          Just v -> return v
          Nothing -> error "Server value not found - impossible!" -- rule out elsewhere
 
-data LLVMLoadModuleParams
-  = LLVMLoadModuleParams ServerName FilePath
+data JVMLoadClassParams
+  = JVMLoadClassParams ServerName String
 
-instance FromJSON LLVMLoadModuleParams where
+instance FromJSON JVMLoadClassParams where
   parseJSON =
-    withObject "params for \"SAW/LLVM/load module\"" $ \o ->
-    LLVMLoadModuleParams <$> o .: "name" <*> o .: "bitcode file"
+    withObject "params for \"SAW/JVM/load class\"" $ \o ->
+    JVMLoadClassParams <$> o .: "name" <*> o .: "class"
 
-llvmLoadModule :: LLVMLoadModuleParams -> Method SAWState OK
-llvmLoadModule (LLVMLoadModuleParams serverName fileName) =
+jvmLoadClass :: JVMLoadClassParams -> Method SAWState OK
+jvmLoadClass (JVMLoadClassParams serverName cname) =
   do tasks <- view sawTask <$> getState
      case tasks of
        (_:_) -> raise $ notAtTopLevel $ map fst tasks
        [] ->
-         do let ?laxArith = False -- TODO read from config
-            halloc <- getHandleAlloc
-            loaded <- liftIO (CMS.loadLLVMModule fileName halloc)
-            case loaded of
-              Left err -> raise (cantLoadLLVMModule (LLVM.formatError err))
-              Right llvmMod ->
-                do setServerVal serverName llvmMod
-                   trackFile fileName
-                   ok
+         do bic <- view sawBIC <$> getState
+            c <- tl $ loadJavaClass bic cname
+            setServerVal serverName c
+            ok

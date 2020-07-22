@@ -18,6 +18,7 @@ import SAWScript.Value (rwCryptol)
 import Argo
 import CryptolServer.Data.Expression
 import SAWServer
+import SAWServer.Data.Contract
 import SAWServer.Data.JVMType
 import SAWServer.Exceptions
 import SAWServer.JVMCrucibleSetup
@@ -26,8 +27,8 @@ import SAWServer.ProofScript
 import SAWServer.TopLevel
 import SAWServer.VerifyCommon
 
-jvmVerify :: VerifyParams JavaType -> Method SAWState OK
-jvmVerify (VerifyParams className fun lemmaNames checkSat contract script lemmaName) =
+jvmVerifyAssume :: ContractMode -> VerifyParams JavaType -> Method SAWState OK
+jvmVerifyAssume mode (VerifyParams className fun lemmaNames checkSat contract script lemmaName) =
   do tasks <- view sawTask <$> getState
      case tasks of
        (_:_) -> raise $ notAtTopLevel $ map fst tasks
@@ -35,31 +36,25 @@ jvmVerify (VerifyParams className fun lemmaNames checkSat contract script lemmaN
          do pushTask (JVMSetup lemmaName [])
             state <- getState
             cls <- getJVMClass className
-            lemmas <- mapM getJVMMethodSpecIR lemmaNames
-            let bic = view  sawBIC state
+            let bic = view sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
-            proofScript <- interpretProofScript script
             fileReader <- getFileReader
             setup <- compileJVMContract fileReader bic cenv <$> traverse getExpr contract
-            res <- tl $ crucible_jvm_verify bic defaultOptions cls fun lemmas checkSat setup proofScript
+            res <- case mode of
+              VerifyContract -> do
+                lemmas <- mapM getJVMMethodSpecIR lemmaNames
+                proofScript <- interpretProofScript script
+                tl $ crucible_jvm_verify bic defaultOptions cls fun lemmas checkSat setup proofScript
+              AssumeContract ->
+                tl $ crucible_jvm_unsafe_assume_spec bic defaultOptions cls fun setup
             dropTask
             setServerVal lemmaName res
             ok
 
+jvmVerify :: VerifyParams JavaType -> Method SAWState OK
+jvmVerify = jvmVerifyAssume VerifyContract
+
+
 jvmAssume :: AssumeParams JavaType -> Method SAWState OK
 jvmAssume (AssumeParams className fun contract lemmaName) =
-  do tasks <- view sawTask <$> getState
-     case tasks of
-       (_:_) -> raise $ notAtTopLevel $ map fst tasks
-       [] ->
-         do pushTask (JVMSetup lemmaName [])
-            state <- getState
-            cls <- getJVMClass className
-            let bic = view  sawBIC state
-                cenv = rwCryptol (view sawTopLevelRW state)
-            fileReader <- getFileReader
-            setup <- compileJVMContract fileReader bic cenv <$> traverse getExpr contract
-            res <- tl $ crucible_jvm_unsafe_assume_spec bic defaultOptions cls fun setup
-            dropTask
-            setServerVal lemmaName res
-            ok
+  jvmVerifyAssume AssumeContract (VerifyParams className fun [] False contract (ProofScript []) lemmaName)

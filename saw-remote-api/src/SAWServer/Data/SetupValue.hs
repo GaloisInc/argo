@@ -10,6 +10,7 @@ import SAWServer
 
 data SetupValTag
   = TagServerValue
+  | TagNullValue
   | TagCryptol
   | TagArrayValue
   | TagFieldLValue
@@ -22,6 +23,7 @@ instance FromJSON SetupValTag where
     withText "tag for setup value"$
     \case
       "saved" -> pure TagServerValue
+      "null value" -> pure TagNullValue
       "Cryptol" -> pure TagCryptol
       "array value" -> pure TagArrayValue
       "field lvalue" -> pure TagFieldLValue
@@ -31,18 +33,13 @@ instance FromJSON SetupValTag where
       _ -> empty
 
 instance FromJSON cryptolExpr => FromJSON (CrucibleSetupVal cryptolExpr) where
-  parseJSON v =
-    nullValue v <|> fromObject v
-
+  parseJSON v = fromObject v
     where
-      nullValue = withText "setup value text" $
-        \case
-          "null" -> pure NullValue
-          _ -> empty
       fromObject = withObject "saved value or Cryptol expression" $ \o ->
         o .: "setup value" >>=
         \case
           TagServerValue -> ServerValue <$> o .: "name"
+          TagNullValue -> pure NullValue
           TagCryptol -> CryptolExpr <$> o .: "expression"
           TagArrayValue -> ArrayValue <$> o .: "elements"
           TagFieldLValue -> FieldLValue <$> o .: "base" <*> o .: "field"

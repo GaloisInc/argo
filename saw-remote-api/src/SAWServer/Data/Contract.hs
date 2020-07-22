@@ -3,7 +3,8 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SAWServer.Data.Contract
-  ( Contract(..)
+  ( ContractMode(..)
+  , Contract(..)
   , ContractVar(..)
   , Allocated(..)
   , PointsTo(..)
@@ -14,6 +15,11 @@ import Data.Text
 
 import SAWServer
 import SAWServer.Data.SetupValue ()
+
+-- | How to use a contract: as a verification goal or an assumption.
+data ContractMode
+  = VerifyContract
+  | AssumeContract
 
 data Contract ty cryptolExpr =
   Contract

@@ -28,6 +28,9 @@ data VerifyParams ty =
     , verifyLemmaName    :: ServerName
     }
 
+-- | A global allocation from the x86 machine code perspective. The
+-- first argument is the symbol name of the global, and the second
+-- argument is how many bytes it should be allocated to point to.
 data X86Alloc = X86Alloc String Integer
 
 data X86VerifyParams ty =

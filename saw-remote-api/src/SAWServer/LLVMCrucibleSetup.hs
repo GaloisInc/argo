@@ -84,7 +84,7 @@ compileLLVMContract ::
   Contract JSONLLVMType (P.Expr P.PName) ->
   LLVMCrucibleSetupM ()
 compileLLVMContract fileReader bic cenv c =
-  interpretLLVMSetup fileReader bic cenv (reverse steps)
+  interpretLLVMSetup fileReader bic cenv steps
   where
     setupFresh (ContractVar n dn ty) = SetupFresh n dn (llvmType ty)
     setupAlloc (Allocated n ty mut align) = SetupAlloc n (llvmType ty) mut align
@@ -107,7 +107,7 @@ interpretLLVMSetup ::
   [SetupStep LLVM.Type] ->
   LLVMCrucibleSetupM ()
 interpretLLVMSetup fileReader bic cenv0 ss =
-  runStateT (traverse_ go (reverse ss)) (mempty, cenv0) *> pure ()
+  runStateT (traverse_ go ss) (mempty, cenv0) *> pure ()
   where
     go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= crucible_return bic defaultOptions
     -- TODO: do we really want two names here?

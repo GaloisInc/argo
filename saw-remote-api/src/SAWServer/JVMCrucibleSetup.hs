@@ -72,7 +72,7 @@ compileJVMContract ::
   CryptolEnv ->
   Contract JavaType (P.Expr P.PName) ->
   JVMSetupM ()
-compileJVMContract fileReader bic cenv c = interpretJVMSetup fileReader bic cenv (reverse steps)
+compileJVMContract fileReader bic cenv c = interpretJVMSetup fileReader bic cenv steps
   where
     setupFresh (ContractVar n dn ty) = SetupFresh n dn ty
     setupAlloc (Allocated n ty mut align) = SetupAlloc n ty mut align
@@ -94,7 +94,7 @@ interpretJVMSetup ::
   CryptolEnv ->
   [SetupStep JavaType] ->
   JVMSetupM ()
-interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go (reverse ss)) (mempty, cenv0) *> pure ()
+interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty, cenv0) *> pure ()
   where
     go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= jvm_return bic opts
     -- TODO: do we really want two names here?
@@ -193,5 +193,4 @@ jvmLoadClass (JVMLoadClassParams serverName cname) =
          do bic <- view sawBIC <$> getState
             c <- tl $ loadJavaClass bic cname
             setServerVal serverName c
-            -- TODO: trackFile
             ok

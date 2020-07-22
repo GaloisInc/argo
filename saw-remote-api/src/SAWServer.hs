@@ -70,7 +70,7 @@ data SAWTask
 instance Show SAWTask where
   show ProofScriptTask = "ProofScript"
   show (LLVMCrucibleSetup n steps) = "(LLVMCrucibleSetup" ++ show n ++ " " ++ show steps ++ ")"
-  show (JVMSetup n steps) = "(JVMCrucibleSetup" ++ show n ++ " " ++ show steps ++ ")"
+  show (JVMSetup n steps) = "(JVMSetup" ++ show n ++ " " ++ show steps ++ ")"
 
 
 data CrucibleSetupVal e

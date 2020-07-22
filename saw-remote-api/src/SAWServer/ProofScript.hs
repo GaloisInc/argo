@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module SAWServer.ProofScript
-  ( ProofScript
+  ( ProofScript(..)
   , interpretProofScript
   , makeSimpset
   , prove

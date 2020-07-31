@@ -5,7 +5,7 @@ module CryptolServer (module CryptolServer) where
 import Control.Lens
 import Control.Monad.IO.Class
 
-import Cryptol.Eval.Monad (EvalOpts(..), PPOpts(..))
+import Cryptol.Eval.Monad (EvalOpts(..), PPOpts(..), PPFloatFormat(..), PPFloatExp(..))
 import Cryptol.ModuleSystem (ModuleCmd, ModuleEnv)
 import Cryptol.ModuleSystem.Env
   (getLoadedModules, lmFilePath, lmFingerprint, meLoadedModules,
@@ -62,7 +62,7 @@ setSearchPath paths =
   over moduleEnv $ \me -> me { meSearchPath = paths ++ meSearchPath me }
 
 theEvalOpts :: EvalOpts
-theEvalOpts = EvalOpts quietLogger (PPOpts False 10 25)
+theEvalOpts = EvalOpts quietLogger (PPOpts False 10 25 10 (FloatFree AutoExponent))
 
 -- | Check that all of the modules loaded in the Cryptol environment
 -- currently have fingerprints that match those when they were loaded.

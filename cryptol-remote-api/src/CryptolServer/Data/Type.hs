@@ -12,6 +12,7 @@ import Cryptol.Parser.Selector (ppSelector)
 import Cryptol.TypeCheck.PP (NameMap, emptyNameMap, ppWithNames)
 import Cryptol.TypeCheck.Type (Kind(..), PC(..), TC(..), TCon(..), TFun(..), TParam(..), Type(..), Schema(..), addTNames, kindOf)
 import Cryptol.Utils.PP (pp)
+import Cryptol.Utils.RecordMap (canonicalFields)
 
 
 newtype JSONSchema = JSONSchema Schema
@@ -200,6 +201,6 @@ instance JSON.ToJSON JSONType where
         [ "type" .= T.pack "record"
         , "fields" .=
           JSON.object [ T.pack (show (pp f)) .= JSONType ns t'
-                      | (f, t') <- fields
+                      | (f, t') <- canonicalFields fields
                       ]
         ]

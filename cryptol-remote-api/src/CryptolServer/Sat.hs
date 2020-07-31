@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -17,7 +18,7 @@ import Cryptol.Eval.Concrete.Value (Value)
 import Cryptol.ModuleSystem (checkExpr, getPrimMap)
 import Cryptol.ModuleSystem.Env (DynamicEnv(..), meDynEnv, meSolverConfig)
 import Cryptol.Symbolic (ProverCommand(..), ProverResult(..), QueryType(..), SatNum(..))
-import Cryptol.Symbolic.SBV (proverNames, satProve)
+import Cryptol.Symbolic.SBV (proverNames, satProve, setupProver)
 import Cryptol.TypeCheck.AST (Expr, Type)
 import Cryptol.TypeCheck.Solve (defaultReplExpr)
 import qualified Cryptol.TypeCheck.Solver.SMT as SMT
@@ -54,8 +55,12 @@ sat (ProveSatParams (Prover name) jsonExpr num) =
                   , pcExpr         = checked
                   , pcSchema       = schema
                   , pcValidate     = False
+                  , pcIgnoreSafety = False
                   }
-            (_firstProver, res) <- runModuleCmd $ satProve cmd
+            sbvCfg <- liftIO (setupProver name) >>= \case
+                        Left msg -> error msg
+                        Right (_ws, sbvCfg) -> return sbvCfg
+            (_firstProver, res) <- runModuleCmd $ satProve sbvCfg cmd
             _stats <- liftIO (readIORef timing)
             case res of
               ProverError msg -> raise (proverError msg)

@@ -2,6 +2,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 module CryptolServer.Data.Expression
   ( module CryptolServer.Data.Expression
@@ -39,6 +40,7 @@ import Cryptol.TypeCheck.AST (PrimMap)
 import Cryptol.TypeCheck.SimpType (tRebuild)
 import qualified Cryptol.TypeCheck.Type as TC
 import Cryptol.Utils.Ident
+import Cryptol.Utils.RecordMap (recordFromFields, canonicalFields)
 
 
 import Argo
@@ -271,9 +273,9 @@ getExpr (Num enc txt w) =
        (ELit (ECNum d DecLit))
        (TSeq (TNum w) TBit)
 getExpr (Record fields) =
-  fmap ERecord $ for (HM.toList fields) $
+  fmap (ERecord . recordFromFields) $ for (HM.toList fields) $
   \(recName, spec) ->
-    Named (Located emptyRange (mkIdent recName)) <$> getExpr spec
+    (mkIdent recName,) . (emptyRange,) <$> getExpr spec
 getExpr (Sequence elts) =
   EList <$> traverse getExpr elts
 getExpr (Tuple projs) =
@@ -320,7 +322,7 @@ readBack prims ty val =
         sequence [ do fv <- evalSel C.Concrete val (RecordSel f Nothing)
                       fa <- readBack prims t fv
                       return (identText f, fa)
-                 | (f, t) <- tfs
+                 | (f, t) <- canonicalFields tfs
                  ]
     TC.TCon (TC.TC (TC.TCTuple _)) [] ->
       pure Unit

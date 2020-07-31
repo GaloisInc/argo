@@ -22,9 +22,11 @@ optional-packages:
   deps/saw-script/deps/llvm-pretty/
   deps/saw-script/deps/llvm-pretty-bc-parser/
   deps/saw-script/deps/parameterized-utils/
-  deps/saw-script/deps/saw-core-aig/
-  deps/saw-script/deps/saw-core-sbv/
-  deps/saw-script/deps/saw-core/
+  deps/saw-script/deps/saw-core/saw-core
+  deps/saw-script/deps/saw-core/saw-core-aig
+  deps/saw-script/deps/saw-core/saw-core-sbv
+  deps/saw-script/deps/saw-core/saw-core-what4
+  deps/saw-script/deps/saw-core-coq
   deps/saw-script/deps/flexdis86/
   deps/saw-script/deps/flexdis86/binary-symbols
   deps/saw-script/deps/macaw/base/
@@ -33,5 +35,4 @@ optional-packages:
   deps/saw-script/deps/macaw/x86_symbolic/
   deps/saw-script/deps/elf-edit/
   deps/saw-script/deps/dwarf/
-  deps/saw-script/deps/saw-core-what4
   deps/saw-script/deps/what4/what4

@@ -657,7 +657,8 @@ serveHandlesNS hLog hIn hOut app =
      input <- newMVar hIn
      output <- synchronized (\msg ->
                                do log (T.pack (show msg))
-                                  BS.hPut hOut $ encodeNetstring $ netstring msg)
+                                  BS.hPut hOut $ encodeNetstring $ netstring msg
+                                  hFlush hOut)
      loop output input
   where
     loop :: (BS.ByteString -> IO ()) -> MVar Handle -> IO ()

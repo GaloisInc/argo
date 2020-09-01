@@ -204,9 +204,9 @@ class LogResults(View):
             message += '\n\tstdout:\n' + '\n'.join(
                 '\t\t' + line for line in failure.exception.stdout.split('\n')
             )
-            message += '\n\tstderr:\n' + '\n'.join(
-                '\t\t' + line for line in failure.exception.stderr.split('\n')
-            )
+            # message += '\n\tstderr:\n' + '\n'.join(
+            #     '\t\t' + line for line in failure.exception.stderr.split('\n')
+            # )
         return message
 
     def format_success(self, success: VerificationSucceeded) -> str:

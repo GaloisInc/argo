@@ -24,7 +24,7 @@ common warnings
 
 common deps
   build-depends:
-    base                         >= 4.11.1.0 && < 4.14,
+    base                         >= 4.11.1.0 && < 4.15,
     aeson                       ^>= 1.4.2,
     async                       ^>= 2.2,
     binary                      ^>= 0.8.5.1,
@@ -35,7 +35,7 @@ common deps
     filelock                    ^>= 0.1,
     filepath                    ^>= 1.4,
     hashable                    >= 1.2 && < 1.4,
-    lens                        >= 4.17 && < 4.19,
+    lens                        >= 4.17 && < 4.20,
     mtl                         ^>= 2.2,
     network                     ^>= 3.0.1,
     optparse-applicative        >= 0.14 && < 0.16,

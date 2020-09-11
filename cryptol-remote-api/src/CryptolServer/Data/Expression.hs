@@ -17,6 +17,7 @@ import qualified Data.ByteString.Base64 as Base64
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.Map as Map
 import qualified Data.Scientific as Sc
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -27,12 +28,12 @@ import Numeric (showHex)
 
 import Cryptol.Eval (evalSel)
 import Cryptol.Eval.Monad
-import Cryptol.Eval.Concrete (evalPrim)
+import Cryptol.Eval.Concrete (primTable)
 import Cryptol.Eval.Concrete.Value hiding (Concrete)
 import qualified Cryptol.Eval.Concrete.Value as C
 import Cryptol.Eval.Value (GenValue(..), asWordVal, enumerateSeqMap)
 import Cryptol.Parser
-import Cryptol.Parser.AST (Bind(..), BindDef(..), Decl(..), Expr(..), Type(..), PName(..), Literal(..), Named(..), NumInfo(..))
+import Cryptol.Parser.AST (Bind(..), BindDef(..), Decl(..), Expr(..), Type(..), PName(..), Literal(..), NumInfo(..))
 import Cryptol.Parser.Position (Located(..), emptyRange)
 import Cryptol.Parser.Selector
 -- import Cryptol.Prims.Syntax
@@ -315,7 +316,8 @@ typeNum _ = empty
 
 readBack :: PrimMap -> TC.Type -> Value -> Eval Expression
 readBack prims ty val =
-  let ?evalPrim = evalPrim in
+  let tbl = primTable theEvalOpts in
+  let ?evalPrim = \i -> Map.lookup i tbl in
   case TC.tNoUser ty of
     TC.TRec tfs ->
       Record . HM.fromList <$>
@@ -365,8 +367,7 @@ readBack prims ty val =
 
 
 observe :: Eval a -> Method ServerState a
-observe (Ready x) = pure x
-observe (Thunk f) = liftIO $ f theEvalOpts
+observe e = liftIO (runEval e)
 
 mkEApp :: Expr PName -> [Expr PName] -> Expr PName
 mkEApp f args = foldl EApp f args

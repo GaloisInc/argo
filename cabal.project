@@ -16,12 +16,12 @@ optional-packages:
   deps/saw-script/deps/crucible/crucible-llvm/
   deps/saw-script/deps/crucible/crucible-jvm/
   deps/saw-script/deps/crucible/crux/
-  deps/saw-script/deps/cryptol-verifier/
   deps/saw-script/deps/jvm-parser/
   deps/saw-script/deps/jvm-verifier/
   deps/saw-script/deps/llvm-pretty/
   deps/saw-script/deps/llvm-pretty-bc-parser/
   deps/saw-script/deps/parameterized-utils/
+  deps/saw-script/deps/saw-core/cryptol-saw-core
   deps/saw-script/deps/saw-core/saw-core
   deps/saw-script/deps/saw-core/saw-core-aig
   deps/saw-script/deps/saw-core/saw-core-sbv

@@ -41,7 +41,7 @@ common deps
                  bytestring,
                  containers >= 0.6 && < 0.7,
                  cryptol >= 2.8.1,
-                 cryptol-verifier,
+                 cryptol-saw-core,
                  crucible,
                  crucible-jvm,
                  cryptonite,

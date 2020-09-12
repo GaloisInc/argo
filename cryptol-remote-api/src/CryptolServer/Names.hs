@@ -8,6 +8,7 @@ import qualified Data.Aeson as JSON
 import Data.Aeson ((.=))
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Data.Text (unpack)
 
 import Cryptol.Parser.Name (PName(..))
 import Cryptol.ModuleSystem.Env (ModContext(..), ModuleEnv(..), DynamicEnv(..), focusedEnv)
@@ -38,7 +39,7 @@ getInfo rnEnv info n' =
        Just i ->
          let ty = ifDeclSig i
              nameDocs = ifDeclDoc i
-         in NameInfo (show (pp n')) (show (pp ty)) ty nameDocs
+         in NameInfo (show (pp n')) (show (pp ty)) ty (unpack <$> nameDocs)
   | n <- lookupValNames n' rnEnv
   ]
 

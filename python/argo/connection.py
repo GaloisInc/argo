@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABCMeta, abstractmethod
 import json
 import os
 import queue
@@ -33,36 +34,44 @@ class IDSource:  # pylint: disable=too-few-public-methods
         return self.next_id
 
 
-class ServerProcess:
-    """A wrapper around a server process, responsible for setting it up and
-       killing it when finished."""
+class ServerProcess(metaclass=ABCMeta):
+    """A wrapper around a server process.
+
+       These is used by :py:class:`ServerConnection`. Each connection
+       has a process to which it can send and receive messages.
+
+       Each subclass should:
+
+       1. Implement ``setup`` to launch a process, create a socket, or
+          whatever else is necessary to communicate with the server.
+
+       2. Implement ``get_one_reply``, so that it returns a string
+          that contains a JSON message if one is available, or ``None``
+          if not.
+
+       3. Implement ``send_one_message``, which sends a string that
+          contains a serialized JSON message to the process.
+    """
 
 
     def __init__(self) -> None:
         """Start the process using the given command.
-
-           :param command: The command to be executed, using a shell, to start
-           the server.
-
-           :param environment: The environment in which to execute the
-           server (if ``None``, the environemnt of the Python process is
-           used).
         """
         self.setup()
 
-
+    @abstractmethod
     def setup(self) -> None:
         """Start a process, if one is not already running."""
         pass
 
-    def get_one_reply(self) -> Optional[str]:
-        raise NotImplementedError('get_one_reply')
+    @abstractmethod
+    def get_one_reply(self) -> Optional[str]: pass
 
-    def send_one_message(self, the_message: str) -> None:
-        raise NotImplementedError('send_one_message')
+    @abstractmethod
+    def send_one_message(self, the_message: str) -> None: pass
 
 # TODO ABCMeta
-class ManagedProcess(ServerProcess):
+class ManagedProcess(ServerProcess, metaclass=ABCMeta):
     """A ``ServerProcess`` that is responsible for starting and stopping
     the underlying server, as well as buffering I/O to and from the server.
     """
@@ -72,6 +81,11 @@ class ManagedProcess(ServerProcess):
     def __init__(self, command: str, *,
                  environment: Optional[Union[Mapping[bytes, Union[bytes, str]],
                                              Mapping[str, Union[bytes, str]]]]=None):
+        """ Construct a managed process by executing the given command.
+
+            :param command: The command to be executed in :func:`setup`.
+            :param environment: A process environment to be used instead of the default.
+        """
         self.command = command
         self.environment_override = environment
         self.buf = bytearray(b'')
@@ -113,6 +127,18 @@ class SocketProcess(ManagedProcess):
                  persist: bool=False,
                  environment: Optional[Union[Mapping[bytes, Union[bytes, str]],
                                              Mapping[str, Union[bytes, str]]]]=None):
+        """:param command: The command to be executed, using a shell, to start
+           the server.
+
+           :param persist: Whether to allow the subprocess to survive
+           the Python process. If this is ``False``, the subprocess is
+           killed when no longer needed.
+
+           :param environment: The environment in which to execute the
+           server (if ``None``, the environemnt of the Python process is
+           used).
+
+        """
         self.persist = persist
         super().__init__(command, environment=environment)
 
@@ -159,7 +185,7 @@ class SocketProcess(ManagedProcess):
 class DynamicSocketProcess(SocketProcess):
     """A ``SocketServerProcess`` whose process communicates over a socket
     on a port chosen arbitrarily by the process itself. This port
-    should be written to ``stdout`` after the literal string ``PORT ``.
+    should be written to ``stdout`` after the literal string ``PORT``.
     """
 
     def setup(self) -> None:
@@ -180,14 +206,6 @@ class DynamicSocketProcess(SocketProcess):
             if self.proc.stdout is None:
                 raise ValueError("Server process has no stdout")
             out_line = self.proc.stdout.readline()
-
-            # Note: the following loop is a hack to work around a
-            # Cryptol limitation. The real solution is to cause it to
-            # not emit defaulting warnings to stdout while loading its
-            # Prelude, but this works for now.
-            while re.match(r'\[warning\] at', out_line) or re.match(r'  Defaulting', out_line):
-                out_line = self.proc.stdout.readline()
-
             match = re.match(r'PORT (\d+)', out_line)
             if match:
                 self.port = int(match.group(1))
@@ -211,6 +229,11 @@ class RemoteSocketProcess(ServerProcess):
     ipv6: bool
 
     def __init__(self, host: str, port: int, ipv6: bool=True):
+        """
+           :param host: The hostname to connect to (e.g. ``"localhost"``)
+           :param port: The port on which to connect
+           :param ipv6: Whether to use IPv6 (``False`` for IPv4)
+        """
         self.host = host
         self.port = port
         self.ipv6 = ipv6

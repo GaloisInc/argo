@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
@@ -159,14 +160,16 @@ p = subprocess.Popen(
     stdout=subprocess.DEVNULL,
     stdin=subprocess.DEVNULL,
     stderr=subprocess.DEVNULL,
-    env=env,
-    start_new_session=True)
+    start_new_session=True,
+    env=env)
 
 time.sleep(5)
+assert(p is not None)
+assert(p.poll() is None)
 
 c3 = argo.ServerConnection(
-       argo.RemoteSocketProcess('localhost', 50005, ipv6=False))
+       argo.RemoteSocketProcess('localhost', 50005, ipv6=True))
 
 low_level_api_test(c3)
 
-p.kill()
+os.killpg(os.getpgid(p.pid), signal.SIGKILL)

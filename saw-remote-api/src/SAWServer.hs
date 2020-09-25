@@ -23,6 +23,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Crypto.Hash as Hash
 import qualified Crypto.Hash.Conduit as Hash
+import System.IO.Silently (silence)
 
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
@@ -150,6 +151,9 @@ getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> getState
 initialState :: (FilePath -> IO ByteString) -> IO SAWState
 initialState readFile =
   let ?fileReader = readFile in
+  -- silence prevents output on stdout, which suppresses defaulting
+  -- warnings from the Cryptol type checker
+  silence $
   do sc <- mkSharedContext
      CryptolSAW.scLoadPreludeModule sc
      JavaSAW.scLoadJavaModule sc

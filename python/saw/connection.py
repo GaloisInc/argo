@@ -23,7 +23,7 @@ class SAWConnection:
         self.most_recent_result = None
         self.persist = persist
         if isinstance(command_or_connection, str):
-            self.proc = ac.ServerProcess(command_or_connection, persist=self.persist)
+            self.proc = ac.DynamicSocketProcess(command_or_connection, persist=self.persist)
             self.server_connection = ac.ServerConnection(self.proc)
         else:
             self.server_connection = command_or_connection

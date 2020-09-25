@@ -70,7 +70,6 @@ class ServerProcess(metaclass=ABCMeta):
     @abstractmethod
     def send_one_message(self, the_message: str) -> None: pass
 
-# TODO ABCMeta
 class ManagedProcess(ServerProcess, metaclass=ABCMeta):
     """A ``ServerProcess`` that is responsible for starting and stopping
     the underlying server, as well as buffering I/O to and from the server.
@@ -127,17 +126,16 @@ class SocketProcess(ManagedProcess):
                  persist: bool=False,
                  environment: Optional[Union[Mapping[bytes, Union[bytes, str]],
                                              Mapping[str, Union[bytes, str]]]]=None):
-        """:param command: The command to be executed, using a shell, to start
-           the server.
+        """:param command: The command to be executed, using a shell,
+             to start the server.
 
            :param persist: Whether to allow the subprocess to survive
-           the Python process. If this is ``False``, the subprocess is
-           killed when no longer needed.
+             the Python process. If this is ``False``, the subprocess is
+             killed when no longer needed.
 
            :param environment: The environment in which to execute the
-           server (if ``None``, the environemnt of the Python process is
-           used).
-
+             server (if ``None``, the environemnt of the Python process is
+             used).
         """
         self.persist = persist
         super().__init__(command, environment=environment)

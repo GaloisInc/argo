@@ -19,7 +19,7 @@ import qualified Data.HashMap.Strict as HM
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as Map
 import qualified Data.Scientific as Sc
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import qualified Data.Text as T
 import Data.Traversable
 import qualified Data.Vector as V
@@ -261,17 +261,17 @@ getExpr (Bit b) =
 getExpr (Integer i) =
   return $
     ETyped
-      (ELit (ECNum i DecLit))
+      (ELit (ECNum i (DecLit (pack (show i)))))
       (TUser (UnQual (mkIdent "Integer")) [])
 getExpr (IntegerModulo i n) =
   return $
     ETyped
-      (ELit (ECNum i DecLit))
+      (ELit (ECNum i (DecLit (pack (show i)))))
       (TUser (UnQual (mkIdent "Z")) [TNum n])
 getExpr (Num enc txt w) =
   do d <- decode enc txt
      return $ ETyped
-       (ELit (ECNum d DecLit))
+       (ELit (ECNum d (DecLit txt)))
        (TSeq (TNum w) TBit)
 getExpr (Record fields) =
   fmap (ERecord . recordFromFields) $ for (HM.toList fields) $

@@ -30,7 +30,7 @@ To clone the project, you'll need to initialize its submodules as well::
     $ git clone https://github.com/galoisinc/argo
     $ cd argo/
     $ git submodule init
-    $ pushd . && cd deps/saw-script/ && git submodule init && cd deps/abcBridge/ && git submodule init && popd
+    $ pushd . && cd deps/saw-script/ && git submodule update --init && cd deps/abcBridge/ && git submodule update --init && popd
 
 Most of the submodules are loaded recursively from the saw-script
 submodule, because that repository already contains the result of

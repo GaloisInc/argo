@@ -10,6 +10,7 @@ import System.Exit
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process
+import Control.Applicative
 import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -82,7 +83,11 @@ withPython3venv ::
   IO a
 withPython3venv requirements todo =
   withSystemTempDirectory "virtenv" $ \venvDir ->
-  do let process = proc "python3" ["-m", "venv", venvDir]
+  do mpy3 <- findExecutable "python3"
+     mpy <- findExecutable "python"
+     process <- case mpy3 <|> mpy of
+                  Just exeName -> return $ proc exeName ["-m", "venv", venvDir]
+                  Nothing -> assertFailure "Python executable not found."
      (exitCode, stdout, stderr) <- readCreateProcessWithExitCode process ""
      case exitCode of
        ExitFailure code ->

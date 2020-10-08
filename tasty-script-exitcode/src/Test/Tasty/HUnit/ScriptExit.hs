@@ -9,6 +9,7 @@ import System.Directory
 import System.Exit
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
+import System.Info (os)
 import System.Process
 import Control.Applicative
 import Data.List
@@ -106,7 +107,8 @@ withPython3venv requirements todo =
                  , testLangArgsFormat = \file -> [file]
                  }
              pip args =
-               let pipProc = proc (venvDir </> "bin" </> "pip") args in
+               let binDir = if os == "mingw32" then "Scripts" else "bin"
+                   pipProc = proc (venvDir </> binDir </> "pip") args in
                readCreateProcessWithExitCode pipProc "" >>=
                \case
                  (ExitFailure code, pipStdout, pipStderr) ->

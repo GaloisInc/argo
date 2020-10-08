@@ -90,6 +90,7 @@ withPython3venv requirements todo =
                 Just exeName -> return exeName
                 Nothing -> assertFailure "Python executable not found."
      let process = proc pyExe ["-m", "venv", venvDir]
+         binDir = if os == "mingw32" then "Scripts" else "bin"
          pipInstall = proc pyExe ["-m", "pip", "install", "--upgrade", "pip"]
      (exitCode, stdout, stderr) <- readCreateProcessWithExitCode process ""
      case exitCode of
@@ -103,12 +104,11 @@ withPython3venv requirements todo =
                TestLang
                  { testLangName       = "Python in virtualenv"
                  , testLangExtension  = ".py"
-                 , testLangExecutable = venvDir </> "bin" </> "python"
+                 , testLangExecutable = venvDir </> binDir </> "python"
                  , testLangArgsFormat = \file -> [file]
                  }
              pip args =
-               let binDir = if os == "mingw32" then "Scripts" else "bin"
-                   pipProc = proc (venvDir </> binDir </> "pip") args in
+               let pipProc = proc (venvDir </> binDir </> "pip") args in
                readCreateProcessWithExitCode pipProc "" >>=
                \case
                  (ExitFailure code, pipStdout, pipStderr) ->

@@ -9,6 +9,7 @@ import System.Directory
 import System.Exit
 import System.FilePath
 import System.IO.Temp (withSystemTempDirectory)
+import System.Info (os)
 import System.Process
 import Control.Applicative
 import Data.List
@@ -85,9 +86,12 @@ withPython3venv requirements todo =
   withSystemTempDirectory "virtenv" $ \venvDir ->
   do mpy3 <- findExecutable "python3"
      mpy <- findExecutable "python"
-     process <- case mpy3 <|> mpy of
-                  Just exeName -> return $ proc exeName ["-m", "venv", venvDir]
-                  Nothing -> assertFailure "Python executable not found."
+     pyExe <- case mpy3 <|> mpy of
+                Just exeName -> return exeName
+                Nothing -> assertFailure "Python executable not found."
+     let process = proc pyExe ["-m", "venv", venvDir]
+         binDir = if os == "mingw32" then "Scripts" else "bin"
+         pipInstall = proc pyExe ["-m", "pip", "install", "--upgrade", "pip"]
      (exitCode, stdout, stderr) <- readCreateProcessWithExitCode process ""
      case exitCode of
        ExitFailure code ->
@@ -100,11 +104,11 @@ withPython3venv requirements todo =
                TestLang
                  { testLangName       = "Python in virtualenv"
                  , testLangExtension  = ".py"
-                 , testLangExecutable = venvDir </> "bin" </> "python"
+                 , testLangExecutable = venvDir </> binDir </> "python"
                  , testLangArgsFormat = \file -> [file]
                  }
              pip args =
-               let pipProc = proc (venvDir </> "bin" </> "pip") args in
+               let pipProc = proc (venvDir </> binDir </> "pip") args in
                readCreateProcessWithExitCode pipProc "" >>=
                \case
                  (ExitFailure code, pipStdout, pipStderr) ->
@@ -114,8 +118,16 @@ withPython3venv requirements todo =
                    ":\nstdout: " <> pipStdout <> "\nstderr: " <> pipStderr
                  (ExitSuccess, _, _) ->
                    pure ()
-         in do traverse (\reqPath -> pip ["install", "-r", reqPath]) requirements
-               todo pip venvPython
+         in do (exitCode, stdout, stderr) <- readCreateProcessWithExitCode pipInstall ""
+               case exitCode of
+                 ExitFailure code ->
+                   assertFailure $
+                   "Failed to create install `pip` with code " <>
+                   show code <> ": " <>
+                   ":\nstdout: " <> stdout <> "\nstderr: " <> stderr
+                 ExitSuccess -> do
+                   traverse (\reqPath -> pip ["install", "-r", reqPath]) requirements
+                   todo pip venvPython
 
 
 -- | Given a list of @TestLang@s to use and a list of possible script

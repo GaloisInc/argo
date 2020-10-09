@@ -204,7 +204,7 @@ class DynamicSocketProcess(SocketProcess):
             if self.proc.stdout is None:
                 raise ValueError("Server process has no stdout")
             match = False
-            while not match:
+            while !match:
               out_line = self.proc.stdout.readline()
               match = re.match(r'PORT (\d+)', out_line)
             self.port = int(match.group(1))

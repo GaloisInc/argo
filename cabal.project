@@ -1,6 +1,7 @@
 packages:
   argo/
   python/
+  file-echo-api/
   cryptol-remote-api/
   tasty-script-exitcode/
 

@@ -84,6 +84,7 @@ withPython3venv ::
   IO a
 withPython3venv requirements todo =
   withSystemTempDirectory "virtenv" $ \venvDir ->
+  -- Some systems install Python 3 as `python3`, but some call it `python`.
   do mpy3 <- findExecutable "python3"
      mpy <- findExecutable "python"
      pyExe <- case mpy3 <|> mpy of

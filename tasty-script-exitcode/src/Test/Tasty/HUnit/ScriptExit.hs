@@ -122,7 +122,7 @@ withPython3venv requirements todo =
                case exitCode of
                  ExitFailure code ->
                    assertFailure $
-                   "Failed to create install `pip` with code " <>
+                   "Failed to install `pip` with code " <>
                    show code <> ": " <>
                    ":\nstdout: " <> stdout <> "\nstderr: " <> stderr
                  ExitSuccess -> do

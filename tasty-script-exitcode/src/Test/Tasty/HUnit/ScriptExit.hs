@@ -92,7 +92,7 @@ withPython3venv requirements todo =
                 Nothing -> assertFailure "Python executable not found."
      let process = proc pyExe ["-m", "venv", venvDir]
          binDir = if os == "mingw32" then "Scripts" else "bin"
-         pipInstall = proc pyExe ["-m", "pip", "install", "--upgrade", "pip"]
+         pipInstall = proc (venvDir </> binDir </> "python") ["-m", "pip", "install", "--upgrade", "pip"]
      (exitCode, stdout, stderr) <- readCreateProcessWithExitCode process ""
      case exitCode of
        ExitFailure code ->

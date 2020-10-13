@@ -36,7 +36,7 @@ newtype Port = Port String deriving (Eq, Ord)
 data TransportOpt
   = StdIONetstring
   -- ^ NetStrings over standard IO
-  | SocketNetstring (Maybe Session) (Maybe Publicity) (Maybe Port)
+  | SocketNetstring (Maybe Session) (Maybe Publicity) (Maybe Port) (Maybe HostName)
   -- ^ NetStrings over some socket
 
 data Publicity
@@ -53,7 +53,7 @@ options desc =
 transport :: Opt.Parser TransportOpt
 transport =
   (\p pub s -> SocketNetstring s pub p)
-    <$> port <*> publicity <*> session
+    <$> port <*> publicity <*> session <*> hostname
   <|> stdio
   where
     port = (Just . Port <$>
@@ -75,6 +75,13 @@ transport =
        Opt.long "session" <>
        Opt.metavar "NAME" <>
        Opt.help "Create or look up a globally available session")
+      <|> pure Nothing
+
+    hostname =
+      (fmap Just . Opt.strOption $
+        Opt.long "host"
+        <> Opt.metavar "HOST"
+        <> Opt.help "Make server available at the specified hostname")
       <|> pure Nothing
 
 selectHost :: Maybe Publicity -> HostName
@@ -166,18 +173,18 @@ realMain theApp opts =
   case transportOpt opts of
     StdIONetstring ->
       serveStdIONS theApp
-    SocketNetstring sessionOpt publicityOpt portOpt ->
+    SocketNetstring sessionOpt publicityOpt portOpt hostNameOpt ->
       do sessionResult <- getOrLockSession sessionOpt publicityOpt portOpt
+         let hostname = fromMaybe (selectHost publicityOpt) hostNameOpt
          hSetBuffering stdout NoBuffering
          case sessionResult of
            UseExisting (Port port) ->
              putStrLn ("PORT " ++ port)
            MakeNew (Port port) ->
              do putStrLn ("PORT " ++ port)
-                serveSocket (selectHost publicityOpt) port theApp
+                serveSocket hostname port theApp
            MakeNewDyn registerPort ->
-             do let h = selectHost publicityOpt
-                (a, port) <- serveSocketDynamic h theApp
+             do (a, port) <- serveSocketDynamic hostname theApp
                 registerPort (Port (show port))
                 putStrLn ("PORT " ++ show port)
                 wait a

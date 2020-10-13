@@ -1,15 +1,3 @@
-[submodule "deps/saw-script"]
-	path = deps/saw-script
-	url = https://github.com/GaloisInc/saw-script.git
 [submodule "deps/llvm-verifier"]
 	path = deps/llvm-verifier
 	url = https://github.com/GaloisInc/llvm-verifier.git
-[submodule "deps/saw-core-aig"]
-	path = deps/saw-core-aig
-	url = https://github.com/GaloisInc/saw-core-aig.git
-[submodule "deps/saw-core-sbv"]
-	path = deps/saw-core-sbv
-	url = https://github.com/GaloisInc/saw-core-sbv.git
-[submodule "deps/saw-core"]
-	path = deps/saw-core
-	url = https://github.com/GaloisInc/saw-core.git

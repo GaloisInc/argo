@@ -20,4 +20,6 @@ Recent Changes
   command-line options are unchanged, but validation of nonsensical
   combinations is also stricter than it was before.
 
-
+- Removed ``--public`` and replaced it with ``--host``. Use ``--host
+  ::`` or ``--host 0.0.0.0`` to get the previous behavior of
+  ``--public``.

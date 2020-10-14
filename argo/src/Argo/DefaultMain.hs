@@ -73,27 +73,12 @@ options desc =
   Opt.info (mode desc <**> Opt.helper) $
   Opt.fullDesc <> Opt.progDesc desc
 
--- transport :: Opt.Parser TransportOpt
--- transport =
---   (\p pub s -> SocketNetstring s pub p)
---     <$> port <*> publicity <*> session
---   <|> stdio
---   where
-
-
---     stdio  = Opt.flag' StdIONetstring $
---              Opt.long "stdio" <> Opt.help "Use netstrings over stdio to communicate"
-
---     publicity =
---       Opt.flag Nothing (Just Public) $
---       Opt.long "public" <> Opt.help "Make the server available over the network"
-
 hostOpt :: Opt.Parser (Maybe HostName)
 hostOpt =
   (fmap Just . Opt.strOption $
    Opt.long "host" <>
    Opt.metavar "HOSTNAME" <>
-   Opt.help "Select the hostname on which to listen (use 0.0.0.0 or :: for publicly available services).")
+   Opt.help "Make server available at the specified hostname (use 0.0.0.0 or :: for publicly available services).")
   <|> pure Nothing
 
 sessionOpt :: Opt.Parser (Maybe Session)
@@ -204,18 +189,18 @@ realMain theApp progMode =
   case progMode of
     StdIONetstring ->
       serveStdIONS theApp
-    SocketNetstring (NetworkOptions session publicity port) ->
-      do sessionResult <- getOrLockSession session publicity port
+    SocketNetstring (NetworkOptions session hostName port) ->
+      do sessionResult <- getOrLockSession session hostName port
+         let hostname = fromMaybe (selectHost hostName) hostName
          hSetBuffering stdout NoBuffering
          case sessionResult of
            UseExisting (Port port) ->
              putStrLn ("PORT " ++ port)
            MakeNew (Port port) ->
              do putStrLn ("PORT " ++ port)
-                serveSocket (selectHost publicity) port theApp
+                serveSocket hostname port theApp
            MakeNewDyn registerPort ->
-             do let h = selectHost publicity
-                (a, port) <- serveSocketDynamic h theApp
+             do (a, port) <- serveSocketDynamic hostname theApp
                 registerPort (Port (show port))
                 putStrLn ("PORT " ++ show port)
                 wait a
@@ -224,5 +209,5 @@ realMain theApp progMode =
                    <> existingPort
                    <> ", not the specified port "
                    <> desiredPort
-    Http path (NetworkOptions session publicity port) ->
+    Http path (NetworkOptions session _host port) ->
       serveHTTP path theApp (maybe 8080 (read . unPort) port)

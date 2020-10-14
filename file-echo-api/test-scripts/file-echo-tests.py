@@ -100,16 +100,27 @@ env = os.environ.copy()
 
 # Launch a separate process for the RemoteSocketProcess test
 p = subprocess.Popen(
-    ["cabal", "v2-exec", "file-echo-api", "--verbose=0", "--", "--port", "50005"],
+    ["cabal", "v2-exec", "file-echo-api", "--verbose=0", "--", "socket", "--port", "50005"],
     stdout=subprocess.DEVNULL,
     stdin=subprocess.DEVNULL,
     stderr=subprocess.DEVNULL,
     start_new_session=True,
     env=env)
 
+p_http = subprocess.Popen(
+           ["cabal", "v2-exec", "file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080"],
+           stdout=subprocess.DEVNULL,
+           stdin=subprocess.DEVNULL,
+           stderr=subprocess.DEVNULL,
+           start_new_session=True,
+           env=env)
+
+
 time.sleep(5)
 assert(p is not None)
 assert(p.poll() is None)
+assert(p_http is not None)
+assert(p_http.poll() is None)
 
 # Test argo's RemoteSocketProcess
 c = argo.ServerConnection(
@@ -122,11 +133,20 @@ os.killpg(os.getpgid(p.pid), signal.SIGKILL)
 
 # Test argo's DynamicSocketProcess
 c = argo.ServerConnection(
-       argo.DynamicSocketProcess("cabal v2-exec file-echo-api --verbose=0 -- --port 50005"))
+       argo.DynamicSocketProcess("cabal v2-exec file-echo-api --verbose=0 -- socket --port 50005"))
 
 run_tests(c)
 
 c = argo.ServerConnection(
-       argo.StdIOProcess("cabal v2-exec file-echo-api --verbose=0 -- --stdio"))
+       argo.StdIOProcess("cabal v2-exec file-echo-api --verbose=0 -- stdio"))
 
 run_tests(c)
+
+
+
+c_http = argo.ServerConnection(
+            argo.HttpProcess(url="http://localhost:8080/"))
+
+run_tests(c_http)
+
+os.killpg(os.getpgid(p_http.pid), signal.SIGKILL)

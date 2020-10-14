@@ -699,11 +699,12 @@ serveHandlesNS hLog hIn hOut app =
 
 serveHTTP ::
   HasCallStack =>
-  App s  {- JSON-RPC app -} ->
-  Int    {- port number  -} ->
+  String {- ^ Request path -} ->
+  App s  {- ^ JSON-RPC app -} ->
+  Int    {- ^ port number  -} ->
   IO ()
-serveHTTP app port =
-    scotty port $ post "/:whatevs" $
+serveHTTP path app port =
+    scotty port $ post (literal path) $
     do req <- request
        body <- liftIO $ strictRequestBody req
        -- NOTE: Making the assumption that WAI forks a thread - TODO: verify this

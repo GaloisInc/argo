@@ -23,63 +23,101 @@ import Argo.Socket
 
 defaultMain :: String -> App s -> IO ()
 defaultMain str app =
-  do opts <- Opt.execParser (options str)
+  do opts <- Opt.customExecParser
+               (Opt.prefs $ Opt.showHelpOnError <> Opt.showHelpOnEmpty)
+               (options str)
      realMain app opts
 
-data Options =
-  Options
-    { transportOpt :: TransportOpt
-    }
+data NetworkOptions =
+  NetworkOptions (Maybe Session) (Maybe HostName) (Maybe Port)
 
-newtype Port = Port String deriving (Eq, Ord)
-
-data TransportOpt
+data ProgramMode
   = StdIONetstring
   -- ^ NetStrings over standard IO
-  | SocketNetstring (Maybe Session) (Maybe Publicity) (Maybe Port)
+  | SocketNetstring NetworkOptions
   -- ^ NetStrings over some socket
+  | Http String NetworkOptions
+  -- ^ HTTP (String is path at which API is served)
 
-data Publicity
-  = Public
+newtype Port = Port {unPort :: String} deriving (Eq, Ord)
 
 newtype Session
   = Session String
 
-options :: String -> Opt.ParserInfo Options
+mode :: String -> Opt.Parser ProgramMode
+mode desc =
+  Opt.hsubparser $ stdioMode desc <> socketMode desc <> httpMode desc
+
+stdioMode, socketMode, httpMode :: String -> Opt.Mod Opt.CommandFields ProgramMode
+
+stdioMode desc = Opt.command "stdio" $
+  Opt.info (pure StdIONetstring) $
+  Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over stdin and stdout"
+socketMode desc = Opt.command "socket" $
+  Opt.info (SocketNetstring <$> networkOptions) $
+  Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over a socket"
+httpMode desc = Opt.command "http" $
+  Opt.info (Http <$> path <*> networkOptions) $
+  Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over HTTP"
+  where
+    path =
+      Opt.argument Opt.str $
+      Opt.metavar "PATH" <> Opt.help "The path at which to serve the API"
+
+networkOptions :: Opt.Parser NetworkOptions
+networkOptions =
+  NetworkOptions <$> sessionOpt <*> hostOpt <*> portOpt
+
+options :: String -> Opt.ParserInfo ProgramMode
 options desc =
-  Opt.info ((Options <$> transport) <**> Opt.helper) $
+  Opt.info (mode desc <**> Opt.helper) $
   Opt.fullDesc <> Opt.progDesc desc
 
-transport :: Opt.Parser TransportOpt
-transport =
-  (\p pub s -> SocketNetstring s pub p)
-    <$> port <*> publicity <*> session
-  <|> stdio
-  where
-    port = (Just . Port <$>
-      Opt.strOption
-        (Opt.long "port" <>
-         Opt.metavar "PORT" <>
-         Opt.help "Use netstrings over a socket on PORT to communicate"))
-      <|> pure Nothing
+-- transport :: Opt.Parser TransportOpt
+-- transport =
+--   (\p pub s -> SocketNetstring s pub p)
+--     <$> port <*> publicity <*> session
+--   <|> stdio
+--   where
 
-    stdio  = Opt.flag' StdIONetstring $
-             Opt.long "stdio" <> Opt.help "Use netstrings over stdio to communicate"
 
-    publicity =
-      Opt.flag Nothing (Just Public) $
-      Opt.long "public" <> Opt.help "Make the server available over the network"
+--     stdio  = Opt.flag' StdIONetstring $
+--              Opt.long "stdio" <> Opt.help "Use netstrings over stdio to communicate"
 
-    session =
-      (fmap (Just . Session) . Opt.strOption $
-       Opt.long "session" <>
-       Opt.metavar "NAME" <>
-       Opt.help "Create or look up a globally available session")
-      <|> pure Nothing
+--     publicity =
+--       Opt.flag Nothing (Just Public) $
+--       Opt.long "public" <> Opt.help "Make the server available over the network"
 
-selectHost :: Maybe Publicity -> HostName
-selectHost (Just Public) = "::"
-selectHost Nothing       = "::1"
+hostOpt :: Opt.Parser (Maybe HostName)
+hostOpt =
+  (fmap Just . Opt.strOption $
+   Opt.long "host" <>
+   Opt.metavar "HOSTNAME" <>
+   Opt.help "Select the hostname on which to listen (use 0.0.0.0 or :: for publicly available services).")
+  <|> pure Nothing
+
+sessionOpt :: Opt.Parser (Maybe Session)
+sessionOpt =
+  (fmap (Just . Session) . Opt.strOption $
+   Opt.long "session" <>
+   Opt.metavar "NAME" <>
+   Opt.help "Create or look up a globally available session")
+  <|> pure Nothing
+
+
+portOpt :: Opt.Parser (Maybe Port)
+portOpt =
+ (Just . Port <$>
+  Opt.strOption
+    (Opt.long "port" <>
+     Opt.metavar "PORT" <>
+     Opt.help "Use netstrings over a socket on PORT to communicate"))
+  <|> pure Nothing
+
+
+selectHost :: Maybe HostName -> HostName
+selectHost (Just name) = name
+selectHost Nothing     = "::1"
 
 data SessionResult
   = MakeNew Port
@@ -87,7 +125,7 @@ data SessionResult
   | UseExisting Port
   | MismatchesExisting Port Port
 
-getOrLockSession :: Maybe Session -> Maybe Publicity -> Maybe Port -> IO SessionResult
+getOrLockSession :: Maybe Session -> Maybe _Publicity -> Maybe Port -> IO SessionResult
 getOrLockSession Nothing _ Nothing     = pure (MakeNewDyn (\_ -> pure ()))
 getOrLockSession Nothing _ (Just port) = pure (MakeNew port)
 getOrLockSession (Just (Session session)) publicity maybePort =
@@ -161,22 +199,22 @@ getOrLockSession (Just (Session session)) publicity maybePort =
                   do writeFile portFile (show port)
                      unlockFile globalLock
 
-realMain :: App s -> Options -> IO ()
-realMain theApp opts =
-  case transportOpt opts of
+realMain :: App s -> ProgramMode -> IO ()
+realMain theApp progMode =
+  case progMode of
     StdIONetstring ->
       serveStdIONS theApp
-    SocketNetstring sessionOpt publicityOpt portOpt ->
-      do sessionResult <- getOrLockSession sessionOpt publicityOpt portOpt
+    SocketNetstring (NetworkOptions session publicity port) ->
+      do sessionResult <- getOrLockSession session publicity port
          hSetBuffering stdout NoBuffering
          case sessionResult of
            UseExisting (Port port) ->
              putStrLn ("PORT " ++ port)
            MakeNew (Port port) ->
              do putStrLn ("PORT " ++ port)
-                serveSocket (selectHost publicityOpt) port theApp
+                serveSocket (selectHost publicity) port theApp
            MakeNewDyn registerPort ->
-             do let h = selectHost publicityOpt
+             do let h = selectHost publicity
                 (a, port) <- serveSocketDynamic h theApp
                 registerPort (Port (show port))
                 putStrLn ("PORT " ++ show port)
@@ -186,3 +224,5 @@ realMain theApp opts =
                    <> existingPort
                    <> ", not the specified port "
                    <> desiredPort
+    Http path (NetworkOptions session publicity port) ->
+      serveHTTP path theApp (maybe 8080 (read . unPort) port)

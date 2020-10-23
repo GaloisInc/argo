@@ -32,6 +32,6 @@ before_install:
 
 script:
   - cabal v2-update
-  - cabal v2-build -j --disable-optimization --gcc-options -maes file-echo-api
-  - cabal v2-test --gcc-options -maes argo
-  - cabal v2-test --gcc-options -maes file-echo-api
+  - cabal v2-build -j --disable-optimization --constraint="cryptonite -support_aesni" file-echo-api
+  - cabal v2-test --constraint="cryptonite -support_aesni" argo
+  - cabal v2-test --constraint="cryptonite -support_aesni" file-echo-api

@@ -31,11 +31,7 @@ before_install:
   - export PATH=/opt/ghc/bin:$HOME/.cabal/bin:$PATH
 
 script:
-  - git submodule init
-  - git submodule update
-  - (cd deps/abcBridge && git submodule init && git submodule update)
   - cabal v2-update
-  - cabal v2-build -j --disable-optimization cryptol-remote-api
-  - cabal v2-build -j --disable-optimization saw-remote-api
-  - cabal v2-test cryptol-remote-api
-  - cabal v2-test saw-remote-api
+  - cabal v2-build -j --disable-optimization file-echo-api
+  - cabal v2-test argo
+  - cabal v2-test file-echo-api

@@ -100,7 +100,7 @@ env = os.environ.copy()
 
 # Launch a separate process for the RemoteSocketProcess test
 p = subprocess.Popen(
-    ["cabal", "v2-exec", "file-echo-api", "--verbose=0", "--", "--port", "50005"],
+    ["cabal", "v2-exec", "file-echo-api", "--verbose=0", "--", "socket", "--port", "50005"],
     stdout=subprocess.DEVNULL,
     stdin=subprocess.DEVNULL,
     stderr=subprocess.DEVNULL,
@@ -109,7 +109,7 @@ p = subprocess.Popen(
 
 time.sleep(5)
 assert(p is not None)
-# assert(p.poll() is None)
+assert(p.poll() is None)
 
 # Test argo's RemoteSocketProcess
 c = argo.ServerConnection(
@@ -120,13 +120,14 @@ run_tests(c)
 # close the remote process, we don't need it for the remaining tests
 os.killpg(os.getpgid(p.pid), signal.SIGKILL)
 
+
 # Test argo's DynamicSocketProcess
 c = argo.ServerConnection(
-       argo.DynamicSocketProcess("cabal v2-exec file-echo-api --verbose=0 -- --port 50005"))
+       argo.DynamicSocketProcess("cabal v2-exec file-echo-api --verbose=0 -- socket"))
 
 run_tests(c)
 
 c = argo.ServerConnection(
-       argo.StdIOProcess("cabal v2-exec file-echo-api --verbose=0 -- --stdio"))
+       argo.StdIOProcess("cabal v2-exec file-echo-api --verbose=0 -- stdio"))
 
 run_tests(c)

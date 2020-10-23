@@ -109,7 +109,7 @@ p = subprocess.Popen(
 
 time.sleep(5)
 assert(p is not None)
-assert(p.poll() is None)
+# assert(p.poll() is None)
 
 # Test argo's RemoteSocketProcess
 c = argo.ServerConnection(

@@ -35,5 +35,5 @@ script:
   - cabal v2-update
   - cabal v2-build -j --disable-optimization --constraint="cryptonite -support_aesni" exe:file-echo-api
   - cabal v2-test --constraint="cryptonite -support_aesni" argo
-  - cabal v2-run file-echo-api --verbose=0 -- scoket --port 44444
+  - cabal v2-run exe:file-echo-api --verbose=0 -- scoket --port 44444
   - cabal v2-test --constraint="cryptonite -support_aesni" file-echo-api

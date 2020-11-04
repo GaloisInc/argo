@@ -286,11 +286,19 @@ The tag values in objects can be:
 
 ``call``
   The expression is a function application. Further fields are:
+
   - ``function``: A :ref:`JSON Cryptol expressions <cryptol-json-expression>`.
   - ``arguments``: A JSON array of :ref:`JSON Cryptol expressions <cryptol-json-expression>`.
 
+``instantiate``
+  The expression is a type application. Further fields are:
+
+  - ``generic``: The polymorphic expression to be instantiated
+  - ``arguments``: A JSON object in which keys are the names of type parameters and values are :ref:`JSON Cryptol types <cryptol-json-type>`.
+
 ``integer modulo``
   The expression is an integer with a modulus (the Cryptol ``Z`` type). Further fields are:
+
   - ``integer``: A JSON number, representing the integer
   - ``modulus``: A JSON number, representing the modulus
 
@@ -328,7 +336,9 @@ Types are represented as JSON objects. The ``type`` field contains one of the fo
 ``variable``
   The type is a type variable. The remaining fields are ``name``,
   which contains the variable's name, and ``kind``, which contains
-  its kind (represented as in the ``forall`` section).
+  its kind (represented as in the ``forall`` section). When providing
+  types to Cryptol, the ``kind`` field should be elided, and type synonyms
+  may be provided with arguments through an optional ``arguments`` field.
 
 ``record``
   The type is a record type. The remaining field is ``fields``,

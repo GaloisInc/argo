@@ -3,35 +3,3 @@ packages:
   python/
   file-echo-api/
   tasty-script-exitcode/
-
-optional-packages:
-  deps/saw-script
-  deps/saw-script/deps/cryptol/
-  deps/saw-script/deps/abcBridge/
-  deps/saw-script/abcBridge/
-  deps/saw-script/deps/aig/
-  deps/saw-script/deps/crucible/crucible/
-  deps/saw-script/deps/crucible/crucible-saw/
-  deps/saw-script/deps/crucible/crucible-llvm/
-  deps/saw-script/deps/crucible/crucible-jvm/
-  deps/saw-script/deps/crucible/crux/
-  deps/saw-script/deps/jvm-parser/
-  deps/saw-script/deps/jvm-verifier/
-  deps/saw-script/deps/llvm-pretty/
-  deps/saw-script/deps/llvm-pretty-bc-parser/
-  deps/saw-script/deps/parameterized-utils/
-  deps/saw-script/deps/saw-core/cryptol-saw-core
-  deps/saw-script/deps/saw-core/saw-core
-  deps/saw-script/deps/saw-core/saw-core-aig
-  deps/saw-script/deps/saw-core/saw-core-sbv
-  deps/saw-script/deps/saw-core/saw-core-what4
-  deps/saw-script/deps/saw-core-coq
-  deps/saw-script/deps/flexdis86/
-  deps/saw-script/deps/flexdis86/binary-symbols
-  deps/saw-script/deps/macaw/base/
-  deps/saw-script/deps/macaw/symbolic/
-  deps/saw-script/deps/macaw/x86/
-  deps/saw-script/deps/macaw/x86_symbolic/
-  deps/saw-script/deps/elf-edit/
-  deps/saw-script/deps/dwarf/
-  deps/saw-script/deps/what4/what4

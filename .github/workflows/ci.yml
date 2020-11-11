@@ -47,3 +47,6 @@ jobs:
       run: cabal test argo
     - name: Cabal file-echo-api tests
       run: cabal test file-echo-api
+    - name: Python Cryptol unit tests
+      working-directory: ./python/cryptol
+      run: python3 -m unittest discover

@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 import base64
 from math import ceil
 import BitVector #type: ignore
-from cryptol.bv import *
+from cryptol.bitvector import BV
 
 from typing import Any, Dict, Iterable, List, NoReturn, Optional, TypeVar, Union
 

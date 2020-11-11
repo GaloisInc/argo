@@ -13,7 +13,7 @@ import argo.interaction
 from argo.interaction import HasProtocolState
 from argo.connection import DynamicSocketProcess, ServerConnection, ServerProcess, StdIOProcess
 from . import cryptoltypes
-from cryptol.bv import BV
+from cryptol.bitvector import BV
 
 
 __all__ = ['cryptoltypes']

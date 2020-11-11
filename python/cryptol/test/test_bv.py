@@ -1,6 +1,6 @@
 import unittest
 import random
-from bv import BV
+from bitvector import BV
 
 
 class BVBaseTest(unittest.TestCase):

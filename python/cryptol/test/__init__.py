@@ -1,2 +1,2 @@
 # import the package
-import bv
+import bitvector

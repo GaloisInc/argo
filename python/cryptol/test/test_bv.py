@@ -218,14 +218,36 @@ class BVBasicTests(BVBaseTest):
         self.assertEqual(BV(0,0).zero(), BV(0,0))
         self.assertEqual(BV(9,255).zero(), BV(9,0))
 
-    def test_of_signed_int(self):
-        self.assertEqual(BV.of_signed_int(8,127), BV(8,127))
-        self.assertEqual(BV.of_signed_int(8,-128), BV(8,0x80))
-        self.assertEqual(BV.of_signed_int(8,-1), BV(8,255))
+    def test_msb(self):
+        self.assertEqual(BV(8,0).msb(), False)
+        self.assertEqual(BV(8,1).msb(), False)
+        self.assertEqual(BV(8,127).msb(), False)
+        self.assertEqual(BV(8,128).msb(), True)
+        self.assertEqual(BV(8,255).msb(), True)
         with self.assertRaises(ValueError):
-            BV.of_signed_int(8,128)
+            BV(0,0).msb()
+
+
+    def test_lsb(self):
+        self.assertEqual(BV(8,0).lsb(), False)
+        self.assertEqual(BV(8,1).lsb(), True)
+        self.assertEqual(BV(8,127).lsb(), True)
+        self.assertEqual(BV(8,128).lsb(), False)
+        self.assertEqual(BV(8,255).lsb(), True)
         with self.assertRaises(ValueError):
-            BV.of_signed_int(8,-129)
+            BV(0,0).lsb()
+
+    def test_from_signed_int(self):
+        self.assertEqual(BV.from_signed_int(8,127), BV(8,127))
+        self.assertEqual(BV.from_signed_int(8,-128), BV(8,0x80))
+        self.assertEqual(BV.from_signed_int(8,-1), BV(8,255))
+        self.assertUnOpExpected(
+            lambda b: b if b.size() == 0 else BV.from_signed_int(b.size(), b.to_signed_int()),
+            lambda b: b)
+        with self.assertRaises(ValueError):
+            BV.from_signed_int(8,128)
+        with self.assertRaises(ValueError):
+            BV.from_signed_int(8,-129)
 
     def test_sub(self):
         self.assertEqual(BV(0,0) - BV(0,0), BV(0,0))

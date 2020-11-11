@@ -57,11 +57,25 @@ class BV:
 
     def to_signed_int(self) -> int:
         """Return the signed (i.e., two's complement) integer the BV represents."""
-        if self.__value >= 0:
+        if not self.msb():
             return self.__value
         else:
-            # negOfNat (2^n - x.to_nat)
             return 0 - ((2 ** self.__size) - self.__value)
+
+    def msb(self) -> bool:
+        """Returns True if the most significant bit is 1, else returns False."""
+        if self.__size == 0:
+            raise ValueError("0-length BVs have no most significant bit.")
+        else:
+            return self[self.__size - 1]
+
+    def lsb(self) -> bool:
+        """Returns True if the least significant bit is 1, else returns False."""
+        if self.__size == 0:
+            raise ValueError("0-length BVs have no least significant bit.")
+        else:
+            return self[0]
+
 
     def __eq__(self, other : Any) -> bool:
         if isinstance(other, BV):
@@ -243,7 +257,7 @@ class BV:
         return BV(self.__size, (1 << self.__size) - 1 - self.__value)
 
     @staticmethod
-    def __of_signed_int(size: int, val : int) -> 'BV':
+    def __from_signed_int(size: int, val : int) -> 'BV':
         excl_max = 2 ** size
         if (size == 0):
             return BV(0,0)
@@ -253,39 +267,48 @@ class BV:
             return BV(size, ((excl_max - 1) & ~(abs(val + 1))) % excl_max)
 
     @staticmethod
-    def of_signed_int(size: int, val : int) -> 'BV':
+    def from_signed_int(size: int, val : int) -> 'BV':
         """Convert `val` into the corresponding `size`-bit two's complement bitvector."""
         if size == 0:
             raise ValueError("There are no two's complement 0-bit vectors.")
         max_val = 2 ** (size - 1) - 1
         min_val = -(2 ** (size - 1))
         if val < min_val or val > max_val:
-            raise ValueError("{val!r} is not in range [{min_val!r},{max_val!r}].")
+            raise ValueError(f'{val!r} is not in range [{min_val!r},{max_val!r}].')
         else:
-            return BV.__of_signed_int(size, val)
+            return BV.__from_signed_int(size, val)
 
     def __sub__(self, other : Union[int, 'BV']) -> 'BV':
         if isinstance(other, BV):
             if self.__size == other.__size:
-                return BV.__of_signed_int(
-                    self.__size, 
-                    self.to_signed_int() - other.to_signed_int())
+                if self.__size == 0:
+                    return self
+                else:
+                    return BV.__from_signed_int(
+                        self.__size,
+                        self.to_signed_int() - other.to_signed_int())
             else:
                 self.__raise_unequal_len_op_error("-", other)
         elif isinstance(other, int):
             self.__check_int_size(other)
-            return BV.__of_signed_int(
-                self.__size, 
-                self.to_signed_int() - other)
+            if self.__size == 0:
+                return self
+            else:
+                return BV.__from_signed_int(
+                    self.__size,
+                    self.to_signed_int() - other)
         else:
             raise ValueError(f'Cannot subtract {other!r} from {self!r}.')
 
     def __rsub__(self, other : int) -> 'BV':
         if isinstance(other, int):
             self.__check_int_size(other)
-            return BV.__of_signed_int(
-                    self.__size, 
-                    other - self.to_signed_int())
+            if self.__size == 0:
+                return self
+            else:
+                return BV.__from_signed_int(
+                        self.__size,
+                        other - self.to_signed_int())
         else:
             raise ValueError(f'Cannot subtract {self!r} from {other!r}.')
 
@@ -300,7 +323,7 @@ class BV:
                 self.__raise_unequal_len_op_error("*", other)
         elif isinstance(other, int):
             self.__check_int_size(other)
-            return BV.__of_signed_int(
+            return BV.__from_signed_int(
                 self.__size, 
                 self.__mod_if_overflow(self.__value * other))
         else:

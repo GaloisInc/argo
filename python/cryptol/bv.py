@@ -1,10 +1,15 @@
 
 from functools import reduce
-from typing import Any, List, Union
+from typing import Any, Iterable, List, Union
 
 class BV:
-    """A bitvector, containing a nonnegative bit width `n`
-    and corresponding nonnegative integer `v` that is less than `2^n`."""
+    """A class representing a cryptol bit vector (i.e., sequence of bits).
+
+    :param size: Number of bits available to the bit vector (must be nonnegative).
+    :type size: int
+    :param value: Nonnegative integer value the bit vector represents (must be less than ``2 ** size``).
+    :type value: int
+    """
     def __init__(self, size : int, value : int) -> None:
         if not isinstance(size, int) or size < 0:
             raise ValueError('`size` parameter to BV must be a nonnegative integer but was given {size!r}.')
@@ -14,9 +19,9 @@ class BV:
         self.__value = value
 
     def hex(self) -> str:
-        """Return the (padded) hexadecimal string for the unsigned integer this BV represents.
+        """Return the (padded) hexadecimal string for the unsigned integer this ``BV`` represents.
         
-        Note: padding is determined by BV's size, rounding up a single digit
+        Note: padding is determined by ``self.size()``, rounding up a single digit
         for widths not evenly divisible by 4."""
         hex_str_width = 2 + (self.__size // 4) + (0 if (self.__size % 4 == 0) else 1)
         return format(self.__value, f'#0{hex_str_width!r}x')
@@ -25,11 +30,11 @@ class BV:
         return f"BV({self.__size!r}, {self.hex()})"
 
     def size(self) -> int:
-        """Width of the BV (i.e., the "bit width" of the value)."""
+        """Size of the ``BV`` (i.e., the available "bit width")."""
         return self.__size
 
     def value(self) -> int:
-        """The unsigned integer interpretation of the BV."""
+        """The unsigned integer interpretation of the ``self``."""
         return self.__value
 
     def __concat_single(self, other : 'BV') -> 'BV':
@@ -38,39 +43,52 @@ class BV:
         else:
             raise ValueError(f'Cannot concat BV with {other!r}')
 
-    def concat(self, *args : List['BV']) -> 'BV':
-        """Concatenate the given BV to the right of `self`."""
-        return reduce(lambda acc, b: acc.__concat_single(b), args, self)
+    def concat(self, *others : Iterable['BV']) -> 'BV':
+        """Concatenate the given ``BV``s to the right of ``self``.
+
+        :param others: The BVs to concatenate onto the right side of ``self`` in order.
+
+        Returns:
+            BV: a bit vector with the bits from ``self`` on the left and the bits from
+                ``others`` in order on the right.
+        """
+        return reduce(lambda acc, b: acc.__concat_single(b), others, self)
     
     @staticmethod
-    def join(*bs : List['BV']) -> 'BV':
-        """Concatenate the given BVs in order."""
+    def join(*bs : Iterable['BV']) -> 'BV':
+        """Concatenate the given ``BV``s in order.
+
+        :param bs: The ``BV``s to concatenate in order.
+
+        Returns:
+            BV: A bit vector with the bits from ``others`` in order.
+        """
         return reduce(lambda acc, b: acc.__concat_single(b), bs, BV(0,0))
 
     def zero(self) -> 'BV':
-        """Return the zero value for this BV's size."""
+        """The zero bit vector for ``self``'s size (i.e., ``BV(self.size(), 0)``)."""
         return BV(self.size() ,0)
 
-    def to_int(self) -> 'BV':
-        """Return the unsigned integer the BV represents."""
+    def to_int(self) -> int:
+        """Return the unsigned integer the ``BV`` represents (equivalent to ``self.value()``)."""
         return self.__value
 
     def to_signed_int(self) -> int:
-        """Return the signed (i.e., two's complement) integer the BV represents."""
+        """Return the signed (i.e., two's complement) integer the ``BV`` represents."""
         if not self.msb():
             return self.__value
         else:
             return 0 - ((2 ** self.__size) - self.__value)
 
     def msb(self) -> bool:
-        """Returns True if the most significant bit is 1, else returns False."""
+        """Returns ``True`` if the most significant bit is 1, else returns ``False``."""
         if self.__size == 0:
             raise ValueError("0-length BVs have no most significant bit.")
         else:
             return self[self.__size - 1]
 
     def lsb(self) -> bool:
-        """Returns True if the least significant bit is 1, else returns False."""
+        """Returns ``True`` if the least significant bit is 1, else returns ``False``."""
         if self.__size == 0:
             raise ValueError("0-length BVs have no least significant bit.")
         else:
@@ -78,26 +96,31 @@ class BV:
 
 
     def __eq__(self, other : Any) -> bool:
+        """Returns ``True`` if ``other`` is also a ``BV`` of the same size and value, else returns ``False``."""
         if isinstance(other, BV):
             return self.__size == other.__size and self.__value == other.__value
         else:
             return False
 
-    def __index__(self):
+    def __index__(self) -> int:
+        """Equivalent to ``self.value()``."""
         return self.__value
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Equivalent to ``self.size()``."""
         return self.__size
 
-    def __bytes__(self):
+    def __bytes__(self) -> bytes:
+        """Returns the ``bytes`` value equivalent to ``self.value()``."""
         byte_len = (self.__size // 8) + (0 if self.__size % 8 == 0 else 1)
         return self.__value.to_bytes(byte_len, 'big')
 
 
     def split(self, size : int) -> List['BV']:
-        """Split `self` into a list of BVs of length `size`.
+        """Split ``self`` into a list of ``BV``s of length ``size``.
         
-        Note: `self.size()` must be divisible by `size`."""
+        :param size: Size of segments to partition ``self`` into (must evently divide ``self.size()``).
+        """
         if not isinstance(size, int) or size <= 0:
             raise ValueError(f'`size` argument to splits must be a positive integer, got {size!r}')
         if not self.size() % size == 0:
@@ -108,21 +131,19 @@ class BV:
 
 
     def popcount(self) -> int:
-        """Return the number of bits set to `1` in `self`."""
+        """Return the number of bits set to ``1`` in ``self``."""
         return bin(self).count("1")
 
     @staticmethod
     def from_bytes(bs : bytes, *, size=None, byteorder='big') -> 'BV':
-        """Convert the given bytes into a BV.
-
-        Resulting BV has length `len(bs) * 8.` 
+        """Convert the given bytes ``bs`` into a ``BV``.
         
-        `size` keyword argument specifies BV's size (and
-        must be large enough to represent the bytes). If `size=None`
-        the resulting BV's size is `len(bs) * 8`.
-
-        `byteorder` keyword argument can be `little` or `big` to select
-        endianness."""
+        :param bs: Bytes to convert to a ``BV``.
+        :param size, optional: Desired ``BV``'s size (must be large enough to represent ``bs``). The
+            default (i.e., ``None``) will result in a ``BV`` of size ``len(bs) * 8``.
+        :param byteorder, optional: Byte ordering ``bs`` should be interpreted as, defaults to
+            ``'big'``, ``little`` being the other acceptable value. Equivalent to the ``byteorder``
+            parameter from Python's ``int.from_bytes``."""
 
         if not isinstance(bs, bytes):
             raise ValueError("from_bytes given not bytes value: {bs!r}")
@@ -138,8 +159,8 @@ class BV:
             raise ValueError(f'from_bytes given invalid bit size {size!r} for bytes {bs!r}')
 
     def with_bit(self, index : int, set_bit : bool) -> 'BV':
-        """Return a BV identical to `self` bit with the bit at `index` set to
-        `1` if `set_bit == True`, else `0`."""
+        """Return a ``BV`` identical to ``self`` but with the bit at ``index`` set to
+        ``1`` if ``set_bit == True``, else ``0``."""
         if index < 0 or index >= self.__size:
             raise ValueError(f'{index!r} is not a valid bit index for {self!r}')
         if set_bit:
@@ -151,7 +172,7 @@ class BV:
 
 
     def to_bytes(self) -> bytes:
-        """Convert the given BV into a python native `bytes` value.
+        """Convert the given ``BV`` into a python native ``bytes`` value.
         
         Note: equivalent to bytes(_)."""
 
@@ -162,6 +183,8 @@ class BV:
                else (value % (2 ** self.__size))
 
     def __add__(self, other : Union[int, 'BV']) -> 'BV':
+        """Addition bewteen ``BV``s of equal size or bewteen a ``BV`` and a nonnegative
+           integer whose value is expressible with the ``BV`` parameter's size."""
         if isinstance(other, BV):
             if self.__size == other.__size:
                 return BV(
@@ -183,6 +206,8 @@ class BV:
             raise ValueError(f'Cannot add {self!r} with {other!r}.')   
 
     def __and__(self, other : Union['BV', int]) -> 'BV':
+        """Bitwise 'logical and' bewteen ``BV``s of equal size or bewteen a ``BV`` and a nonnegative
+           integer whose value is expressible with the ``BV`` parameter's size."""
         if isinstance(other, BV):
             if self.__size == other.__size:
                 return BV(self.__size, self.__value & other.__value)
@@ -200,6 +225,8 @@ class BV:
             raise ValueError(f'Cannot bitwise and {self!r} with value {other!r}.')
     
     def __or__(self, other : Union['BV', int]) -> 'BV':
+        """Bitwise 'logical or' bewteen ``BV``s of equal size or bewteen a ``BV`` and a nonnegative
+           integer whose value is expressible with the ``BV`` parameter's size."""
         if isinstance(other, BV):
             if self.__size == other.__size:
                 return BV(self.__size, self.__value | other.__value)
@@ -217,6 +244,8 @@ class BV:
             raise ValueError(f'Cannot bitwise or {self!r} with value {other!r}.')
 
     def __xor__(self, other : Union['BV', int]) -> 'BV':
+        """Bitwise 'logical xor' bewteen ``BV``s of equal size or bewteen a ``BV`` and a nonnegative
+           integer whose value is expressible with the ``BV`` parameter's size."""
         if isinstance(other, BV):
             if self.__size == other.__size:
                 return BV(self.__size, self.__value ^ other.__value)
@@ -233,7 +262,22 @@ class BV:
         else:
             raise ValueError(f'Cannot bitwise xor {self!r} with value {other!r}.')
 
-    def __getitem__(self, key):
+    def __getitem__(self, key : Union[int, slice]) -> Union[bool, 'BV']:
+        """``BV`` indexing and slicing.
+
+        :param key: If ``key`` is an integer, ``True`` is returned if the corresponding bit
+            is non-zero, else ``False`` is returned. If ``key`` is a ``slice`` (i.e., ``[high:low]``)
+            it specifies a sub-``BV`` of ``self`` corresponding to the bits from
+            index ``low`` up until (but not including) index ``high``.
+
+        Examples:
+
+        ``BV(8,0b00000010)[0] == False``
+
+        ``BV(8,0b00000010)[1] == True``
+
+        ``BV(8,0b00000010)[4:0] == BV(4,0b0010)``
+        """
         if isinstance(key, int):
             if key < 0 or key >= self.__size:
                 raise ValueError(f'{key!r} is not a valid index for {self!r}')
@@ -254,6 +298,7 @@ class BV:
             raise ValueError(f'{key!r} is not a valid BV index or slice.')
 
     def __invert__(self) -> 'BV':
+        """Returns the bitwise inversion of ``self``."""
         return BV(self.__size, (1 << self.__size) - 1 - self.__value)
 
     @staticmethod
@@ -267,18 +312,25 @@ class BV:
             return BV(size, ((excl_max - 1) & ~(abs(val + 1))) % excl_max)
 
     @staticmethod
-    def from_signed_int(size: int, val : int) -> 'BV':
-        """Convert `val` into the corresponding `size`-bit two's complement bitvector."""
+    def from_signed_int(size: int, value : int) -> 'BV':
+        """Returns the ``BV`` corrsponding to the ``self.size()``-bit two's complement representation of ``value``.
+
+        :param size: Bit width of desired ``BV``.
+        :param value: Integer returned ``BV`` is derived from (must be in range
+            ``-(2 ** (size - 1))`` to ``(2 ** (size - 1) - 1)`` inclusively).
+        """
         if size == 0:
             raise ValueError("There are no two's complement 0-bit vectors.")
         max_val = 2 ** (size - 1) - 1
         min_val = -(2 ** (size - 1))
-        if val < min_val or val > max_val:
-            raise ValueError(f'{val!r} is not in range [{min_val!r},{max_val!r}].')
+        if value < min_val or value > max_val:
+            raise ValueError(f'{value!r} is not in range [{min_val!r},{max_val!r}].')
         else:
-            return BV.__from_signed_int(size, val)
+            return BV.__from_signed_int(size, value)
 
     def __sub__(self, other : Union[int, 'BV']) -> 'BV':
+        """Subtraction bewteen ``BV``s of equal size or bewteen a ``BV`` and a nonnegative
+           integer whose value is expressible with the ``BV`` parameter's size."""
         if isinstance(other, BV):
             if self.__size == other.__size:
                 if self.__size == 0:
@@ -314,6 +366,8 @@ class BV:
 
 
     def __mul__(self, other: Union[int, 'BV']) -> 'BV':
+        """Multiplication bewteen ``BV``s of equal size or bewteen a ``BV`` and a nonnegative
+           integer whose value is expressible with the ``BV`` parameter's size."""
         if isinstance(other, BV):
             if self.__size == other.__size:
                 return BV(
@@ -334,6 +388,11 @@ class BV:
 
     
     def __lshift__(self, other : Union[int, 'BV']) -> 'BV':
+        """Returns the bitwise left shift of ``self``.
+
+        :param other: Nonnegative amount to left shift ``self`` by (resulting
+            ``BV``'s size is ``self.size() + int(other)``)).
+        """
         if isinstance(other, int) or isinstance(other, BV):
             n = int(other)
             if n < 0:
@@ -344,6 +403,11 @@ class BV:
 
 
     def __rshift__(self, other : Union[int, 'BV']) -> 'BV':
+        """Returns the bitwise right shift of ``self``.
+
+        :param other: Nonnegative amount to right shift ``self`` by (resulting
+            ``BV``'s size is ``max(0, self.size() - int(other))``).
+        """
         if isinstance(other, int) or isinstance(other, BV):
             n = int(other)
             if n < 0:

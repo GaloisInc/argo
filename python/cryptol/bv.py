@@ -44,15 +44,15 @@ class BV:
     
     @staticmethod
     def join(*bs : List['BV']) -> 'BV':
-        """Concatenate the given BV in order."""
+        """Concatenate the given BVs in order."""
         return reduce(lambda acc, b: acc.__concat_single(b), bs, BV(0,0))
 
     def zero(self) -> 'BV':
-        """Return the zero value for this BV' size."""
+        """Return the zero value for this BV's size."""
         return BV(self.size() ,0)
 
     def to_int(self) -> 'BV':
-        """Return the unsigned integer the BV represent."""
+        """Return the unsigned integer the BV represents."""
         return self.__value
 
     def to_signed_int(self) -> int:
@@ -95,7 +95,7 @@ class BV:
 
 
     def split(self, size : int) -> List['BV']:
-        """Split the BC into a list of BVs of length `size`.
+        """Split `self` into a list of BVs of length `size`.
         
         Note: `self.size()` must be divisible by `size`."""
         if not isinstance(size, int) or size <= 0:
@@ -352,10 +352,6 @@ class BV:
         else:
             raise ValueError(f'Shift must be specified with an integer or BV, but got {other!r}.')
 
-
-# object.__rshift__(self, other)
-
-
     def __check_int_size(self, val : int) -> None:
         if val >= (2 ** self.__size) or val < 0:
             raise ValueError(f'{val!r} is not a valid unsigned {self.__size!r}-bit value.')
@@ -363,46 +359,3 @@ class BV:
 
     def __raise_unequal_len_op_error(self, op : str, other : 'BV') -> None:
         raise ValueError(f'Operator `{op}` cannot be called on BV of unequal length {self!r} and {other!r}.')
-
-
-
-# object.__matmul__(self, other)
-
-# object.__truediv__(self, other)
-
-# object.__floordiv__(self, other)
-
-# object.__mod__(self, other)
-
-# object.__divmod__(self, other)
-
-# object.__pow__(self, other[, modulo])
-
-# object.__lshift__(self, other)
-
-# object.__rshift__(self, other)
-
-# object.__xor__(self, other)
-
-# extern void bitvector_t_zeroize(bitvector_t *bv);
-# extern void bitvector_t_cleanHighBits(bitvector_t *bv);
-# extern void bitvector_t_widenUpdate(bitvector_t *bv, uint32_t nBitsToAdd);
-# extern bitvector_t *bitvector_t_widen(bitvector_t *bv, uint32_t nBitsToAdd);
-# extern uint64_t hexchar_to_digit(char c);
-# extern bitvector_t *bitvector_t_fromHexString(char *string);
-# extern void bitvector_t_copyUpdate(bitvector_t *dst, bitvector_t *src);
-# extern bitvector_t *bitvector_t_copy(bitvector_t *bv);
-# extern void bitvector_t_dropUpdate(bitvector_t *bv, uint32_t nBitsToDrop);
-# extern bitvector_t *bitvector_t_from_bytes(uint8_t *bytes, uint32_t nBytes);
-# extern uint8_t *bitvector_t_to_bytes(bitvector_t *bv);
-# extern void bitvector_t_negateUpdate(bitvector_t *bv);
-# extern void bitvector_t_sliceUpdate(bitvector_t *slice, bitvector_t *bv, uint32_t start, uint32_t length);
-# extern uint8_t bitvector_t_equal(bitvector_t *x, bitvector_t *y);
-
-# #define bitvector_t_zipWith(NAME)                                       \
-# extern void bitvector_t_##NAME##Update(bitvector_t *x, bitvector_t *y); \
-# extern bitvector_t *bitvector_t_##NAME(bitvector_t *x, bitvector_t *y); \
-
-# bitvector_t_zipWith(xor)
-# bitvector_t_zipWith(or)
-# bitvector_t_zipWith(and)

@@ -210,4 +210,6 @@ realMain theApp progMode =
                    <> ", not the specified port "
                    <> desiredPort
     Http path (NetworkOptions session _host port) ->
-      serveHTTP path theApp (maybe 8080 (read . unPort) port)
+      case session of
+        Just _ -> die "Named sessions not yet supported for HTTP"
+        Nothing -> serveHttp path theApp (maybe 8080 (read . unPort) port)

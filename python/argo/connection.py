@@ -303,7 +303,12 @@ class HttpProcess(ServerProcess):
             return self.waiting_replies.pop()
 
     def send_one_message(self, message: str) -> None:
-        self.waiting_replies.append(requests.post(self.url, data=message).text)
+
+        self.waiting_replies.append(
+            requests.post(self.url,
+                          headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
+                          data=message).text
+        )
 
 
 def enqueue_netstring(out: IO[bytes], queue: queue.Queue[str]) -> None:

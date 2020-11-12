@@ -47,6 +47,17 @@ class BV:
         """Size of the ``BV`` (i.e., the available "bit width")."""
         return self.__size
 
+    def widen(self, n : int) -> 'BV':
+        """Returns a "widened" version of ``self``, i.e. ``BV(self.size() + n, self.value())``.
+
+        Args:
+            n (int): The (nonnegative) number of bits to wider the returned bitvector should be.
+        """
+        if not isinstance(n, int) or n < 0:
+            raise ValueError(f'``widen`` expects a nonnegative integer, but got {n!r}')
+        else:
+            return BV(self.__size + n, self.__value)
+
     def value(self) -> int:
         """The unsigned integer interpretation of the ``self``."""
         return self.__value

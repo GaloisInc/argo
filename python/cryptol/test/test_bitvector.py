@@ -112,6 +112,11 @@ class BVBasicTests(BVBaseTest):
         self.assertTrue(BV(0,0) != 0)
         self.assertTrue(0 != BV(0,0))
 
+    def test_widen(self):
+        self.assertEqual(BV(0,0).widen(8), BV(8,0))
+        self.assertEqual(BV(9,255).widen(8), BV(17,255))
+
+
     def test_add(self):
         self.assertEqual(BV(16,7) + BV(16,9), BV(16,16))
         self.assertEqual(BV(16,9) + BV(16,7), BV(16,16))

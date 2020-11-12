@@ -351,7 +351,7 @@ class Expt(CryptolType):
 
 class Log2(CryptolType):
     def __init__(self, operand : CryptolType) -> None:
-        self.right = operand
+        self.operand = operand
 
     def __str__(self) -> str:
         return f"(lg2 {self.operand})"
@@ -361,7 +361,7 @@ class Log2(CryptolType):
 
 class Width(CryptolType):
     def __init__(self, operand : CryptolType) -> None:
-        self.right = operand
+        self.operand = operand
 
     def __str__(self) -> str:
         return f"(width {self.operand})"

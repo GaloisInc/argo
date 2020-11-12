@@ -1,7 +1,7 @@
 
 from functools import reduce
-from typing import Any, Iterable, List, Union
-from BitVector import BitVector
+from typing import Any, List, Union, Optional, overload
+from BitVector import BitVector #type: ignore
 
 
 class BV:
@@ -13,22 +13,23 @@ class BV:
 
     ``BV(bv : BitVector)`` will create an equivalent ``BV`` to the given ``BitVector`` value.
     """
-    def __init__(self, *args) -> None:
-        if len(args) == 1:
-            if not isinstance(args[0], BitVector):
-                raise ValueError(f'BV can only be created from a single value when that value is a BitVector, but got {args[0]!r}')
-            else:
-                self.__size = len(args[0])
-                self.__value = int(args[0])
-        elif len(args) == 2:
-            if not isinstance(args[0], int) or args[0] < 0:
-                raise ValueError(f'`size` parameter to BV must be a nonnegative integer but was given {args[0]!r}.')
-            self.__size = args[0]
-            if not isinstance(args[1], int):
-                raise ValueError(f'{args[1]!r} is not an integer value to initilize a bit vector of size {self.__size!r} with.')
-            self.__value = args[1]
+    __size  : int
+    __value : int
+
+    def __init__(self, size_or_bv : Union[int, BitVector], value : Optional[int] = None) -> None:
+        """Initialize a ``BV`` from a ``BitVector`` or from size and value nonnegative integers."""
+        if value is not None:
+            if not isinstance(size_or_bv, int) or size_or_bv < 0:
+                raise ValueError(f'`size` parameter to BV must be a nonnegative integer but was given {size_or_bv!r}.')
+            self.__size = size_or_bv
+            if not isinstance(value, int):
+                raise ValueError(f'{value!r} is not an integer value to initilize a bit vector of size {self.__size!r} with.')
+            self.__value = value
+        elif not isinstance(size_or_bv, BitVector):
+            raise ValueError(f'BV can only be created from a single value when that value is a BitVector, but got {size_or_bv!r}')
         else:
-            raise ValueError(f'BV constructor expects 1 or 2 arguments, but got {len(args)!r}.')
+            self.__size = len(size_or_bv)
+            self.__value = int(size_or_bv)
         if self.__value < 0 or self.__value.bit_length() > self.__size:
             raise ValueError(f'{self.__value!r} is not representable as an unsigned integer with {self.__size!r} bits.')
 
@@ -43,6 +44,47 @@ class BV:
     def __repr__(self) -> str:
         return f"BV({self.__size!r}, {self.hex()})"
 
+    @overload
+    def __getitem__(self, key : int) -> bool:
+        pass
+    @overload
+    def __getitem__(self, key : slice) -> 'BV':
+        pass
+    def __getitem__(self, key : Union[int, slice]) -> Union[bool, 'BV']:
+        """``BV`` indexing and slicing.
+
+        :param key: If ``key`` is an integer, ``True`` is returned if the corresponding bit
+            is non-zero, else ``False`` is returned. If ``key`` is a ``slice`` (i.e., ``[high:low]``)
+            it specifies a sub-``BV`` of ``self`` corresponding to the bits from
+            index ``low`` up until (but not including) index ``high``.
+
+        Examples:
+
+        ``BV(8,0b00000010)[0] == False``
+
+        ``BV(8,0b00000010)[1] == True``
+
+        ``BV(8,0b00000010)[4:0] == BV(4,0b0010)``
+        """
+        if isinstance(key, int):
+            if key < 0 or key >= self.__size:
+                raise ValueError(f'{key!r} is not a valid index for {self!r}')
+            else:
+                return (self.__value & (1 << key)) != 0
+        if isinstance(key, slice):
+            high = key.start
+            low = key.stop
+            if not isinstance(low, int): raise ValueError(f'Expected BV slice to use non-negative integer indices, but got low index of {low!r}.')
+            if low < 0 and low > self.__size: raise ValueError(f'Expected BV slice low index to be >= 0 and <= the BV size (i.e., {self.__size!r}) but got {low!r}.')
+            if not isinstance(high, int): raise ValueError(f'Expected BV slice to use non-negative integer indices, but got high index of {high!r}.')
+            if low > high: raise ValueError(f'BV slice low index {low!r} is larger than the high index {high!r}.')
+            if high > self.__size: raise ValueError(f'BV slice high index {high!r} is larger than the BV size (i.e., {self.__size!r}).')
+            if key.step: raise ValueError(f'BV slicing expects a step of None, but found {key.step!r}')
+            new_sz = high - low
+            return BV(new_sz, (self.__value >> low) & ((2 ** new_sz) - 1))
+        else:
+            raise ValueError(f'{key!r} is not a valid BV index or slice.')
+
     def size(self) -> int:
         """Size of the ``BV`` (i.e., the available "bit width")."""
         return self.__size
@@ -53,7 +95,7 @@ class BV:
         Args:
             n (int): How many bits wider the returned ``BV`` should be than ``self`` (must be nonnegative).
         """
-        if not isinstance(n, int) or n < 0:
+        if not isinstance(n, int) or n < 0: #type: ignore
             raise ValueError(f'``widen`` expects a nonnegative integer, but got {n!r}')
         else:
             return BV(self.__size + n, self.__value)
@@ -68,7 +110,7 @@ class BV:
         else:
             raise ValueError(f'Cannot concat BV with {other!r}')
 
-    def concat(self, *others : Iterable['BV']) -> 'BV':
+    def concat(self, *others : 'BV') -> 'BV':
         """Concatenate the given ``BV``s to the right of ``self``.
 
         :param others: The BVs to concatenate onto the right side of ``self`` in order.
@@ -80,7 +122,7 @@ class BV:
         return reduce(lambda acc, b: acc.__concat_single(b), others, self)
     
     @staticmethod
-    def join(*bs : Iterable['BV']) -> 'BV':
+    def join(*bs : 'BV') -> 'BV':
         """Concatenate the given ``BV``s in order.
 
         :param bs: The ``BV``s to concatenate in order.
@@ -101,9 +143,10 @@ class BV:
     def to_signed_int(self) -> int:
         """Return the signed (i.e., two's complement) integer the ``BV`` represents."""
         if not self.msb():
-            return self.__value
+            n = self.__value
         else:
-            return 0 - ((2 ** self.__size) - self.__value)
+            n = 0 - ((2 ** self.__size) - self.__value)
+        return n
 
     def msb(self) -> bool:
         """Returns ``True`` if the most significant bit is 1, else returns ``False``."""
@@ -146,7 +189,7 @@ class BV:
         
         :param size: Size of segments to partition ``self`` into (must evently divide ``self.size()``).
         """
-        if not isinstance(size, int) or size <= 0:
+        if not isinstance(size, int) or size <= 0: #type: ignore
             raise ValueError(f'`size` argument to splits must be a positive integer, got {size!r}')
         if not self.size() % size == 0:
             raise ValueError(f'{self!r} is not divisible into equal parts of size {size!r}')
@@ -160,7 +203,7 @@ class BV:
         return bin(self).count("1")
 
     @staticmethod
-    def from_bytes(bs : bytes, *, size=None, byteorder='big') -> 'BV':
+    def from_bytes(bs : bytes, *, size : Optional[int] =None, byteorder : str ='big') -> 'BV':
         """Convert the given bytes ``bs`` into a ``BV``.
         
         :param bs: Bytes to convert to a ``BV``.
@@ -199,7 +242,7 @@ class BV:
     def with_bits(self, low : int, bits : 'BV') -> 'BV':
         """Return a ``BV`` identical to ``self`` but with the bits from ``low`` to
         ``low + bits.size() - 1`` replaced by the bits from ``bits``."""
-        if not isinstance(low, int) or low < 0 or low >= self.__size:
+        if not isinstance(low, int) or low < 0 or low >= self.__size: # type: ignore
             raise ValueError(f'{low!r} is not a valid low bit index for {self!r}')
         elif not isinstance(bits, BV):
             raise ValueError(f'Expected a BV but got {bits!r}')
@@ -217,9 +260,10 @@ class BV:
 
         return self.__bytes__()
 
-    def __mod_if_overflow(self, value):
-        return value if value.bit_length() <= self.__size \
-               else (value % (2 ** self.__size))
+    def __mod_if_overflow(self, value : int) -> int:
+        n : int = value if value.bit_length() <= self.__size \
+                   else (value % (2 ** self.__size))
+        return n
 
     def __add__(self, other : Union[int, 'BV']) -> 'BV':
         """Addition bewteen ``BV``s of equal size or bewteen a ``BV`` and a nonnegative
@@ -230,7 +274,7 @@ class BV:
                     self.__size,
                     self.__mod_if_overflow(self.__value + other.__value))
             else:
-                self.__raise_unequal_len_op_error("+", other)
+                raise ValueError(self.__unequal_len_op_error_msg("+", other))
         elif isinstance(other, int):
             return BV(
                 self.__size,
@@ -251,7 +295,7 @@ class BV:
             if self.__size == other.__size:
                 return BV(self.__size, self.__value & other.__value)
             else:
-                self.__raise_unequal_len_op_error("&", other)
+                raise ValueError(self.__unequal_len_op_error_msg("&", other))
         elif isinstance(other, int):
             return BV(self.__size, self.__value & other)
         else:
@@ -270,7 +314,7 @@ class BV:
             if self.__size == other.__size:
                 return BV(self.__size, self.__value | other.__value)
             else:
-                self.__raise_unequal_len_op_error("|", other)
+                raise ValueError(self.__unequal_len_op_error_msg("|", other))
         elif isinstance(other, int):
             return BV(self.__size, self.__value | other)
         else:
@@ -289,7 +333,7 @@ class BV:
             if self.__size == other.__size:
                 return BV(self.__size, self.__value ^ other.__value)
             else:
-                self.__raise_unequal_len_op_error("^", other)
+                raise ValueError(self.__unequal_len_op_error_msg("^", other))
         elif isinstance(other, int):
             return BV(self.__size, self.__value ^ other)
         else:
@@ -301,40 +345,6 @@ class BV:
         else:
             raise ValueError(f'Cannot bitwise xor {self!r} with value {other!r}.')
 
-    def __getitem__(self, key : Union[int, slice]) -> Union[bool, 'BV']:
-        """``BV`` indexing and slicing.
-
-        :param key: If ``key`` is an integer, ``True`` is returned if the corresponding bit
-            is non-zero, else ``False`` is returned. If ``key`` is a ``slice`` (i.e., ``[high:low]``)
-            it specifies a sub-``BV`` of ``self`` corresponding to the bits from
-            index ``low`` up until (but not including) index ``high``.
-
-        Examples:
-
-        ``BV(8,0b00000010)[0] == False``
-
-        ``BV(8,0b00000010)[1] == True``
-
-        ``BV(8,0b00000010)[4:0] == BV(4,0b0010)``
-        """
-        if isinstance(key, int):
-            if key < 0 or key >= self.__size:
-                raise ValueError(f'{key!r} is not a valid index for {self!r}')
-            else:
-                return (self.__value & (1 << key)) != 0
-        if isinstance(key, slice):
-            high = key.start
-            low = key.stop
-            if not isinstance(low, int): raise ValueError(f'Expected BV slice to use non-negative integer indices, but got low index of {low!r}.')
-            if low < 0 and low > self.__size: raise ValueError(f'Expected BV slice low index to be >= 0 and <= the BV size (i.e., {self.__size!r}) but got {low!r}.')
-            if not isinstance(high, int): raise ValueError(f'Expected BV slice to use non-negative integer indices, but got high index of {high!r}.')
-            if low > high: raise ValueError(f'BV slice low index {low!r} is larger than the high index {high!r}.')
-            if high > self.__size: raise ValueError(f'BV slice high index {high!r} is larger than the BV size (i.e., {self.__size!r}).')
-            if key.step: raise ValueError(f'BV slicing expects a step of None, but found {key.step!r}')
-            new_sz = high - low
-            return BV(new_sz, (self.__value >> low) & ((2 ** new_sz) - 1))
-        else:
-            raise ValueError(f'{key!r} is not a valid BV index or slice.')
 
     def __invert__(self) -> 'BV':
         """Returns the bitwise inversion of ``self``."""
@@ -379,7 +389,7 @@ class BV:
                         self.__size,
                         self.to_signed_int() - other.to_signed_int())
             else:
-                self.__raise_unequal_len_op_error("-", other)
+                raise ValueError(self.__unequal_len_op_error_msg("-", other))
         elif isinstance(other, int):
             self.__check_int_size(other)
             if self.__size == 0:
@@ -413,7 +423,7 @@ class BV:
                     self.__size,
                     self.__mod_if_overflow(self.__value * other.__value))
             else:
-                self.__raise_unequal_len_op_error("*", other)
+                raise ValueError(self.__unequal_len_op_error_msg("*", other))
         elif isinstance(other, int):
             self.__check_int_size(other)
             return BV.__from_signed_int(
@@ -460,5 +470,5 @@ class BV:
             raise ValueError(f'{val!r} is not a valid unsigned {self.__size!r}-bit value.')
 
 
-    def __raise_unequal_len_op_error(self, op : str, other : 'BV') -> None:
-        raise ValueError(f'Operator `{op}` cannot be called on BV of unequal length {self!r} and {other!r}.')
+    def __unequal_len_op_error_msg(self, op : str, other : 'BV') -> str:
+        return f'Operator `{op}` cannot be called on BV of unequal length {self!r} and {other!r}.'

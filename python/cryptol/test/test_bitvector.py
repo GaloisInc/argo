@@ -1,6 +1,6 @@
 import unittest
 import random
-from bitvector import BV
+from cryptol.bitvector import BV
 from BitVector import BitVector
 
 

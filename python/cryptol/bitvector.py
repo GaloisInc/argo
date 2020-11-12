@@ -51,7 +51,7 @@ class BV:
         """Returns a "widened" version of ``self``, i.e. ``BV(self.size() + n, self.value())``.
 
         Args:
-            n (int): The (nonnegative) number of bits to wider the returned bitvector should be.
+            n (int): How many bits wider the returned ``BV`` should be than ``self`` (must be nonnegative).
         """
         if not isinstance(n, int) or n < 0:
             raise ValueError(f'``widen`` expects a nonnegative integer, but got {n!r}')

@@ -45,6 +45,8 @@ class BVBasicTests(BVBaseTest):
     def test_constructor2(self):
         b = BV(0,0)
         self.assertBVEqual(b, 0, 0)
+        b = BV(value=16,size=8)
+        self.assertBVEqual(b, 8, 16)
         b = BV(8,42)
         self.assertBVEqual(b, 8, 42)
 

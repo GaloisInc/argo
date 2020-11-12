@@ -11,25 +11,29 @@ class BV:
     to the unsigned integer representation of ``value`` (N.B., ``0 <= size <= value <= 2 ** size - 1``
     must evaluate to ``True`` or an error will be raised).
 
+    N.B., the ``size`` and ``value`` arguments can be passed positionally or by name:
+
+    ``BV(8,0xff) == BV(size=8, value=0xff) == BV(value=0xff, size=8)``
+
     ``BV(bv : BitVector)`` will create an equivalent ``BV`` to the given ``BitVector`` value.
     """
     __size  : int
     __value : int
 
-    def __init__(self, size_or_bv : Union[int, BitVector], value : Optional[int] = None) -> None:
+    def __init__(self, size : Union[int, BitVector], value : Optional[int] = None) -> None:
         """Initialize a ``BV`` from a ``BitVector`` or from size and value nonnegative integers."""
         if value is not None:
-            if not isinstance(size_or_bv, int) or size_or_bv < 0:
-                raise ValueError(f'`size` parameter to BV must be a nonnegative integer but was given {size_or_bv!r}.')
-            self.__size = size_or_bv
+            if not isinstance(size, int) or size < 0:
+                raise ValueError(f'`size` parameter to BV must be a nonnegative integer but was given {size!r}.')
+            self.__size = size
             if not isinstance(value, int):
                 raise ValueError(f'{value!r} is not an integer value to initilize a bit vector of size {self.__size!r} with.')
             self.__value = value
-        elif not isinstance(size_or_bv, BitVector):
-            raise ValueError(f'BV can only be created from a single value when that value is a BitVector, but got {size_or_bv!r}')
+        elif not isinstance(size, BitVector):
+            raise ValueError(f'BV can only be created from a single value when that value is a BitVector, but got {size!r}')
         else:
-            self.__size = len(size_or_bv)
-            self.__value = int(size_or_bv)
+            self.__size = len(size)
+            self.__value = int(size)
         if self.__value < 0 or self.__value.bit_length() > self.__size:
             raise ValueError(f'{self.__value!r} is not representable as an unsigned integer with {self.__size!r} bits.')
 

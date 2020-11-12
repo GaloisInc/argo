@@ -1,6 +1,7 @@
 import unittest
 import random
 from bitvector import BV
+from BitVector import BitVector
 
 
 class BVBaseTest(unittest.TestCase):
@@ -36,10 +37,14 @@ class BVBaseTest(unittest.TestCase):
 
 class BVBasicTests(BVBaseTest):
     def test_constructor1(self):
-        b = BV(0,0)
-        self.assertBVEqual(b, 0, 0)
+        b = BV(BitVector(intVal = 0, size = 8))
+        self.assertBVEqual(b, 8, 0)
+        b = BV(BitVector(intVal = 42, size = 8))
+        self.assertBVEqual(b, 8, 42)
         
     def test_constructor2(self):
+        b = BV(0,0)
+        self.assertBVEqual(b, 0, 0)
         b = BV(8,42)
         self.assertBVEqual(b, 8, 42)
 
@@ -73,6 +78,10 @@ class BVBasicTests(BVBaseTest):
         self.assertUnOpExpected(
             lambda b: BV(b.size(), int(b)),
             lambda b: b)
+
+    def test_size(self):
+        self.assertEqual(BV(0,0).size(), 0)
+        self.assertEqual(BV(9,255).size(), 9)
 
     def test_len(self):
         self.assertEqual(len(BV(0,0)), 0)

@@ -1,22 +1,36 @@
 
 from functools import reduce
 from typing import Any, Iterable, List, Union
+from BitVector import BitVector
+
 
 class BV:
-    """A class representing a cryptol bit vector (i.e., sequence of bits).
+    """A class representing a cryptol bit vector (i.e., a sequence of bits).
 
-    :param size: Number of bits available to the bit vector (must be nonnegative).
-    :type size: int
-    :param value: Nonnegative integer value the bit vector represents (must be less than ``2 ** size``).
-    :type value: int
+    ``BV(size : int, value : int)`` will create a ``BV`` of length ``size`` and bits corresponding
+    to the unsigned integer representation of ``value`` (N.B., ``0 <= size <= value <= 2 ** size - 1``
+    must evaluate to ``True`` or an error will be raised).
+
+    ``BV(bv : BitVector)`` will create an equivalent ``BV`` to the given ``BitVector`` value.
     """
-    def __init__(self, size : int, value : int) -> None:
-        if not isinstance(size, int) or size < 0:
-            raise ValueError('`size` parameter to BV must be a nonnegative integer but was given {size!r}.')
-        self.__size = size
-        if not isinstance(value, int) or value < 0 or value.bit_length() > size:
-            raise ValueError(f'{value!r} is not a nonnegative integer representable as an unsigned integer with {size!r} BV.')
-        self.__value = value
+    def __init__(self, *args) -> None:
+        if len(args) == 1:
+            if not isinstance(args[0], BitVector):
+                raise ValueError(f'BV can only be created from a single value when that value is a BitVector, but got {args[0]!r}')
+            else:
+                self.__size = len(args[0])
+                self.__value = int(args[0])
+        elif len(args) == 2:
+            if not isinstance(args[0], int) or args[0] < 0:
+                raise ValueError(f'`size` parameter to BV must be a nonnegative integer but was given {args[0]!r}.')
+            self.__size = args[0]
+            if not isinstance(args[1], int):
+                raise ValueError(f'{args[1]!r} is not an integer value to initilize a bit vector of size {self.__size!r} with.')
+            self.__value = args[1]
+        else:
+            raise ValueError(f'BV constructor expects 1 or 2 arguments, but got {len(args)!r}.')
+        if self.__value < 0 or self.__value.bit_length() > self.__size:
+            raise ValueError(f'{self.__value!r} is not representable as an unsigned integer with {self.__size!r} bits.')
 
     def hex(self) -> str:
         """Return the (padded) hexadecimal string for the unsigned integer this ``BV`` represents.

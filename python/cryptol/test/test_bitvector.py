@@ -427,3 +427,18 @@ class BVBasicTests(BVBaseTest):
             BV(8,0b11001100).with_bit(8,False)
         with self.assertRaises(ValueError):
             BV(8,0b11001100).with_bit(-1,False)
+
+    def test_with_bits(self):
+        self.assertEqual(BV(1,0b0).with_bits(0,BV(1,0b0)), BV(1,0b0))
+        self.assertEqual(BV(1,0b0).with_bits(0,BV(1,0b1)), BV(1,0b1))
+        self.assertEqual(BV(1,0b1).with_bits(0,BV(1,0b0)), BV(1,0b0))
+        self.assertEqual(BV(8,0b11010101).with_bits(3,BV(3,0b101)), BV(8,0b11101101))
+        self.assertEqual(BV(8,0b11010101).with_bits(5,BV(3,0b101)), BV(8,0b10110101))
+        with self.assertRaises(ValueError):
+            BV(8,0b11000101).with_bits(-1,BV(3,0b111))
+        with self.assertRaises(ValueError):
+            BV(8,0b11000101).with_bits(0,"bad")
+        with self.assertRaises(ValueError):
+            BV(8,0b11000101).with_bits(0,BV(9,0))
+        with self.assertRaises(ValueError):
+            BV(8,0b11000101).with_bits(1,BV(8,0))

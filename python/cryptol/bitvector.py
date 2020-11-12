@@ -196,6 +196,20 @@ class BV:
             return BV(self.__size, self.__value & mask)
 
 
+    def with_bits(self, low : int, bits : 'BV') -> 'BV':
+        """Return a ``BV`` identical to ``self`` but with the bits from ``low`` to
+        ``low + bits.size() - 1`` replaced by the bits from ``bits``."""
+        if not isinstance(low, int) or low < 0 or low >= self.__size:
+            raise ValueError(f'{low!r} is not a valid low bit index for {self!r}')
+        elif not isinstance(bits, BV):
+            raise ValueError(f'Expected a BV but got {bits!r}')
+        elif low + bits.size() > self.__size:
+            raise ValueError(f'{bits!r} does not fit within {self!r} when starting from low bit index {low!r}.')
+        else:
+            wider = self.size() - (low + bits.size())
+            mask = (BV(bits.size(), 2 ** bits.size() - 1) << low).widen(wider)
+            return (self & ~mask) | (bits << low).widen(wider)
+
     def to_bytes(self) -> bytes:
         """Convert the given ``BV`` into a python native ``bytes`` value.
         

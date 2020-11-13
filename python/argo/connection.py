@@ -7,6 +7,7 @@ import json
 import os
 import queue
 import re
+import requests
 import socket
 import subprocess
 import signal
@@ -273,6 +274,41 @@ class RemoteSocketProcess(ServerProcess):
     def send_one_message(self, message: str) -> None:
         msg_bytes = netstring.encode(message)
         self.socket.send(msg_bytes)
+
+
+class HttpProcess(ServerProcess):
+    """A ``ServerProcess`` that contacts a remote HTTP server.
+    """
+    buf: bytearray
+    socket: socket.socket
+    ipv6: bool
+
+    def __init__(self, url: str):
+        """
+           :param host: The hostname to connect to (e.g. ``"localhost"``)
+           :param port: The port on which to connect
+           :param path: The path to send requests to
+        """
+        self.url = url
+        self.waiting_replies = []
+        super().__init__()
+
+    def setup(self) -> None:
+        pass
+
+    def get_one_reply(self) -> Optional[str]:
+        if len(self.waiting_replies) == 0:
+            return None
+        else:
+            return self.waiting_replies.pop()
+
+    def send_one_message(self, message: str) -> None:
+
+        self.waiting_replies.append(
+            requests.post(self.url,
+                          headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
+                          data=message).text
+        )
 
 
 def enqueue_netstring(out: IO[bytes], queue: queue.Queue[str]) -> None:

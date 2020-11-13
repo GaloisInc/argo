@@ -49,7 +49,7 @@ module Argo
   , serveHandles
   , serveStdIONS
   , serveHandlesNS
-  , serveHTTP
+  , serveHttp
   -- * Request identifiers
   , RequestID(..)
   ) where
@@ -66,6 +66,7 @@ import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
 import Data.Binary.Builder
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BS
+import Data.Foldable (for_)
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (maybeToList)
@@ -73,10 +74,14 @@ import Data.Scientific (Scientific)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Data.Text.Lazy as TL
 import GHC.Stack
+import Network.HTTP.Types.Method (StdMethod(..))
+import Network.HTTP.Types.Status
 import Network.Wai (strictRequestBody)
 import System.IO
 import System.IO.Silently
+import Text.Read (readMaybe)
 import Web.Scotty hiding (raise, params, get, put)
 
 import Argo.ServerState
@@ -697,28 +702,72 @@ serveHandlesNS hLog hIn hOut app =
                 Nothing -> return ()
 
 
-serveHTTP ::
+-- | Serve the application over HTTP, according to the specification
+-- at https://www.simple-is-better.org/json-rpc/transport_http.html
+serveHttp ::
   HasCallStack =>
-  App s  {- JSON-RPC app -} ->
-  Int    {- port number  -} ->
+  String {- ^ Request path -} ->
+  App s  {- ^ JSON-RPC app -} ->
+  Int    {- ^ port number  -} ->
   IO ()
-serveHTTP app port =
-    scotty port $ post "/:whatevs" $
-    do req <- request
-       body <- liftIO $ strictRequestBody req
-       -- NOTE: Making the assumption that WAI forks a thread - TODO: verify this
-       stream $ \put flush ->
-         do output <- synchronized (\ str -> put (fromByteString (BS.toStrict str)) *> flush)
-            let reportError =
-                  \ (exn :: JSONRPCException) ->
-                    output (JSON.encode exn <> BS.singleton newline)
-                reportOtherException =
-                  \ (exn :: SomeException) ->
-                    output $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
-                             <> BS.singleton newline
-            (case JSON.eitherDecode body of
-               Left msg -> throw (parseError (T.pack msg))
-               Right req -> handleRequest (T.hPutStrLn stderr) output app req)
-             `catch` reportError
-             `catch` reportOtherException
- where newline = 0x0a -- ASCII/UTF8
+serveHttp path app port =
+    scotty port $
+      do post (literal path) $
+           do ensureTextJSON "Content-Type" unsupportedMediaType415
+              ensureTextJSON "Accept" badRequest400
+              validateLength
+              b <- body
+              replyBodyContents <- liftIO $ newMVar mempty
+              let respond = \str -> modifyMVar replyBodyContents $ \old -> pure (old <> str, ())
+              res <-
+                liftIO $
+                  (case JSON.eitherDecode b of
+                    Left msg ->
+                      throwIO (parseError (T.pack msg))
+                    Right req ->
+                      Right <$> handleRequest (T.hPutStrLn stderr) respond app req)
+                      `catch` (\ (exn :: JSONRPCException) ->
+                                 pure $ Left $ JSON.encode exn)
+                      `catch` (\ (exn :: SomeException) ->
+                                 pure $ Left $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) }))
+              case res of
+                Left err ->
+                  do setHeader "Content-Type" "application/json"
+                     status badRequest400
+                     raw $ err <> BS.singleton newline
+                Right () ->
+                  do setHeader "Content-Type" "application/json"
+                     body <- liftIO (readMVar replyBodyContents)
+                     status $ if body == ""
+                              then status204
+                              else ok200
+                     raw body
+         -- Return a more informative status code when the wrong HTTP method is used
+         for_ [GET, HEAD, PUT, DELETE, TRACE, CONNECT, OPTIONS] $
+           \method ->
+             addroute method (literal path) $
+             do status methodNotAllowed405
+                text "Please use POST requests to access the API."
+
+  where
+    newline = 0x0a -- ASCII/UTF8
+    validateLength =
+      do len <- header "Content-Length"
+         case len >>= (readMaybe . TL.unpack) of
+           Nothing -> do status lengthRequired411
+                         text "Missing or invalid \"Content-Length\" header."
+                         finish
+           Just l ->
+             do b <- body
+                if BS.length b == l
+                  then pure ()
+                  else do status badRequest400
+                          text "Mismatched length"
+                          finish
+    ensureTextJSON h stat =
+      do contentType <- header h
+         if contentType == Just "application/json"
+           then pure ()
+           else do status stat
+                   text $ "The header \"" <> h <> "\" should be \"application/json\"."
+                   finish

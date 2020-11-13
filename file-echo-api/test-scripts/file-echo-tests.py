@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import requests
 import signal
 import subprocess
 import sys
@@ -100,16 +101,27 @@ env = os.environ.copy()
 
 # Launch a separate process for the RemoteSocketProcess test
 p = subprocess.Popen(
-    ["cabal", "v2-exec", "file-echo-api", "--verbose=0", "--", "--port", "50005"],
+    ["cabal", "v2-exec", "file-echo-api", "--verbose=0", "--", "socket", "--port", "50005"],
     stdout=subprocess.DEVNULL,
     stdin=subprocess.DEVNULL,
     stderr=subprocess.DEVNULL,
     start_new_session=True,
     env=env)
 
+p_http = subprocess.Popen(
+           ["cabal", "v2-exec", "file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080"],
+           stdout=subprocess.DEVNULL,
+           stdin=subprocess.DEVNULL,
+           stderr=subprocess.DEVNULL,
+           start_new_session=True,
+           env=env)
+
+
 time.sleep(5)
 assert(p is not None)
 assert(p.poll() is None)
+assert(p_http is not None)
+assert(p_http.poll() is None)
 
 # Test argo's RemoteSocketProcess
 c = argo.ServerConnection(
@@ -122,11 +134,46 @@ os.killpg(os.getpgid(p.pid), signal.SIGKILL)
 
 # Test argo's DynamicSocketProcess
 c = argo.ServerConnection(
-       argo.DynamicSocketProcess("cabal v2-exec file-echo-api --verbose=0 -- --port 50005"))
+       argo.DynamicSocketProcess("cabal v2-exec file-echo-api --verbose=0 -- socket --port 50005"))
 
 run_tests(c)
 
 c = argo.ServerConnection(
-       argo.StdIOProcess("cabal v2-exec file-echo-api --verbose=0 -- --stdio"))
+       argo.StdIOProcess("cabal v2-exec file-echo-api --verbose=0 -- stdio"))
 
 run_tests(c)
+
+
+
+c_http = argo.ServerConnection(
+            argo.HttpProcess(url="http://localhost:8080/"))
+
+run_tests(c_http)
+
+### Additional tests for the HTTP server ###
+
+# Ensure that only POST is allowed to the designated URL
+get_response = requests.get("http://localhost:8080/")
+assert(get_response.status_code == 405)
+
+# Ensure that other URLs give 404
+get_response = requests.get("http://localhost:8080/some/other/resource")
+assert(get_response.status_code == 404)
+
+post_response = requests.post("http://localhost:8080/some/other/resource")
+assert(post_response.status_code == 404)
+
+# Wrong content-type
+post_response = requests.post("http://localhost:8080/")
+assert(post_response.status_code == 415)
+
+good_headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
+
+# Parse error for request body
+post_response = requests.post("http://localhost:8080/", headers=good_headers)
+assert(post_response.status_code == 400)
+
+post_response = requests.request('POST', "http://localhost:8080/", headers=good_headers, data='{"id":0, "jsonrpc": "2.0", "method": "clear", "params":{"state": null}}')
+assert(post_response.status_code == 200)
+
+os.killpg(os.getpgid(p_http.pid), signal.SIGKILL)

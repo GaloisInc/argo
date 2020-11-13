@@ -35,6 +35,7 @@ common deps
     filelock                    ^>= 0.1,
     filepath                    ^>= 1.4,
     hashable                    >= 1.2 && < 1.4,
+    http-types                  ^>= 0.12,
     lens                        >= 4.17 && < 4.20,
     mtl                         ^>= 2.2,
     network                     >= 3.0.1,

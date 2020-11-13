@@ -14,7 +14,7 @@ import signal
 import sys
 import threading
 import time
-from typing import Any, Dict, IO, Mapping, Optional, Union
+from typing import Any, Dict, List, IO, Mapping, Optional, Union
 
 from . import netstring
 
@@ -282,6 +282,7 @@ class HttpProcess(ServerProcess):
     buf: bytearray
     socket: socket.socket
     ipv6: bool
+    waiting_replies: List[str]
 
     def __init__(self, url: str):
         """

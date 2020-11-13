@@ -186,3 +186,12 @@ scriptTest execPath makeArgs scriptPath =
              "Exit code " <> show code <> ": "
              <> execPath <> " " <> concat (intersperse " " args)
              <> ":\nstdout: " <> stdout <> "\nstderr: " <> stderr
+
+
+-- | Given the name of the pyhon executable,
+-- run `python -m unittest discover` via 
+-- readProcessWithExitCode and return the result.
+runPythonUnitTests :: String -> IO (ExitCode, String, String)
+runPythonUnitTests pyExeName =
+  let args = ["-m", "unittest", "discover"]
+  in readProcessWithExitCode pyExeName args ""

@@ -8,6 +8,7 @@ import Control.Monad
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.HUnit.ScriptExit
+import System.Exit
 
 import Paths_argo_python
 import Argo.PythonBindings
@@ -30,5 +31,12 @@ main =
                tests <- makeScriptTests dir [mypy]
                pure (testGroup ("Typechecking: " <> name) tests)
 
+          -- Have python discover and run unit tests
+          (unitExitCode, unitStdOut, unitStdErr) <-
+            runPythonUnitTests $ testLangExecutable python
+
           defaultMain $
-            testGroup "Tests for Python components" allTests
+            testGroup "Tests for Python components" $
+              allTests ++ 
+              [testCase "Python Unit Tests" $
+                unitExitCode @?= ExitSuccess]

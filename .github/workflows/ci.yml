@@ -40,6 +40,10 @@ jobs:
       run: cabal update
       # Build macaw-base dependencies and crucible separately just so later
       # steps are less verbose and major dependency failures are separate.
+    - name: Install python dependencies
+      working-directory: ./python
+      run: |
+        if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi
     - name: Build
       run: |
         cabal build all
@@ -47,3 +51,5 @@ jobs:
       run: cabal test argo
     - name: Cabal file-echo-api tests
       run: cabal test file-echo-api
+    - name: Python unit tests
+      run: cabal test python

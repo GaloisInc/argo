@@ -1,5 +1,5 @@
 BitVector==3.4.9
 
-mypy==0.770
+mypy==0.790
 
 requests==2.24.0

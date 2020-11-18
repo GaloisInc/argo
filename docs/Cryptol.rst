@@ -162,7 +162,7 @@ The tag values in objects can be:
 
 ``record``
   The expression is a record. The field ``data`` is a JSON
-  object that maps record field names to :ref:`JSON Cryptol types <cryptol-json-expression>`.
+  object that maps record field names to :ref:`JSON Cryptol expressions <cryptol-json-expression>`.
 
 ``sequence``
   The expression is a sequence. The field ``data`` contains a

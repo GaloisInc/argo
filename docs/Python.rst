@@ -1,11 +1,9 @@
-Python Bindings
-===============
-
-General-Purpose
----------------
+===============================
+General-Purpose Python Bindings
+===============================
 
 Module ``argo.connection``
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+==========================
 
 This module contains utilities that are useful for connecting to servers that implement the Argo protocols. To interact with a server, a process and a connection are necessary. The variants of processes are used to manage the different transport layers that are available, such as sockets or pipes, as well as server process lifecycles. They are:
 
@@ -26,44 +24,15 @@ The other necessary component is a :class:`argo.connection.ServerConnection`. Wh
 
 
 Module ``argo.interaction``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+===========================
 
 .. automodule:: argo.interaction
    :members:
    :special-members:
 
 Module ``argo.netstring``
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+=========================
 
 .. automodule:: argo.netstring
-   :members:
-   :special-members:
-
-
-SAW
----
-
-Cryptol
--------
-
-
-Module ``cryptol``
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. automodule:: cryptol
-
-.. autofunction:: cryptol.connect
-
-
-.. autoclass:: cryptol.CryptolConnection
-   :members:
-   :special-members:
-
-
-
-Module ``cryptol.cryptoltypes``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. automodule:: cryptol.cryptoltypes
    :members:
    :special-members:

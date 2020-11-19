@@ -43,6 +43,27 @@ Saving Terms
 JVM Verification
 ================
 
+Loading Classes
+---------------
+
+:Method name:
+
+:Parameters:
+
+Verifying
+---------
+
+:Method name:
+
+:Parameters:
+
+Assuming
+--------
+
+:Method name:
+
+:Parameters:
+
 LLVM Verification
 =================
 

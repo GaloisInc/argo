@@ -15,6 +15,27 @@ Additionally, SAW verification relies on Cryptol, and some SAW methods may throw
 Cryptol Module Management
 =========================
 
+Loading Modules
+---------------
+
+:Method name:
+
+:Parameters:
+
+Loading Files
+-------------
+
+:Method name:
+
+:Parameters:
+
+Saving Terms
+------------
+
+:Method name:
+
+:Parameters:
+
 JVM Verification
 ================
 

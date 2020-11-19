@@ -42,3 +42,4 @@ __pycache__
 .mypy_cache
 python/_build/*
 virtenv
+.vscode

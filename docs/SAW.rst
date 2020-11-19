@@ -19,22 +19,26 @@ Loading Modules
 ---------------
 
 :Method name:
-
+  ``SAW/Cryptol/load module``
 :Parameters:
+  - ``module name``: The name of the Cryptol module to be loaded.
 
 Loading Files
 -------------
 
 :Method name:
-
+  ``SAW/Cryptol/load file``
 :Parameters:
+  - ``file``: The name of the Cryptol source file to be loaded.
 
 Saving Terms
 ------------
 
 :Method name:
-
+  ``SAW/Crpytol/save term``
 :Parameters:
+  - ``name``: The name to bind the value of ``expression`` to.
+  - ``expression``: The Cryptol expression the value of ``name`` is bound to.
 
 JVM Verification
 ================

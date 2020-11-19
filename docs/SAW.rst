@@ -86,5 +86,33 @@ Assuming
 LLVM Verification
 =================
 
+Loading Modules
+---------------
+
+:Method name:
+
+:Parameters:
+
+Verifying (General)
+-------------------
+
+:Method name:
+
+:Parameters:
+
+Verifying (x86)
+---------------
+
+:Method name:
+
+:Parameters:
+
+Assuming
+--------
+
+:Method name:
+
+:Parameters:
+
 Proof Management
 ================

@@ -90,15 +90,24 @@ Loading Modules
 ---------------
 
 :Method name:
-
+  ``SAW/LLVM/load module``
 :Parameters:
+  - ``name``: The name to bind the loaded bitcode file to on the server.
+  - ``bitcode file``: The path to the bitcode file to load and bind to ``name`` on the server.
 
 Verifying (General)
 -------------------
 
 :Method name:
-
+  ``SAW/LLVM/verify``
 :Parameters:
+  - ``module``: The name of the (previously loaded) module containing the function to verify.
+  - ``function``: The name of the function to verify.
+  - ``lemmas``: A list containing the names of previously proved lemmas to be used in compositional verification.
+  - ``check sat``: A Boolean value indicating whether or not to perform path satisfiability checking.
+  - ``contract``: The specification to perform verification against.
+  - ``script``: The proof script to use for verification.
+  - ``lemma name``: The name to bind the result of verification to on the server.
 
 Verifying (x86)
 ---------------

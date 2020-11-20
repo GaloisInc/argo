@@ -38,7 +38,7 @@ Saving Terms
   ``SAW/Crpytol/save term``
 :Parameters:
   - ``name``: The name to bind the value of ``expression`` to on the server.
-  - ``expression``: The Cryptol expression the value of ``name`` is bound to on the server.
+  - ``expression``: The Cryptol expression to bind the value of ``name`` to on the server.
 
 JVM Verification
 ================

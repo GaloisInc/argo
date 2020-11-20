@@ -137,21 +137,31 @@ Making Simpsets
 ---------------
 
 :Method name:
-
+  ``SAW/make simpset``
 :Parameters:
+  - ``elements``: A list of names bound to terms to add to the simpset.
+  - ``result``: The name to bind the simpset to on the server.
 
 Running Proof Scripts
 ---------------------
 
 :Method name:
-
+  ``SAW/prove``
 :Parameters:
-
+  - ``script``: The proof script to run.
+  - ``term``: The term to run the proof script against.
 :Return fields:
+  - ``status``: A string (either ``valid`` or ``invalid``) indicating whether the proof went through successfully or not.
 
 Setting Options
 ---------------
 
 :Method name:
-
+  ``SAW/set option``
 :Parameters:
+  - ``option``: The name of the option to set. This is one of:
+
+    * ``lax arithmetic``
+    * ``SMT array memory model``
+    * ``What4 hash consing``
+  - ``value``: A Boolean value indicating whether to enable/disable the feature named by ``option``.

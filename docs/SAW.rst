@@ -40,12 +40,6 @@ Saving Terms
   - ``name``: The name to bind the value of ``expression`` to on the server.
   - ``expression``: The Cryptol expression the value of ``name`` is bound to on the server.
 
-Specifications
-==============
-
-Proof Scripts
-=============
-
 JVM Verification
 ================
 
@@ -113,15 +107,28 @@ Verifying (x86)
 ---------------
 
 :Method name:
-
+  ``SAW/LLVM/verify x86``
 :Parameters:
+  - ``module``: The name of the (previously loaded) module containing the function to verify.
+  - ``object file``: The path to the x86 object file containing the function to verify.
+  - ``function``: The name of the function to verify.
+  - ``globals``: A list containing the global allocations needed for the verification task.
+  - ``lemmas``: A list containing the names of previously proved lemmas to be used in compositional verification.
+  - ``check sat``: A Boolean value indicating whether or not to perform path satisfiability checking.
+  - ``contract``: The specification to perform verification against.
+  - ``script``: The proof script to use for verification.
+  - ``lemma name``: The name to bind the result of verification to on the server.
 
 Assuming
 --------
 
 :Method name:
-
+  ``SAW/LLVM/assume``
 :Parameters:
+  - ``module``: The name of the (previously loaded) *class* containing the function/method to assume verified.
+  - ``function``: The name of the function/method to assume verified.
+  - ``contract``: The specification to assume for the given function/method.
+  - ``lemma name``: The name to bind the result of verification to on the server.
 
 Proof Management
 ================

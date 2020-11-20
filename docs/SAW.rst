@@ -56,7 +56,7 @@ Loading Classes
   ``SAW/JVM/load class``
 :Parameters:
   - ``name``: The name to bind the loaded class to on the server.
-  - ``class``: The name of the class to load and bind to ``name`` on the server.
+  - ``class``: The name of the class to load and bind the value of ``name`` to on the server.
 
 Verifying
 ---------

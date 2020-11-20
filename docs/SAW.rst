@@ -132,3 +132,26 @@ Assuming
 
 Proof Management
 ================
+
+Making Simpsets
+---------------
+
+:Method name:
+
+:Parameters:
+
+Running Proof Scripts
+---------------------
+
+:Method name:
+
+:Parameters:
+
+:Return fields:
+
+Setting Options
+---------------
+
+:Method name:
+
+:Parameters:

@@ -164,4 +164,5 @@ Setting Options
     * ``lax arithmetic``
     * ``SMT array memory model``
     * ``What4 hash consing``
+
   - ``value``: A Boolean value indicating whether to enable/disable the feature named by ``option``.

@@ -62,7 +62,7 @@ Verifying
   - ``function``: The name of the function/method to verify.
   - ``lemmas``: A list containing the names of previously proved lemmas to be used in compositional verification.
   - ``check sat``: A Boolean value indicating whether or not to perform path satisfiability checking.
-  - ``contract``: The specification to perform verification against.
+  - ``contract``: The :ref:`specification<specifications>` to perform verification against.
   - ``script``: The proof script to use for verification.
   - ``lemma name``: The name to bind the result of verification to on the server.
 
@@ -74,7 +74,7 @@ Assuming
 :Parameters:
   - ``module``: The name of the (previously loaded) *class* containing the function/method to assume verified.
   - ``function``: The name of the function/method to assume verified.
-  - ``contract``: The specification to assume for the given function/method.
+  - ``contract``: The :ref:`specification<specifications>` to assume for the given function/method.
   - ``lemma name``: The name to bind the result of verification to on the server.
 
 LLVM Verification
@@ -99,7 +99,7 @@ Verifying (General)
   - ``function``: The name of the function to verify.
   - ``lemmas``: A list containing the names of previously proved lemmas to be used in compositional verification.
   - ``check sat``: A Boolean value indicating whether or not to perform path satisfiability checking.
-  - ``contract``: The specification to perform verification against.
+  - ``contract``: The :ref:`specification<specifications>` to perform verification against.
   - ``script``: The proof script to use for verification.
   - ``lemma name``: The name to bind the result of verification to on the server.
 
@@ -115,7 +115,7 @@ Verifying (x86)
   - ``globals``: A list containing the global allocations needed for the verification task.
   - ``lemmas``: A list containing the names of previously proved lemmas to be used in compositional verification.
   - ``check sat``: A Boolean value indicating whether or not to perform path satisfiability checking.
-  - ``contract``: The specification to perform verification against.
+  - ``contract``: The :ref:`specification<specifications>` to perform verification against.
   - ``script``: The proof script to use for verification.
   - ``lemma name``: The name to bind the result of verification to on the server.
 
@@ -127,7 +127,7 @@ Assuming
 :Parameters:
   - ``module``: The name of the (previously loaded) *class* containing the function/method to assume verified.
   - ``function``: The name of the function/method to assume verified.
-  - ``contract``: The specification to assume for the given function/method.
+  - ``contract``: The :ref:`specification<specifications>` to assume for the given function/method.
   - ``lemma name``: The name to bind the result of verification to on the server.
 
 Proof Management
@@ -166,6 +166,8 @@ Setting Options
     * ``What4 hash consing``
 
   - ``value``: A Boolean value indicating whether to enable/disable the feature named by ``option``.
+
+.. _specifications:
 
 Specifications
 ==============

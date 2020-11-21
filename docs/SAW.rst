@@ -179,6 +179,8 @@ these specifications are represented by a JSON object with the following fields:
   A list of symbolic variables introduced in the initial state section of the specification. These variables
   are represented by a JSON object containing three fields:
 
+.. _contract-vars:
+
   - ``server name``: The name of the variable on the server.
   - ``name``: The "display name" of the variable, used in debugging output.
   - ``type``: The LLVM or JVM type of this variable.
@@ -190,6 +192,8 @@ these specifications are represented by a JSON object with the following fields:
   A list of allocations in the initial state section of the specification. In preconditions,
   allocations specify that the function being verified expects a pointer to the allocated memory
   to exist. An allocation is a JSON object containing four fields, one of which is optional:
+
+.. _allocation:
 
   - ``server name``: The name by which the allocation is referred to on the server.
   - ``type``: The LLVM or JVM type of the data for which space is being allocated.
@@ -203,29 +207,31 @@ these specifications are represented by a JSON object with the following fields:
   A list of 'points-to' relationships in the initial state section of the specification. These
   relationships are captured in a JSON object containing two fields:
 
+.. _points-to:
+
   - ``pointer``: A Crucible Setup value representing the pointer.
   - ``points to``: A Crucible Setup value representing the referent of ``pointer``.
 
 ``argument vals``
-A list of Crucible Setup values representing the arguments to the function being verified.
+  A list of Crucible Setup values representing the arguments to the function being verified.
 
 ``post vars``
-A list of variables in the final state section of the specification. While in many cases this
-list will be empty, it is sometimes useful to specify that functions return arbitrary values.
-These variables are represented in the same way as those under ``pre vars`` above.
+  A list of variables in the final state section of the specification. While in many cases this
+  list will be empty, it is sometimes useful to specify that functions return arbitrary values.
+  These variables are represented in the same way as :ref:`above<contract-vars>`.
 
 ``post conds``
-A list of the specification's postconditions, as Cryptol expressions.
+  A list of the specification's postconditions, as Cryptol expressions.
 
 ``post allocated``
-A list of allocations in the final state section of the specification. In postconditions,
-allocations specify that the function being verified allocated memory. An allocation is
-represented in the same was as under ``pre conds`` above.
+  A list of allocations in the final state section of the specification. In postconditions,
+  allocations specify that the function being verified allocated memory. An allocation is
+  represented in the same was as :ref:`above<allocation>`.
 
 ``post points tos``
-A list of 'points-to' relationships in the final state section of the specification. These
-relationships are represented in the same was as under ``pre points to`` above.
+  A list of 'points-to' relationships in the final state section of the specification. These
+  relationships are represented in the same was as :ref:`above<points-to>`.
 
 
 ``return val``
-An optional Crucible Setup value specifying the expected return value of the function being verified.
+  An optional Crucible Setup value specifying the expected return value of the function being verified.

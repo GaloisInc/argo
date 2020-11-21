@@ -209,11 +209,11 @@ these specifications are represented by a JSON object with the following fields:
 
 .. _points-to:
 
-  - ``pointer``: A Crucible Setup value representing the pointer.
-  - ``points to``: A Crucible Setup value representing the referent of ``pointer``.
+  - ``pointer``: A :ref:`Crucible Setup value<setup-values>` representing the pointer.
+  - ``points to``: A :ref:`Crucible Setup value<setup-values>` representing the referent of ``pointer``.
 
 ``argument vals``
-  A list of Crucible Setup values representing the arguments to the function being verified.
+  A list of :ref:`Crucible Setup values<setup-values>` representing the arguments to the function being verified.
 
 ``post vars``
   A list of variables in the final state section of the specification. While in many cases this
@@ -234,7 +234,7 @@ these specifications are represented by a JSON object with the following fields:
 
 
 ``return val``
-  An optional Crucible Setup value specifying the expected return value of the function being verified.
+  An optional :ref:`Crucible Setup value<setup-values>` specifying the expected return value of the function being verified.
 
 .. _proof-scripts:
 
@@ -278,3 +278,8 @@ A proof script is represented as a JSON object with a single field:
   ``trivial``
     States that the goal should be trivially true (either the constant ``True`` or a function that immediately
     returns ``True``. This tactic fails if that is not the case.
+
+.. _setup-values:
+
+Crucible Setup Values
+=====================

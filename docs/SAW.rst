@@ -63,7 +63,7 @@ Verifying
   - ``lemmas``: A list containing the names of previously proved lemmas to be used in compositional verification.
   - ``check sat``: A Boolean value indicating whether or not to perform path satisfiability checking.
   - ``contract``: The :ref:`specification<specifications>` to perform verification against.
-  - ``script``: The proof script to use for verification.
+  - ``script``: The :ref:`proof script<proof-scripts>` to use for verification.
   - ``lemma name``: The name to bind the result of verification to on the server.
 
 Assuming
@@ -100,7 +100,7 @@ Verifying (General)
   - ``lemmas``: A list containing the names of previously proved lemmas to be used in compositional verification.
   - ``check sat``: A Boolean value indicating whether or not to perform path satisfiability checking.
   - ``contract``: The :ref:`specification<specifications>` to perform verification against.
-  - ``script``: The proof script to use for verification.
+  - ``script``: The :ref:`proof script<proof-scripts>` to use for verification.
   - ``lemma name``: The name to bind the result of verification to on the server.
 
 Verifying (x86)
@@ -116,7 +116,7 @@ Verifying (x86)
   - ``lemmas``: A list containing the names of previously proved lemmas to be used in compositional verification.
   - ``check sat``: A Boolean value indicating whether or not to perform path satisfiability checking.
   - ``contract``: The :ref:`specification<specifications>` to perform verification against.
-  - ``script``: The proof script to use for verification.
+  - ``script``: The :ref:`proof script<proof-scripts>` to use for verification.
   - ``lemma name``: The name to bind the result of verification to on the server.
 
 Assuming
@@ -148,8 +148,8 @@ Running Proof Scripts
 :Method name:
   ``SAW/prove``
 :Parameters:
-  - ``script``: The proof script to run.
-  - ``term``: The term to run the proof script against.
+  - ``script``: The :ref:`proof script<proof-scripts>` to run.
+  - ``term``: The name of a term bound on the server to run the proof script against.
 :Return fields:
   - ``status``: A string (either ``valid`` or ``invalid``) indicating whether the proof went through successfully or not.
 
@@ -235,3 +235,46 @@ these specifications are represented by a JSON object with the following fields:
 
 ``return val``
   An optional Crucible Setup value specifying the expected return value of the function being verified.
+
+.. _proof-scripts:
+
+Proof Scripts
+=============
+
+SAW allows one to direct a verification task using a proof script, which is simply a sequence of proof
+tactics to apply. Very commonly, the proof script provided in a verification task is simply an instruction
+to use an external SAT/SMT solver such as ABS, Yices, or Z3.
+
+A proof script is represented as a JSON object with a single field:
+
+``tactics``
+  A list of proof tactics to apply to the context/goal. A proof tactic is represented as a JSON object
+  containing a tag named ``tactic``, with any further fields determined by this tag. These tag values can be:
+
+  ``use prover``
+    Apply an external prover to the goal. There is an additional field ``prover``, which is a JSON object
+    with a field ``name`` specifying what prover to use (one of ``abc``, ``cvc4``, ``rme``, ``yices``, or ``z3``),
+    and a field ``uninterpreted functions`` when ``name`` is one of ``cvc4``, ``yices``, or ``z3``. This
+    field is a list of names of functions taken as uninterpreted/abstract.
+
+  ``unfold``
+    Unfold terms in the context/goal. There is an additional field ``names``, a list of the names bound on
+    the server to unfold.
+
+  ``beta reduce goal``
+    Perform a single beta reduction on the proof goal.
+
+  ``evaluate goal``
+    Fully evaluate the proof goal. There is an additional field ``uninterpreted functions``, a list of names
+    of functions taken as uninterpreted/abstract.
+
+  ``simplify``
+    Simplify the context/goal. There is an additional field ``rules``, a name bound to a simpset on the server.
+
+  ``assume unsat``
+    Assume the goal is unsatisfiable, which in the current implementation of SAW should be interpreted as
+    assuming the property being checked to be true. This is likely to change in the future.
+
+  ``trivial``
+    States that the goal should be trivially true (either the constant ``True`` or a function that immediately
+    returns ``True``. This tactic fails if that is not the case.

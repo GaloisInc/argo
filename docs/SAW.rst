@@ -283,3 +283,18 @@ A proof script is represented as a JSON object with a single field:
 
 Crucible Setup Values
 =====================
+
+Setup Values encompass all values that can occur during symbolic execution, including Cryptol terms,
+pointers, arrays, and structures. They are used extensively when writing the specifications provided to the
+``verify`` commads. Setup Values are represented as JSON objects containing a tag field, ``setup value``,
+that determines the other fields. This tag value can be:
+
+``saved``
+  A term previously saved on the server. There is an additional field ``name`` giving the name bound to the
+  term on the server.
+
+``null value``
+  A null/empty value.
+
+``Cryptol``
+  A Cryptol term. There is an additional field ``expression``, containing a Cryptol expression.

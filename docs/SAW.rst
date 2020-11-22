@@ -183,7 +183,7 @@ these specifications are represented by a JSON object with the following fields:
 
   - ``server name``: The name of the variable on the server.
   - ``name``: The "display name" of the variable, used in debugging output.
-  - ``type``: The :ref:`LLVM<llvm-types>` or JVM type of this variable.
+  - ``type``: The :ref:`LLVM<llvm-types>` or :ref:`JVM<jvm-types>` type of this variable.
 
 ``pre conds``
   A list of the specification's preconditions, as Cryptol expressions.
@@ -196,7 +196,7 @@ these specifications are represented by a JSON object with the following fields:
 .. _allocation:
 
   - ``server name``: The name by which the allocation is referred to on the server.
-  - ``type``: The :ref:`LLVM<llvm-types>` or JVM type of the data for which space is being allocated.
+  - ``type``: The :ref:`LLVM<llvm-types>` or :ref:`JVM<jvm-types>` type of the data for which space is being allocated.
   - ``mutable``: A Boolean value indicating whether the allocated memory is mutable or not.
   - ``alignment``: An integer value indicating where the start of the allocated memory should
     be aligned. This value must be a power of two, and the allocated memory may be aligned at
@@ -327,3 +327,8 @@ that determines the other fields. This tag value can be:
 
 LLVM Types
 ==========
+
+.. _jvm-types:
+
+JVM Types
+=========

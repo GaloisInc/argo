@@ -298,3 +298,27 @@ that determines the other fields. This tag value can be:
 
 ``Cryptol``
   A Cryptol term. There is an additional field ``expression``, containing a Cryptol expression.
+
+``array value``
+  An array value. There is an additional field ``elements``, which is a list of :ref:`Crucible Setup values<setup-values>`
+  to populate the array with.
+
+``field lvalue``
+  A struct field to be assigned to. There are two additional fields:
+
+  - ``base``: A :ref:`Crucible Setup value<setup-values>`, the structure containing the field to assign to.
+  - ``field``: The name of the field to assign to.
+
+``element lvalue``
+  An array element to be assigned to. Theer are two additional fields:
+
+  - ``base``: A :ref:`Crucible Setup value<setup-values>`, the array to be indexed for assignment.
+  - ``index``: An integer giving the index into the array to be assigned to.
+
+``global initializer``
+  A constant global initializer value. There is an additional field ``name``, giving the name of the
+  global variable on the server to access the initializer of.
+
+``global lvalue``
+  A global variable to be assigned to. There is an additional field ``name``, giving the name of the global
+  variable on the server that is to be assigned to.

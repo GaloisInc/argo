@@ -328,6 +328,69 @@ that determines the other fields. This tag value can be:
 LLVM Types
 ==========
 
+For most commands involving the introduction of variables or the allocation of space, the type of data to
+be stored must be provided. Since SAW supports both LLVM and JVM verification, the types from these
+respective architectures must have JSON representations. Both LLVM and JVM types are represented as JSON
+objects with a tag field to indicate any additional information that must/might be present.
+
+The tag field is named ``type``. This tag value can be:
+
+``primitive type``
+  An LLVM primitive type. This is an additional field ``primitive``, which can be any of the following:
+
+  - ``label``: An LLVM label.
+  - ``void``: The LLVM void type.
+  - ``integer``: An LLVM integer. There is an additional field ``size``, an integer giving the number of
+    bytes in the integer type.
+  - ``float``: An LLVM float. There is an additional field, ``float type``, which can be any of the following:
+
+    + ``half``
+    + ``float``
+    + ``double``
+    + ``fp128``
+    + ``x86_fp80``
+    + ``PPC_fp128``
+
+  - ``X86mmx``: An x86 SIMD instruction.
+  - ``metadata``: LLVM metadata.
+
+``type alias``
+  A type alias. There is an additional field ``alias of``, which identifies the type being aliased by name.
+
+``array``
+  An LLVM array. There are two additional fields:
+
+  - ``size``: An integer giving the length of the array.
+  - ``element type``: An :ref:`LLVM type<llvm-types>` describing the array elements.
+
+``function``
+  A function type. There are three additional fields:
+
+  - ``return type``: An :ref:`LLVM type<llvm-types>` describing the return type of the function.
+  - ``argument types``: A list of :ref:`LLVM types<llvm-types>` describing the arguments of the function.
+  - ``varargs``: A Boolean indicating whether this function takes a variable number of arguments.
+
+``pointer``
+  A pointer type. There is an additional field ``to type``, an :ref:`LLVM type<llvm-types>` describing the
+  referent type of the pointer.
+
+``struct``
+  A structure type. There is an additional field ``fields``, a List f :ref:`LLVM types<llvm-types>` describing
+  the structure fields.
+
+``packed struct``
+  A packed structure type. There is an additional field ``fields``, a List f :ref:`LLVM types<llvm-types>` describing
+  the structure fields.
+
+``vector``
+  An LLVM vector. There are two additional fields:
+
+  - ``size``: An integer giving the length of the array.
+  - ``element type``: An :ref:`LLVM type<llvm-types>` describing the array elements.
+
+``opaque``
+  An opaque structure type.
+
 .. _jvm-types:
 
 JVM Types

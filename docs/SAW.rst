@@ -375,11 +375,11 @@ The tag field is named ``type``. This tag value can be:
   referent type of the pointer.
 
 ``struct``
-  A structure type. There is an additional field ``fields``, a List of :ref:`LLVM types<llvm-types>` describing
+  A structure type. There is an additional field ``fields``, a list of :ref:`LLVM types<llvm-types>` describing
   the structure fields.
 
 ``packed struct``
-  A packed structure type. There is an additional field ``fields``, a List of :ref:`LLVM types<llvm-types>` describing
+  A packed structure type. There is an additional field ``fields``, a list of :ref:`LLVM types<llvm-types>` describing
   the structure fields.
 
 ``vector``

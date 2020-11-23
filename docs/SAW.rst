@@ -252,7 +252,7 @@ A proof script is represented as a JSON object with a single field:
   containing a tag named ``tactic``, with any further fields determined by this tag. These tag values can be:
 
   ``use prover``
-    Apply an external prover to the goal. There is an additional field ``prover``, which is a JSON object
+    Apply an external prover to the goal. There is an additional field ``prover`` which is a JSON object
     with a field ``name`` specifying what prover to use (one of ``abc``, ``cvc4``, ``rme``, ``yices``, or ``z3``),
     and a field ``uninterpreted functions`` when ``name`` is one of ``cvc4``, ``yices``, or ``z3``. This
     field is a list of names of functions taken as uninterpreted/abstract.
@@ -297,10 +297,10 @@ that determines the other fields. This tag value can be:
   A null/empty value.
 
 ``Cryptol``
-  A Cryptol term. There is an additional field ``expression``, containing a Cryptol expression.
+  A Cryptol term. There is an additional field ``expression`` containing a Cryptol expression.
 
 ``array value``
-  An array value. There is an additional field ``elements``, which is a list of :ref:`Crucible Setup values<setup-values>`
+  An array value. There is an additional field ``elements`` which is a list of :ref:`Crucible Setup values<setup-values>`
   to populate the array with.
 
 ``field lvalue``
@@ -316,11 +316,11 @@ that determines the other fields. This tag value can be:
   - ``index``: An integer giving the index into the array to be assigned to.
 
 ``global initializer``
-  A constant global initializer value. There is an additional field ``name``, giving the name of the
+  A constant global initializer value. There is an additional field ``name`` giving the name of the
   global variable on the server to access the initializer of.
 
 ``global lvalue``
-  A global variable to be assigned to. There is an additional field ``name``, giving the name of the global
+  A global variable to be assigned to. There is an additional field ``name`` giving the name of the global
   variable on the server that is to be assigned to.
 
 .. _llvm-types:
@@ -336,13 +336,13 @@ objects with a tag field to indicate any additional information that must/might 
 The tag field is named ``type``. This tag value can be:
 
 ``primitive type``
-  An LLVM primitive type. This is an additional field ``primitive``, which can be any of the following:
+  An LLVM primitive type. This is an additional field ``primitive`` which can be any of the following:
 
   - ``label``: An LLVM label.
   - ``void``: The LLVM void type.
   - ``integer``: An LLVM integer. There is an additional field ``size``, an integer giving the number of
     bytes in the integer type.
-  - ``float``: An LLVM float. There is an additional field, ``float type``, which can be any of the following:
+  - ``float``: An LLVM float. There is an additional field ``float type`` which can be any of the following:
 
     + ``half``
     + ``float``
@@ -375,11 +375,11 @@ The tag field is named ``type``. This tag value can be:
   referent type of the pointer.
 
 ``struct``
-  A structure type. There is an additional field ``fields``, a List f :ref:`LLVM types<llvm-types>` describing
+  A structure type. There is an additional field ``fields``, a List of :ref:`LLVM types<llvm-types>` describing
   the structure fields.
 
 ``packed struct``
-  A packed structure type. There is an additional field ``fields``, a List f :ref:`LLVM types<llvm-types>` describing
+  A packed structure type. There is an additional field ``fields``, a List of :ref:`LLVM types<llvm-types>` describing
   the structure fields.
 
 ``vector``
@@ -395,3 +395,26 @@ The tag field is named ``type``. This tag value can be:
 
 JVM Types
 =========
+
+As with LLVM types, there is a tag field named ``type``. This tag value can be:
+
+``primitive type``
+  A JVM primitive type. There is an additional field ``primitive`` which can be any of the following:
+
+  - ``boolean``: A JVM Boolean.
+  - ``byte``: A JVM byte.
+  - ``char``: A JVM character.
+  - ``double``: A JVM double-precision float.
+  - ``float``: A JVM single-precsion float.
+  - ``int``: A JVM integer.
+  - ``long``: A JVM long integer.
+  - ``short``: A JVM short integer.
+
+``array type``
+  A JVM array. There are two additional fields:
+
+  - ``size``: An integer giving the length of the array.
+  - ``element type``: An :ref:`JVM type<jvm-types>` describing the array elements.
+
+``class type``
+  A JVM class. There is an additional field ``class name`` which identifies the class.

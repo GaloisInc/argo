@@ -14,7 +14,6 @@ Argo, a JSON-RPC Interface to Cryptol and SAW
    Cryptol Python API <CryptolPython>
    SAW Python API <SAWPython>
    Protocol Overview <Protocol>
-   SAW Verification <SAW>
 
 
 Indices and tables

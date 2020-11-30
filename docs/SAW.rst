@@ -35,13 +35,16 @@ Saving Terms
 ------------
 
 :Method name:
-  ``SAW/Crpytol/save term``
+  ``SAW/Cryptol/save term``
 :Parameters:
   - ``name``: The name to bind the value of ``expression`` to on the server.
   - ``expression``: The Cryptol expression to bind the value of ``name`` to on the server.
 
 JVM Verification
 ================
+
+NOTE: The following represents an aspirational view of the JVM-specific protocol; currently,
+the code underlying these methods is incomplete and does not work.
 
 Loading Classes
 ---------------
@@ -89,7 +92,7 @@ Loading Modules
   - ``name``: The name to bind the loaded bitcode file to on the server.
   - ``bitcode file``: The path to the bitcode file to load and bind to ``name`` on the server.
 
-Verifying (General)
+Verifying (LLVM Implementations)
 -------------------
 
 :Method name:
@@ -103,14 +106,14 @@ Verifying (General)
   - ``script``: The :ref:`proof script<proof-scripts>` to use for verification.
   - ``lemma name``: The name to bind the result of verification to on the server.
 
-Verifying (x86)
+Verifying (x86 Implementations)
 ---------------
 
 :Method name:
   ``SAW/LLVM/verify x86``
 :Parameters:
-  - ``module``: The name of the (previously loaded) module containing the function to verify.
-  - ``object file``: The path to the x86 object file containing the function to verify.
+  - ``module``: The name of the (previously loaded) module containing the type of the function to verify.
+  - ``object file``: The path to the x86 object file containing the implementation of the function to verify.
   - ``function``: The name of the function to verify.
   - ``globals``: A list containing the global allocations needed for the verification task.
   - ``lemmas``: A list containing the names of previously proved lemmas to be used in compositional verification.
@@ -186,7 +189,7 @@ these specifications are represented by a JSON object with the following fields:
   - ``type``: The :ref:`LLVM<llvm-types>` or :ref:`JVM<jvm-types>` type of this variable.
 
 ``pre conds``
-  A list of the specification's preconditions, as Cryptol expressions.
+  A list of the specification's preconditions, as :ref:`Cryptol terms<cryptol-json-expression>`.
 
 ``pre allocated``
   A list of allocations in the initial state section of the specification. In preconditions,
@@ -221,7 +224,7 @@ these specifications are represented by a JSON object with the following fields:
   These variables are represented in the same way as :ref:`above<contract-vars>`.
 
 ``post conds``
-  A list of the specification's postconditions, as Cryptol expressions.
+  A list of the specification's postconditions, as :ref:`Cryptol terms<cryptol-json-expression>`.
 
 ``post allocated``
   A list of allocations in the final state section of the specification. In postconditions,
@@ -243,7 +246,7 @@ Proof Scripts
 
 SAW allows one to direct a verification task using a proof script, which is simply a sequence of proof
 tactics to apply. Very commonly, the proof script provided in a verification task is simply an instruction
-to use an external SAT/SMT solver such as ABS, Yices, or Z3.
+to use an external SAT/SMT solver such as ABC, Yices, or Z3.
 
 A proof script is represented as a JSON object with a single field:
 
@@ -286,7 +289,7 @@ Crucible Setup Values
 
 Setup Values encompass all values that can occur during symbolic execution, including Cryptol terms,
 pointers, arrays, and structures. They are used extensively when writing the specifications provided to the
-``verify`` commads. Setup Values are represented as JSON objects containing a tag field, ``setup value``,
+``verify`` commands. Setup Values are represented as JSON objects containing a tag field, ``setup value``,
 that determines the other fields. This tag value can be:
 
 ``saved``

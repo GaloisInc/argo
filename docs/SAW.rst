@@ -93,7 +93,7 @@ Loading Modules
   - ``bitcode file``: The path to the bitcode file to load and bind to ``name`` on the server.
 
 Verifying (LLVM Implementations)
--------------------
+--------------------------------
 
 :Method name:
   ``SAW/LLVM/verify``
@@ -107,7 +107,7 @@ Verifying (LLVM Implementations)
   - ``lemma name``: The name to bind the result of verification to on the server.
 
 Verifying (x86 Implementations)
----------------
+-------------------------------
 
 :Method name:
   ``SAW/LLVM/verify x86``

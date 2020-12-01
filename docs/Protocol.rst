@@ -40,7 +40,6 @@ consequence being a delay in its response. The client can maintain its
 own handle into the server state, persist it to disk, and pick up
 where it left off on another computer.
 
-
 Transport
 ---------
 

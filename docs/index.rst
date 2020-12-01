@@ -18,7 +18,6 @@ Argo, a JSON-RPC Interface to Cryptol and SAW
    SAW Verification <SAW>
    Errors
 
-
 Indices and tables
 ==================
 

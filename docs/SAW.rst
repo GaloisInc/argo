@@ -307,13 +307,13 @@ that determines the other fields. This tag value can be:
   to populate the array with.
 
 ``field lvalue``
-  A struct field to be assigned to. There are two additional fields:
+  A field of a struct. There are two additional fields:
 
   - ``base``: A :ref:`Crucible Setup value<setup-values>`, the structure containing the field to assign to.
   - ``field``: The name of the field to assign to.
 
 ``element lvalue``
-  An array element to be assigned to. Theer are two additional fields:
+  An element of an array. Theer are two additional fields:
 
   - ``base``: A :ref:`Crucible Setup value<setup-values>`, the array to be indexed for assignment.
   - ``index``: An integer giving the index into the array to be assigned to.
@@ -421,3 +421,4 @@ As with LLVM types, there is a tag field named ``type``. This tag value can be:
 
 ``class type``
   A JVM class. There is an additional field ``class name`` which identifies the class.
+  Class names are encoded using dots.

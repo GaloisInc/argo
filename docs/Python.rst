@@ -22,7 +22,6 @@ The other necessary component is a :class:`argo.connection.ServerConnection`. Wh
    :members:
    :special-members:
 
-
 Module ``argo.interaction``
 ===========================
 

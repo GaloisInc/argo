@@ -20,6 +20,11 @@ Commands
   * Clears any loaded file from the server's memory.
   * No parameters
 
+* ``implode``
+  
+  * Causes the server to raise an internal error (for testing purposes).
+  * No parameters
+
 Queries
 -------------------------
 

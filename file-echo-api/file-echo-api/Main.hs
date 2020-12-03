@@ -29,5 +29,6 @@ serverMethods :: [(Text, Argo.MethodType, JSON.Value -> Argo.Method FES.ServerSt
 serverMethods =
   [ ("load",           Argo.Command,   Argo.method FES.loadCmd)
   , ("clear",          Argo.Command,   Argo.method FES.clearCmd)
+  , ("implode",        Argo.Query,     Argo.method FES.implodeCmd)
   , ("show",           Argo.Query,     Argo.method FES.showCmd)
   ]

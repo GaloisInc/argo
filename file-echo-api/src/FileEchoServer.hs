@@ -9,6 +9,8 @@ import           Data.ByteString ( ByteString )
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Text as T
 import qualified System.Directory as Dir
+import           Control.Exception ( throwIO )
+
 
 newtype FileContents = FileContents String
 
@@ -86,7 +88,7 @@ data ClearParams = ClearParams
 instance JSON.FromJSON ClearParams where
   parseJSON =
     JSON.withObject "params for \"show\"" $
-    \o -> pure ClearParams
+    \_ -> pure ClearParams
 
 clearCmd :: ClearParams -> Argo.Method ServerState ()
 clearCmd _ =
@@ -118,3 +120,17 @@ showCmd (ShowParams start end) =
                 Nothing -> length contents
                 Just idx -> idx - start 
      pure (JSON.object [ "value" .= (JSON.String $ T.pack $ take len $ drop start contents)])
+
+
+------------------------------------------------------------------------
+-- Implode Command
+
+data ImplodeParams = ImplodeParams
+
+instance JSON.FromJSON ImplodeParams where
+  parseJSON =
+    JSON.withObject "params for \"implode\"" $
+    \_ -> pure ImplodeParams
+
+implodeCmd :: ClearParams -> Argo.Method ServerState ()
+implodeCmd _ = liftIO $ throwIO $ Argo.internalError

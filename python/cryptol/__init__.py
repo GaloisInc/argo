@@ -13,10 +13,11 @@ import argo.interaction
 from argo.interaction import HasProtocolState
 from argo.connection import DynamicSocketProcess, ServerConnection, ServerProcess, StdIOProcess
 from . import cryptoltypes
-from cryptol.bitvector import BV
+from . import bitvector
+from . import solver
 
 
-__all__ = ['cryptoltypes']
+__all__ = ['cryptoltypes', 'BV', 'solver']
 
 
 
@@ -70,7 +71,7 @@ def from_cryptol_arg(val : Any) -> Any:
                     byteorder='big')
             else:
                 raise ValueError("Unknown encoding " + str(enc))
-            return BV(size, n)
+            return bitvector.BV(size, n)
         else:
             raise ValueError("Unknown expression tag " + tag)
     else:
@@ -137,6 +138,25 @@ class CryptolCheckType(argo.interaction.Query):
     def process_result(self, res : Any) -> Any:
         return res['type schema']
 
+class CryptolSat(argo.interaction.Query):
+    def __init__(self, connection : HasProtocolState, solver : solver.Solver, expr : Any, sat_num : Optional[int]) -> None:
+        super(CryptolSat, self).__init__(
+            'sat',
+            {'prover': solver,
+            'expression': expr,
+            'result count': 'all' if sat_num is None else sat_num},
+            connection
+        )
+
+    def process_result(self, res : Any) -> Any:
+        if res['result'] == 'unsat':
+            return False
+        elif res['result'] == 'sat':
+            return [from_cryptol_arg(arg['expr'])
+                    for m in res['models']
+                    for arg in m]
+        else:
+            raise ValueError("Unknown sat result " + str(res))
 
 class CryptolNames(argo.interaction.Query):
     def __init__(self, connection : HasProtocolState) -> None:
@@ -275,7 +295,18 @@ class CryptolConnection:
         self.most_recent_result = CryptolFocusedModule(self)
         return self.most_recent_result
 
+    def sat(self, expression : Any, *, solver : solver.Solver = solver.Z3, sat_num : Optional[int] = 1) -> argo.interaction.Query:
+        """Check if ``expression`` is satisfiable, like ``:sat`` at the Cryptol REPL.
 
+        The solver can be specified via the ``solver`` keyword argument (Z3 is the deault).
+
+        The number of satisfying assignments returned (if any) can be specified via the
+        ``sat_num`` keyword argument (equivalent to the ``satNum`` setting in Cryptol) where
+        ``sat_num = n`` means to return up to ``n`` satisfying assignments and ``sat_num = None``
+        means to return as many satisfying assignments as possible.
+        """
+        self.most_recent_result = CryptolSat(self, solver, expression, sat_num)
+        return self.most_recent_result
 
 class CryptolDynamicSocketProcess(DynamicSocketProcess):
 

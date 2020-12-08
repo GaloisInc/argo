@@ -644,8 +644,8 @@ serveHandles hLog hIn hOut app = init >>= loop
             Nothing -> const (return ())
 
 -- | Serve an application on stdio, with messages encoded as netstrings.
-serveStdIONS :: HasCallStack => App s -> IO ()
-serveStdIONS = serveHandlesNS (Just stderr) stdin stdout
+serveStdIONS :: HasCallStack => Maybe Handle -> App s -> IO ()
+serveStdIONS logDest = serveHandlesNS logDest stdin stdout
 
 -- | Serve an application on arbitrary handles, with messages
 -- encoded as netstrings.

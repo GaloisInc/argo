@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase, OverloadedStrings, ScopedTypeVariables #-}
 module Argo.DefaultMain (defaultMain) where
 
 
@@ -11,7 +11,7 @@ import Control.Exception (handle, IOException)
 import Network.Socket (HostName)
 import qualified Options.Applicative as Opt
 import Safe (readMay)
-import System.IO (BufferMode(..), hSetBuffering, stdout)
+import System.IO (BufferMode(..), hPutStrLn, hSetBuffering, stderr, stdout)
 import System.FileLock
 import System.Directory
 import System.FilePath
@@ -29,10 +29,12 @@ defaultMain str app =
      realMain app opts
 
 data NetworkOptions =
-  NetworkOptions (Maybe Session) (Maybe HostName) (Maybe Port)
+  NetworkOptions (Maybe Session) (Maybe HostName) (Maybe Port) (Maybe LogOption)
+
+data LogOption = StdErrLog
 
 data ProgramMode
-  = StdIONetstring
+  = StdIONetstring (Maybe LogOption)
   -- ^ NetStrings over standard IO
   | SocketNetstring NetworkOptions
   -- ^ NetStrings over some socket
@@ -51,7 +53,7 @@ mode desc =
 stdioMode, socketMode, httpMode :: String -> Opt.Mod Opt.CommandFields ProgramMode
 
 stdioMode desc = Opt.command "stdio" $
-  Opt.info (pure StdIONetstring) $
+  Opt.info (StdIONetstring <$> logOpt) $
   Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over stdin and stdout"
 socketMode desc = Opt.command "socket" $
   Opt.info (SocketNetstring <$> networkOptions) $
@@ -66,7 +68,7 @@ httpMode desc = Opt.command "http" $
 
 networkOptions :: Opt.Parser NetworkOptions
 networkOptions =
-  NetworkOptions <$> sessionOpt <*> hostOpt <*> portOpt
+  NetworkOptions <$> sessionOpt <*> hostOpt <*> portOpt <*> logOpt
 
 options :: String -> Opt.ParserInfo ProgramMode
 options desc =
@@ -99,6 +101,20 @@ portOpt =
      Opt.help "Use netstrings over a socket on PORT to communicate"))
   <|> pure Nothing
 
+logOpt :: Opt.Parser (Maybe LogOption)
+logOpt =
+  (Just <$>
+   Opt.option whichLog
+   (Opt.long "log" <>
+    Opt.metavar "DEST" <>
+    Opt.help "Output logs. Destionation is 'stderr' for stderr."))
+  <|> pure Nothing
+  where
+    whichLog =
+      Opt.eitherReader $
+        \case
+          "stderr" -> Right StdErrLog
+          other -> Left $ "Unknown log option '" ++ other ++ "'"
 
 selectHost :: Maybe HostName -> HostName
 selectHost (Just name) = name
@@ -187,20 +203,22 @@ getOrLockSession (Just (Session session)) publicity maybePort =
 realMain :: App s -> ProgramMode -> IO ()
 realMain theApp progMode =
   case progMode of
-    StdIONetstring ->
-      serveStdIONS theApp
-    SocketNetstring (NetworkOptions session hostName port) ->
+    StdIONetstring logging ->
+      let logger = stderr <$ logging
+      in serveStdIONS logger theApp
+    SocketNetstring (NetworkOptions session hostName port logging) ->
       do sessionResult <- getOrLockSession session hostName port
          let hostname = fromMaybe (selectHost hostName) hostName
+         let logger = maybe (const (pure ())) (const (hPutStrLn stderr)) logging
          hSetBuffering stdout NoBuffering
          case sessionResult of
            UseExisting (Port port) ->
              putStrLn ("PORT " ++ port)
            MakeNew (Port port) ->
              do putStrLn ("PORT " ++ port)
-                serveSocket hostname port theApp
+                serveSocket logger hostname port theApp
            MakeNewDyn registerPort ->
-             do (a, port) <- serveSocketDynamic hostname theApp
+             do (a, port) <- serveSocketDynamic logger hostname theApp
                 registerPort (Port (show port))
                 putStrLn ("PORT " ++ show port)
                 wait a
@@ -209,7 +227,7 @@ realMain theApp progMode =
                    <> existingPort
                    <> ", not the specified port "
                    <> desiredPort
-    Http path (NetworkOptions session _host port) ->
+    Http path (NetworkOptions session _host port _logging) ->
       case session of
         Just _ -> die "Named sessions not yet supported for HTTP"
         Nothing -> serveHttp path theApp (maybe 8080 (read . unPort) port)

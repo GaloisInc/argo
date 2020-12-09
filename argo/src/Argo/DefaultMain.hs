@@ -28,8 +28,20 @@ defaultMain str app =
                (options str)
      realMain app opts
 
+-- | Options that are common to the network server modes of operation,
+-- like socket and HTTP.
 data NetworkOptions =
-  NetworkOptions (Maybe Session) (Maybe HostName) (Maybe Port) (Maybe LogOption)
+  NetworkOptions
+  { networkSession :: Maybe Session
+    -- ^ The name of an existing session to re-establish
+  , networkHost :: Maybe HostName
+    -- ^ The hostname on which to listen (e.g. "::" or "0.0.0.0" for
+    -- public services)
+  , networkPort :: Maybe Port
+    -- ^ The port number on which to listen
+  , networkLog :: Maybe LogOption
+    -- ^ How to log incoming connections and messages
+  }
 
 data LogOption = StdErrLog
 

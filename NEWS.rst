@@ -8,7 +8,6 @@ development artifacts can keep apprised of ongoing updates.
 
 Recent Changes
 ==============
-
 - Added a ``--public`` flag that causes the socket server to listen for
   external connections
 
@@ -23,3 +22,6 @@ Recent Changes
 - Removed ``--public`` and replaced it with ``--host``. Use ``--host
   ::`` or ``--host 0.0.0.0`` to get the previous behavior of
   ``--public``.
+
+- Added a ``--log`` option that controls debug logging, which is now
+  off by default.

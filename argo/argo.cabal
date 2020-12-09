@@ -56,6 +56,8 @@ library
   exposed-modules:
     Argo
     Argo.DefaultMain
+    Argo.Doc
+    Argo.Doc.ReST
     Argo.Panic
     Argo.ServerState
     Argo.Socket

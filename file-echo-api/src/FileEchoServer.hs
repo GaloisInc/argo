@@ -2,14 +2,16 @@
 module FileEchoServer ( module FileEchoServer ) where
 
 import qualified Argo as Argo
-import           Control.Monad.IO.Class ( liftIO )
+import Argo.Doc
+import Control.Exception ( throwIO )
+import Control.Monad.IO.Class ( liftIO )
 import qualified Data.Aeson as JSON
-import           Data.Aeson ( (.:), (.:?), (.=), (.!=) )
-import           Data.ByteString ( ByteString )
+import Data.Aeson ( (.:), (.:?), (.=), (.!=) )
+import Data.ByteString ( ByteString )
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Text as T
 import qualified System.Directory as Dir
-import           Control.Exception ( throwIO )
+
 
 
 newtype FileContents = FileContents String
@@ -67,13 +69,16 @@ instance JSON.FromJSON LoadParams where
     JSON.withObject "params for \"load\"" $
     \o -> LoadParams <$> o .: "file path"
 
+instance DescribedParams LoadParams where
+  parameterFieldDescription = [("file path", Paragraph [Text "The file to read into memory."])]
+
 loadCmd :: LoadParams -> Argo.Method ServerState ()
 loadCmd (LoadParams file) =
   do exists <- liftIO $ Dir.doesFileExist file
      if exists
      then do getFileContents <- Argo.getFileReader
              contents <- liftIO $ getFileContents file
-             Argo.setState $ ServerState 
+             Argo.setState $ ServerState
               { loadedFile = Just file
               , fileContents = FileContents $ Char8.unpack contents
               }
@@ -89,6 +94,9 @@ instance JSON.FromJSON ClearParams where
   parseJSON =
     JSON.withObject "params for \"show\"" $
     \_ -> pure ClearParams
+
+instance DescribedParams ClearParams where
+  parameterFieldDescription = []
 
 clearCmd :: ClearParams -> Argo.Method ServerState ()
 clearCmd _ =
@@ -113,6 +121,12 @@ instance JSON.FromJSON ShowParams where
              end <- o   .:? "end"
              pure $ ShowParams start end
 
+instance DescribedParams ShowParams where
+  parameterFieldDescription = [ ("start", Paragraph [Text "Start index (inclusive). If not provided, the substring is from the beginning of the file."])
+                              , ("end", Paragraph [Text "End index (exclusive). If not provided, the remainder of the file is returned."])
+                              ]
+
+
 showCmd :: ShowParams -> Argo.Method ServerState JSON.Value
 showCmd (ShowParams start end) =
   do (FileContents contents) <-  fileContents <$> Argo.getState
@@ -132,5 +146,45 @@ instance JSON.FromJSON ImplodeParams where
     JSON.withObject "params for \"implode\"" $
     \_ -> pure ImplodeParams
 
+instance DescribedParams ImplodeParams where
+  parameterFieldDescription = []
+
+
 implodeCmd :: ClearParams -> Argo.Method ServerState ()
 implodeCmd _ = liftIO $ throwIO $ Argo.internalError
+
+----------------------------------------------------------------------
+
+data Ignorable =
+  ThisDatatype | ExistsTo | DemonstrateDocs
+
+instance JSON.FromJSON Ignorable where
+  parseJSON (JSON.Bool True) = pure ThisDatatype
+  parseJSON (JSON.Bool False) = pure ExistsTo
+  parseJSON JSON.Null = pure DemonstrateDocs
+  parseJSON _ = fail "Unknown value"
+
+instance Described Ignorable where
+  typeName = "Ignorable data"
+  description =
+    [ Paragraph [Text "Data to be ignored can take one of three forms:"]
+    , DescriptionList
+        [ (Literal "true", Paragraph [Text "The first ignorable value"])
+        , (Literal "false", Paragraph [Text "The second ignorable value"])
+        , (Literal "null", Paragraph [Text "The ultimate ignorable value, neither true nor false"])
+        ]
+    , Paragraph [Text "Nothing else may be ignored."]
+    ]
+
+data IgnoreParams = IgnoreParams !Ignorable
+
+instance JSON.FromJSON IgnoreParams where
+  parseJSON =
+    JSON.withObject "params for \"ignore\"" $
+      \o -> IgnoreParams <$> o .: "to be ignored"
+
+instance DescribedParams IgnoreParams where
+  parameterFieldDescription = [("to be ignored", Paragraph [Text "The value to be ignored goes here."])]
+
+ignoreCmd :: IgnoreParams -> Argo.Method ServerState ()
+ignoreCmd _ = pure ()

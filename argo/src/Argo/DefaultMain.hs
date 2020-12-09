@@ -4,8 +4,10 @@ module Argo.DefaultMain (defaultMain) where
 
 import Control.Applicative
 import Control.Monad
+import Control.Lens (view)
 import Data.Maybe
 import Data.Foldable
+import qualified Data.Text.IO as T
 import Control.Concurrent.Async (wait)
 import Control.Exception (handle, IOException)
 import Network.Socket (HostName)
@@ -18,6 +20,8 @@ import System.FilePath
 import System.Exit (die)
 
 import Argo
+import qualified Argo.Doc as Doc
+import Argo.Doc.ReST
 import Argo.Socket
 
 
@@ -38,17 +42,21 @@ data ProgramMode
   -- ^ NetStrings over some socket
   | Http String NetworkOptions
   -- ^ HTTP (String is path at which API is served)
+  | Doc !Format
+  -- ^ Dump protocol description to stdout
 
 newtype Port = Port {unPort :: String} deriving (Eq, Ord)
 
 newtype Session
   = Session String
 
+data Format = ReST
+
 mode :: String -> Opt.Parser ProgramMode
 mode desc =
-  Opt.hsubparser $ stdioMode desc <> socketMode desc <> httpMode desc
+  Opt.hsubparser $ stdioMode desc <> socketMode desc <> httpMode desc <> docMode desc
 
-stdioMode, socketMode, httpMode :: String -> Opt.Mod Opt.CommandFields ProgramMode
+stdioMode, socketMode, httpMode, docMode :: String -> Opt.Mod Opt.CommandFields ProgramMode
 
 stdioMode desc = Opt.command "stdio" $
   Opt.info (pure StdIONetstring) $
@@ -63,6 +71,12 @@ httpMode desc = Opt.command "http" $
     path =
       Opt.argument Opt.str $
       Opt.metavar "PATH" <> Opt.help "The path at which to serve the API"
+docMode desc = Opt.command "doc" $
+  Opt.info (Doc <$> format) $
+  Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Emit protocol documentation"
+  where
+    format = pure ReST
+
 
 networkOptions :: Opt.Parser NetworkOptions
 networkOptions =
@@ -213,3 +227,9 @@ realMain theApp progMode =
       case session of
         Just _ -> die "Named sessions not yet supported for HTTP"
         Nothing -> serveHttp path theApp (maybe 8080 (read . unPort) port)
+    Doc format ->
+      case format of
+        ReST ->
+          T.putStrLn $
+          restructuredText $
+            Doc.App (view appName theApp) (view appDocumentation theApp)

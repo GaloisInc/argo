@@ -33,6 +33,7 @@ restructuredText block =
     go (Datatype t name contents) =
       do anchor (mangle (show t))
          header name
+         terpri
          nestSection (traverse_ go contents)
          terpri
     go (App name contents) = go (Section name contents)
@@ -44,6 +45,7 @@ restructuredText block =
         do terpri
            inline name
            indented $ terpri >> go what
+           terpri
     go (BulletedList elts) =
       for_ elts $
         \contents ->

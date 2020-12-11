@@ -583,8 +583,8 @@ synchronized f =
 -- | One way to run a server is on stdio, listening for requests on stdin
 -- and replying on stdout. In this system, each request must be on a
 -- line for itself, and no newlines are otherwise allowed.
-serveStdIO :: HasCallStack => App s -> IO ()
-serveStdIO = serveHandles (Just stderr) stdin stdout
+serveStdIO :: HasCallStack => (Text -> IO ()) -> App s -> IO ()
+serveStdIO logger = serveHandles logger stdin stdout
 
 getStateID :: Request -> IO StateID
 getStateID req =
@@ -605,12 +605,12 @@ getStateID req =
 -- itself, and no newlines are otherwise allowed.
 serveHandles ::
   HasCallStack =>
-  Maybe Handle {- ^ Where to log debug info -} ->
+  (Text -> IO ()) {- ^ Logger -} ->
   Handle {- ^ input handle    -} ->
   Handle {- ^ output handle   -} ->
   App s  {- ^ RPC application -} ->
   IO ()
-serveHandles hLog hIn hOut app = init >>= loop
+serveHandles logger hIn hOut app = init >>= loop
   where
     newline = 0x0a -- ASCII/UTF8
 
@@ -624,7 +624,7 @@ serveHandles hLog hIn hOut app = init >>= loop
           do _ <- forkIO $
                (case JSON.eitherDecode l of
                   Left msg -> throw (parseError (T.pack msg))
-                  Right req -> handleRequest log out app req)
+                  Right req -> handleRequest logger out app req)
                `catch` reportError out
                `catch` reportOtherException out
              loop (out, rest)
@@ -639,29 +639,25 @@ serveHandles hLog hIn hOut app = init >>= loop
         JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
         <> BS.singleton newline
 
-    log = case hLog of
-            Just h -> T.hPutStrLn h
-            Nothing -> const (return ())
-
 -- | Serve an application on stdio, with messages encoded as netstrings.
-serveStdIONS :: HasCallStack => Maybe Handle -> App s -> IO ()
-serveStdIONS logDest = serveHandlesNS logDest stdin stdout
+serveStdIONS :: HasCallStack => (Text -> IO ()) -> App s -> IO ()
+serveStdIONS logger = serveHandlesNS logger stdin stdout
 
 -- | Serve an application on arbitrary handles, with messages
 -- encoded as netstrings.
 serveHandlesNS ::
   HasCallStack =>
-  Maybe Handle {- ^ debug log handle -} ->
-  Handle       {- ^ input handle     -} ->
-  Handle       {- ^ output handle    -} ->
-  App s        {- ^ RPC application  -} ->
+  (Text -> IO ()) {- ^ logger -} ->
+  Handle          {- ^ input handle     -} ->
+  Handle          {- ^ output handle    -} ->
+  App s           {- ^ RPC application  -} ->
   IO ()
-serveHandlesNS hLog hIn hOut app =
+serveHandlesNS logger hIn hOut app =
   do hSetBinaryMode hIn True
      hSetBuffering hIn NoBuffering
      input <- newMVar hIn
      output <- synchronized (\msg ->
-                               do log (T.pack (show msg))
+                               do logger (T.pack (show msg))
                                   BS.hPut hOut $ encodeNetstring $ netstring msg
                                   hFlush hOut)
      loop output input
@@ -676,11 +672,11 @@ serveHandlesNS hLog hIn hOut app =
                 loop output input
 
     processLine output line =
-      do log (T.pack (show line))
+      do logger (T.pack (show line))
          forkIO $
            case JSON.eitherDecode (decodeNetstring line) of
              Left  msg -> throwIO (parseError (T.pack msg))
-             Right req -> handleRequest log output app req
+             Right req -> handleRequest logger output app req
            `catch` reportError output
            `catch` reportOtherException output
 
@@ -696,21 +692,17 @@ serveHandlesNS hLog hIn hOut app =
                     , errorStdErr = "<no stderr captured: exception outside capture region>"
                     }
 
-    log :: Text -> IO ()
-    log msg = case hLog of
-                Just h -> T.hPutStrLn h msg
-                Nothing -> return ()
-
 
 -- | Serve the application over HTTP, according to the specification
 -- at https://www.simple-is-better.org/json-rpc/transport_http.html
 serveHttp ::
   HasCallStack =>
-  String {- ^ Request path -} ->
-  App s  {- ^ JSON-RPC app -} ->
-  Int    {- ^ port number  -} ->
+  (T.Text -> IO ()) {- ^ Logger            -} ->
+  String            {- ^ Request path -} ->
+  App s             {- ^ JSON-RPC app -} ->
+  Int               {- ^ port number  -} ->
   IO ()
-serveHttp path app port =
+serveHttp logger path app port =
     scotty port $
       do post (literal path) $
            do ensureTextJSON "Content-Type" unsupportedMediaType415
@@ -725,7 +717,7 @@ serveHttp path app port =
                     Left msg ->
                       throwIO (parseError (T.pack msg))
                     Right req ->
-                      Right <$> handleRequest (T.hPutStrLn stderr) respond app req)
+                      Right <$> handleRequest logger respond app req)
                       `catch` (\ (exn :: JSONRPCException) ->
                                  pure $ Left $ JSON.encode exn)
                       `catch` (\ (exn :: SomeException) ->

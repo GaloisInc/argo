@@ -6,6 +6,7 @@ import Control.Applicative
 import Control.Monad
 import Data.Maybe
 import Data.Foldable
+import qualified Data.Text.IO as T
 import Control.Concurrent.Async (wait)
 import Control.Exception (handle, IOException)
 import Network.Socket (HostName)
@@ -119,7 +120,7 @@ logOpt =
    Opt.option whichLog
    (Opt.long "log" <>
     Opt.metavar "DEST" <>
-    Opt.help "Output logs. Destionation is 'stderr' for stderr."))
+    Opt.help "Output logs. Destination is 'stderr' for stderr."))
   <|> pure Nothing
   where
     whichLog =
@@ -216,12 +217,12 @@ realMain :: App s -> ProgramMode -> IO ()
 realMain theApp progMode =
   case progMode of
     StdIONetstring logging ->
-      let logger = stderr <$ logging
+      let logger = maybeLog logging
       in serveStdIONS logger theApp
     SocketNetstring (NetworkOptions session hostName port logging) ->
       do sessionResult <- getOrLockSession session hostName port
          let hostname = fromMaybe (selectHost hostName) hostName
-         let logger = maybe (const (pure ())) (const (hPutStrLn stderr)) logging
+         let logger = maybeLog logging
          hSetBuffering stdout NoBuffering
          case sessionResult of
            UseExisting (Port port) ->
@@ -239,7 +240,11 @@ realMain theApp progMode =
                    <> existingPort
                    <> ", not the specified port "
                    <> desiredPort
-    Http path (NetworkOptions session _host port _logging) ->
+    Http path (NetworkOptions session _host port logging) ->
       case session of
         Just _ -> die "Named sessions not yet supported for HTTP"
-        Nothing -> serveHttp path theApp (maybe 8080 (read . unPort) port)
+        Nothing ->
+          do let logger = maybeLog logging
+             serveHttp logger path theApp (maybe 8080 (read . unPort) port)
+  where maybeLog Nothing _ = pure ()
+        maybeLog (Just StdErrLog) txt = T.hPutStrLn stderr txt

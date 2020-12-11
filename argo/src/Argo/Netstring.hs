@@ -26,7 +26,7 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Builder as BS
 
 import Data.Word
-import System.IO
+import System.IO (Handle, hIsEOF)
 
 data BadNetstring
   = BadLength

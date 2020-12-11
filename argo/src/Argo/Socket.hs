@@ -8,6 +8,7 @@ import Control.Concurrent       (forkFinally)
 import Control.Concurrent.Async (Async, async, forConcurrently_)
 import Control.Exception        (displayException)
 import Control.Monad            (forever)
+import Data.Text                (Text, pack)
 import System.IO                (IOMode(ReadWriteMode), hClose, stderr)
 
 import qualified Network.Socket as N
@@ -27,7 +28,7 @@ listenQueueDepth = 10
 -- A reasonable default host name is "::", and a reasonable default
 -- service name is a port number as a string, e.g. "10000".
 serveSocket ::
-  (String -> IO ()) {- ^ logger            -} ->
+  (Text -> IO ())   {- ^ logger            -} ->
   N.HostName        {- ^ host              -} ->
   N.ServiceName     {- ^ port              -} ->
   App s             {- ^ rpc application   -} ->
@@ -47,7 +48,7 @@ serveSocket logger hostName serviceName app =
 -- The resulting worker thread and dynamically assigned port
 -- number are returned on success.
 serveSocketDynamic ::
-  (String -> IO ()) {- ^ Logger            -} ->
+  (Text -> IO ())   {- ^ Logger            -} ->
   N.HostName        {- ^ IP address        -} ->
   App s             {- ^ RPC application   -} ->
   IO (Async (), N.PortNumber)
@@ -83,18 +84,18 @@ startListening addr =
 
 -- | Accept a new connection on the given listening socket and
 -- start processing rpc requests.
-acceptClient :: (String -> IO ()) -> App s -> N.Socket -> IO ()
+acceptClient :: (Text -> IO ()) -> App s -> N.Socket -> IO ()
 acceptClient logMessage app s =
 
   do (c, peer) <- N.accept s
      h         <- N.socketToHandle c ReadWriteMode
      -- don't use c after this, it is owned by h
 
-     logMessage ("CONNECT: " ++ show peer)
-     _ <- forkFinally (serveHandlesNS (Just stderr) h h app) $ \res ->
+     logMessage (pack ("CONNECT: " ++ show peer))
+     _ <- forkFinally (serveHandlesNS logMessage h h app) $ \res ->
        do case res of
-            Right _ -> logMessage ("CLOSE: " ++ show peer)
-            Left e  -> logMessage ("ERROR: " ++ show peer ++ " " ++ displayException e)
+            Right _ -> logMessage (pack ("CLOSE: " ++ show peer))
+            Left e  -> logMessage (pack ("ERROR: " ++ show peer ++ " " ++ displayException e))
           hClose h
 
      return ()

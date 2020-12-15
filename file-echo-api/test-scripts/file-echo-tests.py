@@ -207,3 +207,12 @@ post_response = requests.request('POST', "http://localhost:8080/", headers=good_
 assert(post_response.status_code == 200)
 
 os.killpg(os.getpgid(p_http.pid), signal.SIGKILL)
+
+# Test the custom command line argument to load a file at server start
+hello_file = file_dir.joinpath('hello.txt')
+c_preload = argo.ServerConnection(
+              argo.StdIOProcess("cabal v2-exec file-echo-api --verbose=0 -- stdio --file \"" + str(hello_file) + "\""))
+uid = c_preload.send_message("show", {"state": None})
+actual = c_preload.wait_for_reply_to(uid)
+expected = {'result':{'state':None,'stdout':'','stderr':'','answer':{'value':'Hello World!\n'}},'jsonrpc':'2.0','id':uid}
+assert(actual == expected)

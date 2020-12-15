@@ -25,20 +25,35 @@ import System.Exit (die)
 import Argo
 import Argo.Socket
 
+-- | The options selected by a user, including the server mode but
+-- excluding mode-specific initialization options (e.g. the HTTP port).
 data UserOptions stdIOOpts socketOpts httpOpts
   = StdIOOpts stdIOOpts
   | SocketOpts socketOpts
   | HttpOpts httpOpts
 
+-- | If all modes use the same user option, collapse them into a
+-- single structure.
 userOptions :: UserOptions a a a -> a
 userOptions (StdIOOpts opts) = opts
 userOptions (SocketOpts opts) = opts
 userOptions (HttpOpts opts) = opts
 
+-- | Run an Argo application using the default set of command-line
+-- arguments and server modes, augmented with additional command-line
+-- arguments for application-specific initialization.
+--
+-- For instance, this can be used to specify a file to load at server
+-- startup, or to customize server settings. The available settings
+-- can be different for each server mode, if desired.
 customMain ::
-  Opt.Parser stdIOOpts -> Opt.Parser socketOpts -> Opt.Parser httpOpts ->
-  String ->
-  (UserOptions stdIOOpts socketOpts httpOpts -> IO (App s)) ->
+  Opt.Parser stdIOOpts {- ^ A command-line parser for the options for stdio mode -} ->
+  Opt.Parser socketOpts {- ^ A command-line parser for the options for socket mode -} ->
+  Opt.Parser httpOpts {- ^ A command-line parser for the options for HTTP mode -}->
+  String {- ^ A description to be shown to users in the --help text -} ->
+  (UserOptions stdIOOpts socketOpts httpOpts -> IO (App s))
+    {- ^ An initialization procedure for the application that transforms the
+         parsed custom options into an application -} ->
   IO ()
 customMain stdioOpts socketOpts httpOpts str app =
   do opts <- Opt.customExecParser
@@ -46,7 +61,12 @@ customMain stdioOpts socketOpts httpOpts str app =
                (options stdioOpts socketOpts httpOpts str)
      realMain app opts
 
-defaultMain :: String -> App s -> IO ()
+-- | Run an Argo application using the default set of command-line
+-- arguments and server modes.
+defaultMain ::
+  String {- ^ A description to be shown to users in the --help text -} ->
+  App s {- ^ The application to be run -} ->
+  IO ()
 defaultMain str app =
   customMain parseNoOpts parseNoOpts parseNoOpts str $ const $ pure app
 

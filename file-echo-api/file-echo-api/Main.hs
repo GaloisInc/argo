@@ -29,6 +29,9 @@ mkInitState opts reader = FES.initialState (initialFile opts) reader
 
 newtype ServerOptions = ServerOptions { initialFile :: Maybe FilePath }
 
+-- This function parses additional options used by this particular
+-- application. The ordinary Argo options are still parsed, and these
+-- are appended.
 parseServerOptions :: Opt.Parser ServerOptions
 parseServerOptions = ServerOptions <$> filename
   where

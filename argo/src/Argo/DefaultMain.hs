@@ -1,6 +1,10 @@
 {-# LANGUAGE LambdaCase, OverloadedStrings, ScopedTypeVariables #-}
-module Argo.DefaultMain (defaultMain) where
-
+module Argo.DefaultMain
+  ( -- * Main functions
+    defaultMain, customMain,
+    -- * Options
+    UserOptions(..),
+    userOptions) where
 
 import Control.Applicative
 import Control.Monad
@@ -21,13 +25,35 @@ import System.Exit (die)
 import Argo
 import Argo.Socket
 
+data UserOptions stdIOOpts socketOpts httpOpts
+  = StdIOOpts stdIOOpts
+  | SocketOpts socketOpts
+  | HttpOpts httpOpts
+
+userOptions :: UserOptions a a a -> a
+userOptions (StdIOOpts opts) = opts
+userOptions (SocketOpts opts) = opts
+userOptions (HttpOpts opts) = opts
+
+customMain ::
+  Opt.Parser stdIOOpts -> Opt.Parser socketOpts -> Opt.Parser httpOpts ->
+  String ->
+  (UserOptions stdIOOpts socketOpts httpOpts -> IO (App s)) ->
+  IO ()
+customMain stdioOpts socketOpts httpOpts str app =
+  do opts <- Opt.customExecParser
+               (Opt.prefs $ Opt.showHelpOnError <> Opt.showHelpOnEmpty)
+               (options stdioOpts socketOpts httpOpts str)
+     realMain app opts
 
 defaultMain :: String -> App s -> IO ()
 defaultMain str app =
-  do opts <- Opt.customExecParser
-               (Opt.prefs $ Opt.showHelpOnError <> Opt.showHelpOnEmpty)
-               (options str)
-     realMain app opts
+  customMain parseNoOpts parseNoOpts parseNoOpts str $ const $ pure app
+
+data NoOpts = NoOpts
+
+parseNoOpts :: Opt.Parser NoOpts
+parseNoOpts = pure NoOpts
 
 -- | Options that are common to the network server modes of operation,
 -- like socket and HTTP.
@@ -46,12 +72,12 @@ data NetworkOptions =
 
 data LogOption = StdErrLog
 
-data ProgramMode
-  = StdIONetstring (Maybe LogOption)
+data ProgramMode stdioOpts socketOpts httpOpts
+  = StdIONetstring (Maybe LogOption) stdioOpts
   -- ^ NetStrings over standard IO
-  | SocketNetstring NetworkOptions
+  | SocketNetstring NetworkOptions socketOpts
   -- ^ NetStrings over some socket
-  | Http String NetworkOptions
+  | Http String NetworkOptions httpOpts
   -- ^ HTTP (String is path at which API is served)
 
 newtype Port = Port {unPort :: String} deriving (Eq, Ord)
@@ -59,20 +85,27 @@ newtype Port = Port {unPort :: String} deriving (Eq, Ord)
 newtype Session
   = Session String
 
-mode :: String -> Opt.Parser ProgramMode
-mode desc =
-  Opt.hsubparser $ stdioMode desc <> socketMode desc <> httpMode desc
+mode ::
+  Opt.Parser stdioOpts ->
+  Opt.Parser socketOpts ->
+  Opt.Parser httpOpts ->
+  String -> Opt.Parser (ProgramMode stdioOpts socketOpts httpOpts)
+mode stdio socket http desc =
+  Opt.hsubparser $ stdioMode stdio desc <> socketMode socket desc <> httpMode http desc
 
-stdioMode, socketMode, httpMode :: String -> Opt.Mod Opt.CommandFields ProgramMode
-
-stdioMode desc = Opt.command "stdio" $
-  Opt.info (StdIONetstring <$> logOpt) $
+stdioMode :: Opt.Parser stdioOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts)
+stdioMode user desc = Opt.command "stdio" $
+  Opt.info (StdIONetstring <$> logOpt <*> user) $
   Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over stdin and stdout"
-socketMode desc = Opt.command "socket" $
-  Opt.info (SocketNetstring <$> networkOptions) $
+
+socketMode :: Opt.Parser socketOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts)
+socketMode user desc = Opt.command "socket" $
+  Opt.info (SocketNetstring <$> networkOptions <*> user) $
   Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over a socket"
-httpMode desc = Opt.command "http" $
-  Opt.info (Http <$> path <*> networkOptions) $
+
+httpMode :: Opt.Parser httpOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts)
+httpMode user desc = Opt.command "http" $
+  Opt.info (Http <$> path <*> networkOptions <*> user) $
   Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over HTTP"
   where
     path =
@@ -83,9 +116,14 @@ networkOptions :: Opt.Parser NetworkOptions
 networkOptions =
   NetworkOptions <$> sessionOpt <*> hostOpt <*> portOpt <*> logOpt
 
-options :: String -> Opt.ParserInfo ProgramMode
-options desc =
-  Opt.info (mode desc <**> Opt.helper) $
+options ::
+  Opt.Parser stdioOpts ->
+  Opt.Parser socketOpts ->
+  Opt.Parser httpOpts ->
+  String ->
+  Opt.ParserInfo (ProgramMode stdioOpts socketOpts httpOpts)
+options stdioOpts socketOpts httpOpts desc =
+  Opt.info (mode stdioOpts socketOpts httpOpts desc <**> Opt.helper) $
   Opt.fullDesc <> Opt.progDesc desc
 
 hostOpt :: Opt.Parser (Maybe HostName)
@@ -213,14 +251,18 @@ getOrLockSession (Just (Session session)) publicity maybePort =
                   do writeFile portFile (show port)
                      unlockFile globalLock
 
-realMain :: App s -> ProgramMode -> IO ()
-realMain theApp progMode =
+realMain ::
+  (UserOptions stdIOOpts socketOpts httpOpts -> IO (App s)) ->
+  ProgramMode stdIOOpts socketOpts httpOpts -> IO ()
+realMain makeApp progMode =
   case progMode of
-    StdIONetstring logging ->
-      let logger = maybeLog logging
-      in serveStdIONS logger theApp
-    SocketNetstring (NetworkOptions session hostName port logging) ->
-      do sessionResult <- getOrLockSession session hostName port
+    StdIONetstring logging userOpts ->
+      do theApp <- makeApp (StdIOOpts userOpts)
+         let logger = maybeLog logging
+         serveStdIONS logger theApp
+    SocketNetstring (NetworkOptions session hostName port logging) userOpts ->
+      do theApp <- makeApp (SocketOpts userOpts)
+         sessionResult <- getOrLockSession session hostName port
          let hostname = fromMaybe (selectHost hostName) hostName
          let logger = maybeLog logging
          hSetBuffering stdout NoBuffering
@@ -240,11 +282,12 @@ realMain theApp progMode =
                    <> existingPort
                    <> ", not the specified port "
                    <> desiredPort
-    Http path (NetworkOptions session _host port logging) ->
-      case session of
-        Just _ -> die "Named sessions not yet supported for HTTP"
-        Nothing ->
-          do let logger = maybeLog logging
-             serveHttp logger path theApp (maybe 8080 (read . unPort) port)
+    Http path (NetworkOptions session _host port logging) userOpts ->
+      do theApp <- makeApp (HttpOpts userOpts)
+         case session of
+           Just _ -> die "Named sessions not yet supported for HTTP"
+           Nothing ->
+             do let logger = maybeLog logging
+                serveHttp logger path theApp (maybe 8080 (read . unPort) port)
   where maybeLog Nothing _ = pure ()
         maybeLog (Just StdErrLog) txt = T.hPutStrLn stderr txt

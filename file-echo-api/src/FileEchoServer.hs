@@ -14,20 +14,27 @@ import           Control.Exception ( throwIO )
 
 newtype FileContents = FileContents String
 
-data ServerState = ServerState 
+data ServerState = ServerState
   { loadedFile :: Maybe FilePath
   -- ^ Loaded file (if any).
   , fileContents :: FileContents
   -- ^ Current file contents, or "" if one has not been loaded yet.
   }
 
-initialState :: IO ServerState
-initialState = pure $ ServerState Nothing (FileContents "")
+initialState ::
+  Maybe FilePath ->
+  (FilePath -> IO ByteString) ->
+  IO ServerState
+initialState Nothing _reader =
+  pure $ ServerState Nothing (FileContents "")
+initialState (Just path) reader =
+  do contents <- FileContents . Char8.unpack <$> reader path
+     pure $ ServerState (Just path) contents
 
 newtype ServerErr = ServerErr String
-newtype ServerRes a = ServerRes (Either ServerErr (a,FileContents))
-newtype ServerCmd a = 
-  ServerCmd (((FilePath -> IO ByteString), FileContents) -> IO (ServerRes a))
+newtype ServerRes a = ServerRes (Either ServerErr (a, FileContents))
+newtype ServerCmd a =
+  ServerCmd ((FilePath -> IO ByteString, FileContents) -> IO (ServerRes a))
 
 
 ------------------------------------------------------------------------
@@ -73,7 +80,7 @@ loadCmd (LoadParams file) =
      if exists
      then do getFileContents <- Argo.getFileReader
              contents <- liftIO $ getFileContents file
-             Argo.setState $ ServerState 
+             Argo.setState $ ServerState
               { loadedFile = Just file
               , fileContents = FileContents $ Char8.unpack contents
               }
@@ -118,7 +125,7 @@ showCmd (ShowParams start end) =
   do (FileContents contents) <-  fileContents <$> Argo.getState
      let len = case end of
                 Nothing -> length contents
-                Just idx -> idx - start 
+                Just idx -> idx - start
      pure (JSON.object [ "value" .= (JSON.String $ T.pack $ take len $ drop start contents)])
 
 

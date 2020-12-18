@@ -447,9 +447,16 @@ instance JSON.ToJSON a => JSON.ToJSON (Response StateID a) where
         ]
       ]
 
+-- | A version of `hSilence` with the same type signature as `hCapture`
+-- but that always returns the empty string, to allow easy toggling
+-- between silencing and capturing.
+hNoCapture :: [Handle] -> IO a -> IO (String, a)
+hNoCapture hs a = ("",) <$> hSilence hs a
+
 runMethodResponse ::
   Method s a ->
   RequestID ->
+  Bool ->
   (FilePath -> IO B.ByteString) ->
   (Text -> IO ()) ->
   s ->
@@ -461,11 +468,11 @@ execMethodSilently ::
   s ->
   IO s
 (runMethodResponse, execMethodSilently) =
-  ( \m reqID fileReader logger st ->
-      tryOutErr hCapture reqID (runMethod m fileReader logger st)
+  ( \m reqID readOnly fileReader logger st ->
+      tryOutErr (if readOnly then hCapture else hCapture) reqID (runMethod m fileReader logger st)
   , \m fileReader logger st -> fst <$>
       tryOutErr
-        (\hs a -> ("",) <$> hSilence hs a)
+        hNoCapture
         IDNull
         (runMethod m fileReader logger st) )
   where
@@ -495,12 +502,13 @@ execMethodSilently ::
 handleRequest ::
   forall s.
   HasCallStack =>
+  Bool ->
   (Text -> IO ()) ->
   (BS.ByteString -> IO ()) ->
   App s ->
   Request ->
   IO ()
-handleRequest logger respond app req =
+handleRequest readOnly logger respond app req =
   case M.lookup method $ view appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (Command, m) ->
@@ -514,7 +522,7 @@ handleRequest logger respond app req =
                Just initAppState ->
                  do let r = (method, view requestParams req)
                     let fileReader = freshStateReader contents stateID
-                    (newAppState, result) <- runMethodResponse (m params) reqID fileReader logger initAppState
+                    (newAppState, result) <- runMethodResponse (m params) reqID readOnly fileReader logger initAppState
                     sid' <- saveNewState contents stateID r newAppState
                     return $ addStateID sid' result
          respond (JSON.encode response)
@@ -528,7 +536,7 @@ handleRequest logger respond app req =
                Nothing -> throwIO $ unknownStateID stateID
                Just theAppState ->
                  do let fileReader = B.readFile -- No caching of this state
-                    (_, result) <- runMethodResponse (m params) reqID fileReader logger theAppState
+                    (_, result) <- runMethodResponse (m params) reqID readOnly fileReader logger theAppState
                     -- Here, we return the original state ID, because
                     -- queries don't result in new states.
                     return $ addStateID stateID result
@@ -583,8 +591,8 @@ synchronized f =
 -- | One way to run a server is on stdio, listening for requests on stdin
 -- and replying on stdout. In this system, each request must be on a
 -- line for itself, and no newlines are otherwise allowed.
-serveStdIO :: HasCallStack => (Text -> IO ()) -> App s -> IO ()
-serveStdIO logger = serveHandles logger stdin stdout
+serveStdIO :: HasCallStack => Bool -> (Text -> IO ()) -> App s -> IO ()
+serveStdIO readOnly logger = serveHandles readOnly logger stdin stdout
 
 getStateID :: Request -> IO StateID
 getStateID req =
@@ -605,12 +613,13 @@ getStateID req =
 -- itself, and no newlines are otherwise allowed.
 serveHandles ::
   HasCallStack =>
+  Bool            {- ^ True to work on read-only file system -} ->
   (Text -> IO ()) {- ^ Logger -} ->
   Handle {- ^ input handle    -} ->
   Handle {- ^ output handle   -} ->
   App s  {- ^ RPC application -} ->
   IO ()
-serveHandles logger hIn hOut app = init >>= loop
+serveHandles readOnly logger hIn hOut app = init >>= loop
   where
     newline = 0x0a -- ASCII/UTF8
 
@@ -624,7 +633,7 @@ serveHandles logger hIn hOut app = init >>= loop
           do _ <- forkIO $
                (case JSON.eitherDecode l of
                   Left msg -> throw (parseError (T.pack msg))
-                  Right req -> handleRequest logger out app req)
+                  Right req -> handleRequest readOnly logger out app req)
                `catch` reportError out
                `catch` reportOtherException out
              loop (out, rest)
@@ -640,19 +649,20 @@ serveHandles logger hIn hOut app = init >>= loop
         <> BS.singleton newline
 
 -- | Serve an application on stdio, with messages encoded as netstrings.
-serveStdIONS :: HasCallStack => (Text -> IO ()) -> App s -> IO ()
-serveStdIONS logger = serveHandlesNS logger stdin stdout
+serveStdIONS :: HasCallStack => Bool -> (Text -> IO ()) -> App s -> IO ()
+serveStdIONS readOnly logger = serveHandlesNS readOnly logger stdin stdout
 
 -- | Serve an application on arbitrary handles, with messages
 -- encoded as netstrings.
 serveHandlesNS ::
   HasCallStack =>
+  Bool            {- ^ True to work on read-only file system -} ->
   (Text -> IO ()) {- ^ logger -} ->
   Handle          {- ^ input handle     -} ->
   Handle          {- ^ output handle    -} ->
   App s           {- ^ RPC application  -} ->
   IO ()
-serveHandlesNS logger hIn hOut app =
+serveHandlesNS readOnly logger hIn hOut app =
   do hSetBinaryMode hIn True
      hSetBuffering hIn NoBuffering
      input <- newMVar hIn
@@ -676,7 +686,7 @@ serveHandlesNS logger hIn hOut app =
          forkIO $
            case JSON.eitherDecode (decodeNetstring line) of
              Left  msg -> throwIO (parseError (T.pack msg))
-             Right req -> handleRequest logger output app req
+             Right req -> handleRequest readOnly logger output app req
            `catch` reportError output
            `catch` reportOtherException output
 
@@ -697,12 +707,13 @@ serveHandlesNS logger hIn hOut app =
 -- at https://www.simple-is-better.org/json-rpc/transport_http.html
 serveHttp ::
   HasCallStack =>
+  Bool              {- ^ True to work on read-only file system -} ->
   (T.Text -> IO ()) {- ^ Logger            -} ->
   String            {- ^ Request path -} ->
   App s             {- ^ JSON-RPC app -} ->
   Int               {- ^ port number  -} ->
   IO ()
-serveHttp logger path app port =
+serveHttp readOnly logger path app port =
     scotty port $
       do post (literal path) $
            do ensureTextJSON "Content-Type" unsupportedMediaType415
@@ -717,7 +728,7 @@ serveHttp logger path app port =
                     Left msg ->
                       throwIO (parseError (T.pack msg))
                     Right req ->
-                      Right <$> handleRequest logger respond app req)
+                      Right <$> handleRequest readOnly logger respond app req)
                       `catch` (\ (exn :: JSONRPCException) ->
                                  pure $ Left $ JSON.encode exn)
                       `catch` (\ (exn :: SomeException) ->

@@ -47,6 +47,7 @@ userOptions (HttpOpts opts) = opts
 -- startup, or to customize server settings. The available settings
 -- can be different for each server mode, if desired.
 customMain ::
+  Bool {- ^ True to work on a read-only file system -} ->
   Opt.Parser stdIOOpts {- ^ A command-line parser for the options for stdio mode -} ->
   Opt.Parser socketOpts {- ^ A command-line parser for the options for socket mode -} ->
   Opt.Parser httpOpts {- ^ A command-line parser for the options for HTTP mode -}->
@@ -55,11 +56,11 @@ customMain ::
     {- ^ An initialization procedure for the application that transforms the
          parsed custom options into an application -} ->
   IO ()
-customMain stdioOpts socketOpts httpOpts str app =
+customMain readOnly stdioOpts socketOpts httpOpts str app =
   do opts <- Opt.customExecParser
                (Opt.prefs $ Opt.showHelpOnError <> Opt.showHelpOnEmpty)
                (options stdioOpts socketOpts httpOpts str)
-     realMain app opts
+     realMain readOnly app opts
 
 -- | Run an Argo application using the default set of command-line
 -- arguments and server modes.
@@ -68,7 +69,7 @@ defaultMain ::
   App s {- ^ The application to be run -} ->
   IO ()
 defaultMain str app =
-  customMain parseNoOpts parseNoOpts parseNoOpts str $ const $ pure app
+  customMain False parseNoOpts parseNoOpts parseNoOpts str $ const $ pure app
 
 data NoOpts = NoOpts
 
@@ -272,14 +273,15 @@ getOrLockSession (Just (Session session)) publicity maybePort =
                      unlockFile globalLock
 
 realMain ::
+  Bool ->
   (UserOptions stdIOOpts socketOpts httpOpts -> IO (App s)) ->
   ProgramMode stdIOOpts socketOpts httpOpts -> IO ()
-realMain makeApp progMode =
+realMain readOnly makeApp progMode =
   case progMode of
     StdIONetstring logging userOpts ->
       do theApp <- makeApp (StdIOOpts userOpts)
          let logger = maybeLog logging
-         serveStdIONS logger theApp
+         serveStdIONS readOnly logger theApp
     SocketNetstring (NetworkOptions session hostName port logging) userOpts ->
       do theApp <- makeApp (SocketOpts userOpts)
          sessionResult <- getOrLockSession session hostName port
@@ -291,9 +293,9 @@ realMain makeApp progMode =
              putStrLn ("PORT " ++ port)
            MakeNew (Port port) ->
              do putStrLn ("PORT " ++ port)
-                serveSocket logger hostname port theApp
+                serveSocket readOnly logger hostname port theApp
            MakeNewDyn registerPort ->
-             do (a, port) <- serveSocketDynamic logger hostname theApp
+             do (a, port) <- serveSocketDynamic readOnly logger hostname theApp
                 registerPort (Port (show port))
                 putStrLn ("PORT " ++ show port)
                 wait a
@@ -308,6 +310,6 @@ realMain makeApp progMode =
            Just _ -> die "Named sessions not yet supported for HTTP"
            Nothing ->
              do let logger = maybeLog logging
-                serveHttp logger path theApp (maybe 8080 (read . unPort) port)
+                serveHttp readOnly logger path theApp (maybe 8080 (read . unPort) port)
   where maybeLog Nothing _ = pure ()
         maybeLog (Just StdErrLog) txt = T.hPutStrLn stderr txt

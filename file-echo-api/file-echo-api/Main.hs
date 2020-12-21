@@ -15,7 +15,7 @@ import Argo.DefaultMain ( customMain, userOptions )
 import qualified FileEchoServer as FES
 
 main :: IO ()
-main = customMain False parseServerOptions parseServerOptions parseServerOptions description getApp
+main = customMain parseServerOptions parseServerOptions parseServerOptions description getApp
   where
     getApp opts =
       Argo.mkApp (mkInitState $ userOptions opts) serverMethods

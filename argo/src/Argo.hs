@@ -235,9 +235,9 @@ data JSONRPCException =
     , errorID :: Maybe RequestID
       -- ^ The request ID, if one is available. @Nothing@ omits
       -- it, because JSON-RPC defines a meaning for null.
-    , errorStdOut :: String
+    , errorStdOut :: Maybe String
       -- ^ The standard output of the method producing this error
-    , errorStdErr :: String
+    , errorStdErr :: Maybe String
       -- ^ The standard error of the method producing this error
     } deriving Show
 
@@ -268,8 +268,8 @@ invalidParams msg params =
                    , message = T.pack ("Invalid params: " ++ msg)
                    , errorData = Just params
                    , errorID = Nothing
-                   , errorStdOut = ""
-                   , errorStdErr = ""
+                   , errorStdOut = Nothing
+                   , errorStdErr = Nothing
                    }
 
 -- | The input string could not be parsed as JSON (from the JSON-RPC spec)
@@ -279,8 +279,8 @@ parseError msg =
                    , message   = "Parse error"
                    , errorData = Just (JSON.String msg)
                    , errorID   = Nothing
-                   , errorStdOut = ""
-                   , errorStdErr = ""
+                   , errorStdOut = Nothing
+                   , errorStdErr = Nothing
                    }
 
 -- | The method called does not exist (from the JSON-RPC spec)
@@ -290,8 +290,8 @@ methodNotFound meth =
                    , message   = "Method not found"
                    , errorData = Just (JSON.toJSON meth)
                    , errorID   = Nothing
-                   , errorStdOut = ""
-                   , errorStdErr = ""
+                   , errorStdOut = Nothing
+                   , errorStdErr = Nothing
                    }
 
 -- | The request issued is not valid (from the JSON-RPC spec)
@@ -301,8 +301,8 @@ invalidRequest =
                    , message   = "Invalid request"
                    , errorData = Nothing
                    , errorID   = Nothing
-                   , errorStdOut = ""
-                   , errorStdErr = ""
+                   , errorStdOut = Nothing
+                   , errorStdErr = Nothing
                    }
 
 -- | Some unspecified bad thing happened in the server (from the JSON-RPC spec)
@@ -312,8 +312,8 @@ internalError =
                    , message   = "Internal error"
                    , errorData = Nothing
                    , errorID   = Nothing
-                   , errorStdOut = ""
-                   , errorStdErr = ""
+                   , errorStdOut = Nothing
+                   , errorStdErr = Nothing
                    }
 
 -- | The provided State ID is not one that the server has previously sent.
@@ -323,8 +323,8 @@ unknownStateID sid =
                    , message = "Unknown state ID"
                    , errorData = Just $ JSON.toJSON sid
                    , errorID = Nothing
-                   , errorStdOut = ""
-                   , errorStdErr = ""
+                   , errorStdOut = Nothing
+                   , errorStdErr = Nothing
                    }
 
 -- | Construct a 'JSONRPCException' from an error code, error text, and perhaps
@@ -336,8 +336,8 @@ makeJSONRPCException c m d =
     , message = m
     , errorData = JSON.toJSON <$> d
     , errorID = Nothing
-    , errorStdOut = ""
-    , errorStdErr = ""
+    , errorStdOut = Nothing
+    , errorStdErr = Nothing
     }
 
 
@@ -436,8 +436,8 @@ rerunStep reqID app opts startState (method, params) fileReader =
 data Response stateID a
   = Response { _responseID :: !RequestID
              , _responseAnswer :: !a
-             , _responseStdOut :: !String
-             , _responseStdErr :: !String
+             , _responseStdOut :: !(Maybe String)
+             , _responseStdErr :: !(Maybe String)
              , _responseStateID :: !stateID
              } deriving (Eq, Ord, Show)
 
@@ -447,10 +447,10 @@ responseID = lens _responseID (\r m -> r { _responseID = m })
 responseAnswer :: Lens (Response stateID a) (Response stateID b) a b
 responseAnswer = lens _responseAnswer (\r m -> r { _responseAnswer = m })
 
-responseStdOut :: Lens' (Response stateID a) String
+responseStdOut :: Lens' (Response stateID a) (Maybe String)
 responseStdOut = lens _responseStdOut (\r m -> r { _responseStdOut = m })
 
-responseStdErr :: Lens' (Response stateID a) String
+responseStdErr :: Lens' (Response stateID a) (Maybe String)
 responseStdErr = lens _responseStdOut (\r m -> r { _responseStdOut = m })
 
 responseStateID :: Lens (Response stateID a) (Response stateID' a) stateID stateID'
@@ -482,16 +482,23 @@ instance JSON.ToJSON a => JSON.ToJSON (Response StateID a) where
         ]
       ]
 
--- | A version of `hSilence` with the same type signature as `hCapture`
--- but that always returns the empty string, to allow easy toggling
--- between silencing and capturing.
-hNoCapture :: [Handle] -> IO a -> IO (String, a)
-hNoCapture hs a = ("",) <$> hSilence hs a
+-- | A wrapper around `hCapture` with a type signature tht allows for no
+-- result, to allow easy toggling between silencing and capturing.
+hCaptureWrap :: [Handle] -> IO a -> IO (Maybe String, a)
+hCaptureWrap hs a =
+  do (out, r) <- hCapture hs a
+     return (Just out, r)
 
-methodCapture :: MethodOptions -> [Handle] -> IO a -> IO (String, a)
+-- | A version of `hSilence` with the same type signature as
+-- `hCaptureWrap`, to allow easy toggling between silencing and
+-- capturing.
+hNoCapture :: [Handle] -> IO a -> IO (Maybe String, a)
+hNoCapture hs a = (Nothing,) <$> hSilence hs a
+
+methodCapture :: MethodOptions -> [Handle] -> IO a -> IO (Maybe String, a)
 methodCapture opts
    | optFileSystemMode opts == ReadOnly = hNoCapture
-   | otherwise = hCapture
+   | otherwise = hCaptureWrap
 
 runMethodResponse ::
   Method s a ->
@@ -514,7 +521,7 @@ execMethodSilently ::
         (runMethod m opts st) )
   where
     tryOutErr ::
-      (forall a. [Handle] -> IO a -> IO (String, a)) ->
+      (forall a. [Handle] -> IO a -> IO (Maybe String, a)) ->
       RequestID ->
       IO (s, a) ->
       IO (s, Response () a)
@@ -531,10 +538,10 @@ execMethodSilently ::
               (\(st, answer) -> pure (st, Response reqID answer out err ())))
            res
       where
-        tryPutOutErr :: String -> String -> IO ()
+        tryPutOutErr :: Maybe String -> Maybe String -> IO ()
         tryPutOutErr out err =
-          do void $ try @IOException (hPutStr stdout out)
-             void $ try @IOException (hPutStr stderr err)
+          do void $ try @IOException (traverse (hPutStr stdout) out)
+             void $ try @IOException (traverse (hPutStr stderr) err)
 
 handleRequest ::
   forall s.
@@ -732,8 +739,8 @@ serveHandlesNS opts hIn hOut app =
     reportOtherException out exn =
       out $ JSON.encode $
       internalError { errorData = Just (JSON.String (T.pack (show exn)))
-                    , errorStdOut = "<no stdout captured: exception outside capture region>"
-                    , errorStdErr = "<no stderr captured: exception outside capture region>"
+                    , errorStdOut = Nothing
+                    , errorStdErr = Nothing
                     }
 
 

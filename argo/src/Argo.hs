@@ -67,7 +67,6 @@ import Control.Lens hiding ((.=))
 import qualified Data.Aeson as JSON
 import Data.Aeson ((.:), (.:!), (.=))
 import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
-import Data.Binary.Builder
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BS
 import Data.Foldable (for_)
@@ -77,12 +76,10 @@ import Data.Maybe (maybeToList)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy as TL
 import GHC.Stack
 import Network.HTTP.Types.Method (StdMethod(..))
 import Network.HTTP.Types.Status
-import Network.Wai (strictRequestBody)
 import System.IO
 import System.IO.Silently
 import Text.Read (readMaybe)
@@ -560,8 +557,8 @@ handleRequest opts respond app req =
                Nothing -> throwIO $ unknownStateID stateID
                Just initAppState ->
                  do let r = (method, view requestParams req)
-                    let fileReader = freshStateReader contents stateID
-                    (newAppState, result) <- runMethodResponse (m params) reqID opts initAppState
+                    let opts' = opts { optFileReader = freshStateReader contents stateID }
+                    (newAppState, result) <- runMethodResponse (m params) reqID opts' initAppState
                     sid' <- saveNewState contents stateID r newAppState
                     return $ addStateID sid' result
          respond (JSON.encode response)
@@ -574,8 +571,8 @@ handleRequest opts respond app req =
              \case
                Nothing -> throwIO $ unknownStateID stateID
                Just theAppState ->
-                 do let fileReader = B.readFile -- No caching of this state
-                    (_, result) <- runMethodResponse (m params) reqID opts theAppState
+                 do let opts' = opts { optFileReader = B.readFile } -- No caching of this state
+                    (_, result) <- runMethodResponse (m params) reqID opts' theAppState
                     -- Here, we return the original state ID, because
                     -- queries don't result in new states.
                     return $ addStateID stateID result

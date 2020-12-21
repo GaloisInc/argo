@@ -482,7 +482,7 @@ instance JSON.ToJSON a => JSON.ToJSON (Response StateID a) where
         ]
       ]
 
--- | A wrapper around `hCapture` with a type signature tht allows for no
+-- | A wrapper around `hCapture` with a type signature that allows for no
 -- result, to allow easy toggling between silencing and capturing.
 hCaptureWrap :: [Handle] -> IO a -> IO (Maybe String, a)
 hCaptureWrap hs a =

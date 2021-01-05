@@ -43,7 +43,7 @@ restructuredText block =
     go (DescriptionList elts) =
       for_ elts $ \(name, what) ->
         do terpri
-           inline name
+           traverse_ inline name
            indented $ terpri >> go what
            terpri
     go (BulletedList elts) =

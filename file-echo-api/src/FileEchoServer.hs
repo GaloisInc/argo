@@ -180,11 +180,11 @@ instance Doc.Described Ignorable where
   description =
     [ Doc.Paragraph [Doc.Text "Data to be ignored can take one of three forms:"]
     , Doc.DescriptionList
-        [ (Doc.Literal "true",
+        [ (pure $ Doc.Literal "true",
            Doc.Paragraph [Doc.Text "The first ignorable value"])
-        , (Doc.Literal "false",
+        , (pure $ Doc.Literal "false",
            Doc.Paragraph [Doc.Text "The second ignorable value"])
-        , (Doc.Literal "null",
+        , (pure $ Doc.Literal "null",
            Doc.Paragraph [Doc.Text "The ultimate ignorable value, neither true nor false"])
         ]
     , Doc.Paragraph [Doc.Text "Nothing else may be ignored."]

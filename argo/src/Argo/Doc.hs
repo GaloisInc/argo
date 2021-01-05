@@ -4,6 +4,7 @@
 
 module Argo.Doc (LinkTarget(..), Block(..), Inline(..), Described(..), DescribedParams(..), datatype) where
 
+import Data.List.NonEmpty
 import Data.Text (Text)
 import Data.Typeable
 
@@ -16,7 +17,7 @@ data Block
   | Datatype TypeRep Text [Block]
   | App Text [Block]
   | Paragraph [Inline]
-  | DescriptionList [(Inline, Block)]
+  | DescriptionList [(NonEmpty Inline, Block)]
   | BulletedList [Block]
 
 data Inline

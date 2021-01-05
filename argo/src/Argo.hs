@@ -70,6 +70,7 @@ import Data.Binary.Builder
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BS
 import Data.Foldable (for_)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (maybeToList)
@@ -243,7 +244,7 @@ mkApp name docs initAppState methods =
                        [ if null paramDocs
                          then Doc.Paragraph [Doc.Text "No parameters"]
                          else Doc.DescriptionList
-                              [ (Doc.Literal field, fieldDocs)
+                              [ (Doc.Literal field :| [], fieldDocs)
                               | (field, fieldDocs) <- paramDocs
                               ]
                        , implDoc

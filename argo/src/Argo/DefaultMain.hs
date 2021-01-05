@@ -25,6 +25,7 @@ import System.Exit (die)
 
 import Argo
 import qualified Argo.Doc as Doc
+import Argo.Doc.Protocol (protocolDocs)
 import Argo.Doc.ReST
 import Argo.Socket
 
@@ -335,7 +336,7 @@ realMain makeApp progMode =
           do theApp <- makeApp (DocOpts userOpts)
              T.putStrLn $
                restructuredText $
-                 Doc.App (view appName theApp) (view appDocumentation theApp)
+                 Doc.App (view appName theApp) (protocolDocs : view appDocumentation theApp)
 
   where maybeLog Nothing _ = pure ()
         maybeLog (Just StdErrLog) txt = T.hPutStrLn stderr txt

@@ -26,3 +26,6 @@ Recent Changes
 - Removed ``--public`` and replaced it with ``--host``. Use ``--host
   ::`` or ``--host 0.0.0.0`` to get the previous behavior of
   ``--public``.
+
+- Added a ``--log`` option that controls debug logging, which is now
+  off by default.

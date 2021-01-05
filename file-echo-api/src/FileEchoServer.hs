@@ -23,11 +23,18 @@ data ServerState = ServerState
   -- ^ Current file contents, or "" if one has not been loaded yet.
   }
 
-initialState :: IO ServerState
-initialState = pure $ ServerState Nothing (FileContents "")
+initialState ::
+  Maybe FilePath ->
+  (FilePath -> IO ByteString) ->
+  IO ServerState
+initialState Nothing _reader =
+  pure $ ServerState Nothing (FileContents "")
+initialState (Just path) reader =
+  do contents <- FileContents . Char8.unpack <$> reader path
+     pure $ ServerState (Just path) contents
 
 newtype ServerErr = ServerErr String
-newtype ServerRes a = ServerRes (Either ServerErr (a,FileContents))
+newtype ServerRes a = ServerRes (Either ServerErr (a, FileContents))
 newtype ServerCmd a =
   ServerCmd ((FilePath -> IO ByteString, FileContents) -> IO (ServerRes a))
 

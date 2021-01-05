@@ -4,22 +4,21 @@
 {-# LANGUAGE TypeApplications #-}
 module Main ( main ) where
 
-import qualified Data.Aeson as JSON
 import Data.ByteString (ByteString)
-import Data.Text (Text)
 import Data.Typeable
+import qualified Options.Applicative as Opt
 
 import qualified Argo as Argo
 import qualified Argo.Doc as Doc
-import Argo.DefaultMain (defaultMain)
-
+import Argo.DefaultMain ( customMain, userOptions )
 
 import qualified FileEchoServer as FES
 
 main :: IO ()
-main =
-  do theApp <- Argo.mkApp "File echo server" docs mkInitState serverMethods
-     defaultMain description theApp
+main = customMain parseServerOptions parseServerOptions parseServerOptions parseServerOptions description getApp
+  where
+    getApp opts =
+      Argo.mkApp "file-echo-api" docs (mkInitState $ userOptions opts) serverMethods
 
 docs :: [Doc.Block]
 docs =
@@ -31,8 +30,22 @@ description :: String
 description =
   "An RPC server for loading and printing files."
 
-mkInitState :: (FilePath -> IO ByteString) -> IO FES.ServerState 
-mkInitState = const FES.initialState
+mkInitState :: ServerOptions -> (FilePath -> IO ByteString) -> IO FES.ServerState
+mkInitState opts reader = FES.initialState (initialFile opts) reader
+
+newtype ServerOptions = ServerOptions { initialFile :: Maybe FilePath }
+
+-- This function parses additional options used by this particular
+-- application. The ordinary Argo options are still parsed, and these
+-- are appended.
+parseServerOptions :: Opt.Parser ServerOptions
+parseServerOptions = ServerOptions <$> filename
+  where
+    filename =
+      Opt.optional $ Opt.strOption $
+      Opt.long "file" <>
+      Opt.metavar "FILENAME" <>
+      Opt.help "Initial file to echo"
 
 serverMethods :: [Argo.AppMethod FES.ServerState]
 serverMethods =

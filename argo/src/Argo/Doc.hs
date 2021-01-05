@@ -25,10 +25,21 @@ data Inline
   | Link LinkTarget Text
   | Literal Text
 
+-- | This class provides the canonical documentation for a datatype
+-- that occurs as part of a protocol message (in other words, it
+-- documents the @FromJSON@ and @ToJSON@ instances). The type variable
+-- does not occur in the method's signature because it is intended to
+-- be used with the @TypeApplications@ extension to GHC Haskell.
 class Described a where
   typeName :: Text
   description :: [Block]
 
+
+-- | This class provides the canonical documentation for a datatype
+-- that is deserialized as parameters to some method via a @FromJSON@
+-- instance. The type variable does not occur in the method's
+-- signature because it is intended to be used with the
+-- @TypeApplications@ extension to GHC Haskell.
 class DescribedParams a where
   parameterFieldDescription :: [(Text, Block)]
 

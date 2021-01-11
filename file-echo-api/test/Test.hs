@@ -18,7 +18,6 @@ main =
      withPython3venv (Just reqs) $ \pip python ->
        do pySrc <- getArgoPythonFile "."
           testScriptsDir <- getDataFileName "test-scripts/"
-          --let testScriptsDir = "/Users/andrew/Repos/GRINDSTONE/argo/file-echo-api/test-scripts"
           pip ["install", pySrc]
           putStrLn "pipped"
 

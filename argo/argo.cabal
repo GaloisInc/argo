@@ -46,6 +46,7 @@ common deps
     scotty                      ^>= 0.12,
     silently                    ^>= 1.2,
     text                        ^>= 1.2.3,
+    time,
     unordered-containers        ^>= 0.2,
     uuid                        ^>= 1.3,
     wai                         ^>= 3.2.2,

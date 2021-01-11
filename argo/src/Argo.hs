@@ -19,7 +19,7 @@
 module Argo
   ( -- * Primary interface to JSON-RPC
     App
-  , mkApp
+  , mkApp, mkDefaultApp
   , appName
   , appDocumentation
   -- * Method Options
@@ -36,6 +36,9 @@ module Argo
   , getState
   , modifyState
   , setState
+  -- * Manipulating internal server state
+  , pinState, unpinState
+  , unpinAllStates, setCacheLimit
   -- * File I/O in methods that respects caching
   , getFileReader
   -- * "printf"-style debugging in methods
@@ -59,6 +62,7 @@ module Argo
   , serveHttp
   -- * Request identifiers
   , RequestID(..)
+  , StateID
   ) where
 
 import Control.Concurrent
@@ -93,8 +97,6 @@ import qualified Argo.Doc as Doc
 import Argo.ServerState
 import Argo.Netstring
 
-type AppServerState = ServerState (Text, JSON.Object)
-
 -- | We only support JSON-RPC 2.0.
 jsonRPCVersion :: Text
 jsonRPCVersion = "2.0"
@@ -121,6 +123,14 @@ data MethodContext =
     , mctxFileReader :: FilePath -> IO B.ByteString
     -- ^ A function returning the contents of the named file,
     -- potentially from a cache.
+    , mctxStatePin :: StateID -> IO ()
+    -- ^ A function for pinning a state (i.e., adding it to the persistent cache).
+    , mctxStateUnpin :: StateID -> IO ()
+    -- ^ A function for unpinning a state (i.e., removing it from the persistent cache).
+    , mctxStateUnpinAll :: IO ()
+    -- ^ A function for unpinning all pinned states (i.e., clearing the persistent cache).
+    , mctxSetECacheLimit :: Int -> IO ()
+    -- ^ A function for setting the max size of the ephemeral cache.
     }
 
 defaultMethodOptions :: MethodOptions
@@ -212,18 +222,44 @@ setState = Method . put
 raise :: JSONRPCException -> Method state a
 raise = liftIO . throwIO
 
+-- | Pin the specified state.
+pinState :: StateID -> Method state ()
+pinState sid = Method $ do
+  pin <- asks mctxStatePin
+  liftIO $ pin sid
+
+-- | Unpin the specified state.
+unpinState :: StateID -> Method state ()
+unpinState sid = Method $ do
+  unpin <- asks mctxStateUnpin
+  liftIO $ unpin sid
+
+-- | Unpin all states.
+unpinAllStates :: Method state ()
+unpinAllStates = Method $ do
+  unpinAll <- asks mctxStateUnpinAll
+  liftIO $ unpinAll
+
+
+-- | Set the limit for the ephemeral cache.
+setCacheLimit :: Int -> Method state ()
+setCacheLimit n = Method $ do
+  setCacheSize <- asks mctxSetECacheLimit
+  liftIO $ setCacheSize n
+
+
 --------------------------------------------------------------------------------
 
 -- | An application is a state and a mapping from names to methods.
 data App s =
-  App { _serverState :: MVar (AppServerState s)
+  App { _serverState :: MVar (ServerState s)
       , _appMethods :: Map Text (MethodType, JSON.Value -> Method s JSON.Value)
       , _appName :: Text
       , _appDocumentation :: [Doc.Block]
       }
 
 -- | Focus on the state var in an 'App'
-serverState :: Lens' (App s) (MVar (AppServerState s))
+serverState :: Lens' (App s) (MVar (ServerState s))
 serverState = lens _serverState (\a s -> a { _serverState = s })
 
 -- | Focus on the 'Method's in an 'App'
@@ -268,12 +304,13 @@ methodDocs = lens _methodDocs (\m t -> m { _methodDocs = t })
 mkApp ::
   Text {- ^ Application name -} ->
   [Doc.Block] {- ^ Documentation -} ->
+  ServerOpts {- ^ Server options to use at launch. -}->
   ((FilePath -> IO B.ByteString) -> IO s) {- ^ how to get the initial state -} ->
   [AppMethod s]
   {- ^ Individual methods -} ->
   IO (App s)
-mkApp name docs initAppState methods =
-  App <$> (newMVar =<< initialState initAppState)
+mkApp name docs opts initAppState methods =
+  App <$> (newMVar =<< initServerState opts initAppState)
       <*> pure (M.fromList [ (name, (ty, impl)) | AppMethod name ty impl _ _ <- methods])
       <*> pure name
       <*> pure (docs ++
@@ -291,6 +328,18 @@ mkApp name docs initAppState methods =
                    ]])
 
   where mt ty = T.toLower (T.pack ("(" ++ show ty ++ ")"))
+
+
+-- | Like @mkApp@ but uses Argo's default server options (see @defaultServerOpts@
+--   in @Argo.ServerState@).
+mkDefaultApp ::
+  Text {- ^ Application name -} ->
+  [Doc.Block] {- ^ Documentation -} ->
+  ((FilePath -> IO B.ByteString) -> IO s) {- ^ how to get the initial state -} ->
+  [AppMethod s]
+  {- ^ method names paired with their implementations -} ->
+  IO (App s)
+mkDefaultApp nm docs initAppState methods = mkApp nm docs defaultServerOpts initAppState methods
 
 -- | JSON RPC exceptions should be thrown by method implementations when
 -- they want to return an error.
@@ -486,17 +535,6 @@ instance JSON.ToJSON Request where
       "id"      .= view requestID     req <>
       "params"  .= view requestParams req
 
-rerunStep ::
-  forall s.
-  Maybe RequestID -> App s -> MethodOptions ->
-  s -> (Text, JSON.Object) -> (FilePath -> IO B.ByteString) -> IO s
-rerunStep reqID app opts startState (method, params) fileReader =
-  case M.lookup method $ view appMethods app of
-    Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
-    Just (_, m) ->
-      fst <$> runMethod (m $ JSON.Object params) mctx startState
-          where mctx = MethodContext { mctxOptions = opts, mctxFileReader = fileReader }
-
 -- | A response to a command or query.
 --
 -- The first type parameter represents the type of state IDs used at
@@ -626,51 +664,71 @@ handleRequest ::
 handleRequest opts respond app req =
   case M.lookup method $ view appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
-    Just (Command, m) ->
+    Just (Command, m) -> do
       withRequestID $ \reqID ->
-      do stateID <- getStateID req
-         response <- withMVar theState $
-           \contents ->
-             getAppState (rerunStep (Just reqID) app opts) contents stateID >>=
-             \case
-               Nothing -> throwIO $ unknownStateID stateID
-               Just initAppState ->
-                 do let r = (method, view requestParams req)
-                    let mctx = MethodContext { mctxOptions = opts, mctxFileReader = freshStateReader contents stateID }
-                    (newAppState, result) <- runMethodResponse (m params) reqID mctx initAppState
-                    sid' <- saveNewState contents stateID r newAppState
-                    return $ addStateID sid' result
-         respond (JSON.encode response)
-    Just (Query, m) ->
+        do stateID <- getStateID req
+           response <- withMVar theState $
+             \state -> do
+               getAppState state stateID >>=
+                 \case
+                   Nothing -> throwIO $ unknownStateID stateID
+                   Just initAppState ->
+                     do let mctx = MethodContext
+                                   { mctxOptions = opts
+                                   , mctxFileReader = freshStateFileReader state stateID
+                                   , mctxStatePin = pinAppState state
+                                   , mctxStateUnpin = unpinAppState state
+                                   , mctxStateUnpinAll = clearPersistentCache state
+                                   , mctxSetECacheLimit = setEphemeralCacheLimit state
+                                   }
+                        (newAppState, result) <- runMethodResponse (m params) reqID mctx initAppState
+                        sid' <- saveNewAppState state newAppState
+                        return $ addStateID sid' result
+           respond (JSON.encode response)
+    Just (Query, m) -> do
       withRequestID $ \reqID ->
-      do stateID <- getStateID req
-         response <- withMVar theState $
-           \contents ->
-             getAppState (rerunStep (Just reqID) app opts) contents stateID >>=
-             \case
-               Nothing -> throwIO $ unknownStateID stateID
-               Just theAppState ->
-                 do let mctx = MethodContext { mctxOptions = opts, mctxFileReader = B.readFile } -- No caching of this state
-                    (_, result) <- runMethodResponse (m params) reqID mctx theAppState
-                    -- Here, we return the original state ID, because
-                    -- queries don't result in new states.
-                    return $ addStateID stateID result
-         respond (JSON.encode response)
-    Just (Notification, m) ->
+        do stateID <- getStateID req
+           response <- withMVar theState $
+             \state -> do
+               getAppState state stateID >>=
+                 \case
+                   Nothing -> throwIO $ unknownStateID stateID
+                   Just theAppState ->
+                     do let mctx = MethodContext
+                                   { mctxOptions = opts
+                                   , mctxFileReader = B.readFile -- No caching of this state
+                                   , mctxStatePin = pinAppState state
+                                   , mctxStateUnpin = unpinAppState state
+                                   , mctxStateUnpinAll = clearPersistentCache state
+                                   , mctxSetECacheLimit = setEphemeralCacheLimit state
+                                   }
+                        (_, result) <- runMethodResponse (m params) reqID mctx theAppState
+                        -- Here, we return the original state ID, because
+                        -- queries don't result in new states.
+                        return $ addStateID stateID result
+           respond (JSON.encode response)
+    Just (Notification, m) -> do
       withoutRequestID $
-      void $
-      do stateID <- getStateID req
-         withMVar theState $
-           \contents ->
-             getAppState (rerunStep reqID app opts) contents stateID >>=
-             \case
-               Nothing -> throwIO $ unknownStateID stateID
-               Just theAppState ->
-                 -- No reply will be sent, so there is no way of the
-                 -- client re-using any resulting state. So we don't
-                 -- cache file contents here.
-                 let mctx = MethodContext { mctxOptions = opts, mctxFileReader = B.readFile } in
-                 (,()) <$> execMethodSilently (m params) mctx theAppState
+       void $
+        do stateID <- getStateID req
+           withMVar theState $
+             \state -> do
+               getAppState state stateID >>=
+                 \case
+                   Nothing -> throwIO $ unknownStateID stateID
+                   Just theAppState ->
+                     -- No reply will be sent, so there is no way of the
+                     -- client re-using any resulting state. So we don't
+                     -- cache file contents here.
+                     let mctx = MethodContext
+                                { mctxOptions = opts
+                                , mctxFileReader = B.readFile -- No caching of this state
+                                , mctxStatePin = pinAppState state
+                                , mctxStateUnpin = unpinAppState state
+                                , mctxStateUnpinAll = clearPersistentCache state
+                                , mctxSetECacheLimit = setEphemeralCacheLimit state
+                                }
+                     in (,()) <$> execMethodSilently (m params) mctx theAppState
   where
     method   = view requestMethod req
     params   = JSON.Object $ view requestParams req

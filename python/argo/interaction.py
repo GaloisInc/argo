@@ -61,7 +61,7 @@ class Interaction:
         self.request_id = \
             connection. \
             server_connection. \
-            send_message(self._method, self._params)
+            send_command(self._method, self._params)
 
     def add_param(self, name: str, val: Any) -> None:
         self._params[name] = val

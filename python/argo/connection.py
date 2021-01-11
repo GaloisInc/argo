@@ -69,7 +69,7 @@ class ServerProcess(metaclass=ABCMeta):
     def get_one_reply(self) -> Optional[str]: pass
 
     @abstractmethod
-    def send_one_message(self, the_message: str) -> None: pass
+    def send_one_message(self, the_message: str, *, expecting_response : bool = True) -> None: pass
 
 class ManagedProcess(ServerProcess, metaclass=ABCMeta):
     """A ``ServerProcess`` that is responsible for starting and stopping
@@ -167,7 +167,7 @@ class SocketProcess(ManagedProcess):
         except (ValueError, IndexError):
             return None
 
-    def send_one_message(self, message: str) -> None:
+    def send_one_message(self, message: str, expecting_response : bool = True) -> None:
         msg_bytes = netstring.encode(message)
         self.socket.send(msg_bytes)
 
@@ -271,7 +271,7 @@ class RemoteSocketProcess(ServerProcess):
         except (ValueError, IndexError):
             return None
 
-    def send_one_message(self, message: str) -> None:
+    def send_one_message(self, message: str, *, expecting_response : bool = True) -> None:
         msg_bytes = netstring.encode(message)
         self.socket.send(msg_bytes)
 
@@ -303,13 +303,13 @@ class HttpProcess(ServerProcess):
         else:
             return self.waiting_replies.pop()
 
-    def send_one_message(self, message: str) -> None:
-
-        self.waiting_replies.append(
-            requests.post(self.url,
+    def send_one_message(self, message: str, *, expecting_response : bool = True) -> None:
+        r = requests.post(self.url,
                           headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
                           data=message).text
-        )
+        if expecting_response:
+            self.waiting_replies.append(r)
+
 
 
 def enqueue_netstring(out: IO[bytes], queue: queue.Queue[str]) -> None:
@@ -358,7 +358,7 @@ class StdIOProcess(ManagedProcess):
             self.proc_thread.daemon = True
             self.proc_thread.start()
 
-    def send_one_message(self, the_message: str) -> None:
+    def send_one_message(self, the_message: str, *, expecting_response : bool = True) -> None:
         if self.proc is not None and self.proc.stdin is not None:
             self.proc.stdin.write(netstring.encode(the_message))
             self.proc.stdin.flush()
@@ -410,10 +410,10 @@ class ServerConnection:
             self.replies[the_reply['id']] = the_reply
             reply_bytes = self.process.get_one_reply()
 
-    def send_message(self, method: str, params: dict) -> int:
-        """Send a message to the server with the given JSONRPC method and
-           parameters. The return value is the unique request ID that
-           was used for the message, which can be used to find
+    def send_command(self, method: str, params: dict) -> int:
+        """Send a message to the server with the given JSONRPC command
+           method and parameters. The return value is the unique request
+           ID that was used for the message, which can be used to find
            replies.
         """
         request_id = self.get_id()
@@ -424,6 +424,25 @@ class ServerConnection:
         msg_string = json.dumps(msg)
         self.process.send_one_message(msg_string)
         return request_id
+
+    def send_query(self, method: str, params: dict) -> int:
+        """Send a message to the server with the given JSONRPC query
+           method and parameters. The return value is the unique request
+           ID that was used for the message, which can be used to find
+           replies.
+        """
+        return self.send_command(method, params)
+
+    def send_notification(self, method: str, params: dict) -> None:
+        """Send a message to the server with the given JSONRPC notification
+           method and parameters. There is no return value, since notifications
+           do not allow for a response from the server.
+        """
+        msg = {'jsonrpc': '2.0',
+               'method': method,
+               'params': params}
+        msg_string = json.dumps(msg)
+        self.process.send_one_message(msg_string, expecting_response = False)
 
     def wait_for_reply_to(self, request_id: int) -> Any:
         """Block until a reply is received for the given

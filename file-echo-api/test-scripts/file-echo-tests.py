@@ -78,7 +78,7 @@ def run_tests(c):
     # Method not found
     uid = c.send_message("bad function", {"state": cleared_state})
     actual = c.wait_for_reply_to(uid)
-    expected = {'error':{'data':{'stdout':'','data':'bad function','stderr':''},'code':-32601,'message':'Method not found'},'jsonrpc':'2.0','id':uid}
+    expected = {'error':{'data':{'stdout':None,'data':'bad function','stderr':None},'code':-32601,'message':'Method not found'},'jsonrpc':'2.0','id':uid}
     assert(actual == expected)
 
     # Invalid params
@@ -107,14 +107,14 @@ def run_tests(c):
     # send a request with an invalid state id
     uid = c.send_message("show", {"state": "12345678-9101-1121-3141-516171819202"})
     actual = c.wait_for_reply_to(uid)
-    expected = {'error':{'data':{'stdout':'','data':'12345678-9101-1121-3141-516171819202','stderr':''},'code':20,'message':'Unknown state ID'},'jsonrpc':'2.0','id':uid}
+    expected = {'error':{'data':{'stdout':None,'data':'12345678-9101-1121-3141-516171819202','stderr':None},'code':20,'message':'Unknown state ID'},'jsonrpc':'2.0','id':uid}
     assert(actual == expected)
 
     # invalid request (missing JSON-RPC required fields)
     invalid_request = {'jsonrpc': '2.0','method': 'bad request', 'id':1}
     c.process.send_one_message(json.dumps(invalid_request))
     actual = c.wait_for_reply_to(None)
-    expected = {'error':{'data':{'stdout':'','data':'Error in $: key \"params\" not found','stderr':''},'code':-32700,'message':'Parse error'},'jsonrpc':'2.0','id':None}
+    expected = {'error':{'data':{'stdout':None,'data':'Error in $: key \"params\" not found','stderr':None},'code':-32700,'message':'Parse error'},'jsonrpc':'2.0','id':None}
     assert(actual == expected)
 
    # invalid request (Bad JSON)
@@ -122,7 +122,7 @@ def run_tests(c):
     c.process.send_one_message(invalid_request)
     time.sleep(2) # pause before fetching response so we don't just read the previous response whose JSON-RPC id is `null`
     actual = c.wait_for_reply_to(None)
-    expected = {'error':{'data':{'stdout':'','data':'Error in $: Failed reading: not a valid json value at \'BAAAAADJSON\'','stderr':''},'code':-32700,'message':'Parse error'},'jsonrpc':'2.0','id':None}
+    expected = {'error':{'data':{'stdout':None,'data':'Error in $: Failed reading: not a valid json value at \'BAAAAADJSON\'','stderr':None},'code':-32700,'message':'Parse error'},'jsonrpc':'2.0','id':None}
     assert(actual == expected)
 
 

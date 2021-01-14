@@ -106,18 +106,22 @@ data MethodOptions =
     { optFileSystemMode :: FileSystemMode
     -- ^ Allowable behavior with respect to the external file system.
     -- ReadOnly prohibits creating or writing files.
-    , optFileReader :: FilePath -> IO B.ByteString
-    -- ^ A function returning the contents of the named file,
-    -- potentially from a cache.
     , optLogger :: Text -> IO ()
     -- ^ A function to use for logging debug messages.
+    }
+
+data MethodContext =
+  MethodContext
+    { mctxOptions :: MethodOptions
+    , mctxFileReader :: FilePath -> IO B.ByteString
+    -- ^ A function returning the contents of the named file,
+    -- potentially from a cache.
     }
 
 defaultMethodOptions :: MethodOptions
 defaultMethodOptions =
   MethodOptions
     { optFileSystemMode = ReadWrite
-    , optFileReader = B.readFile
     , optLogger = const (return ())
     }
 
@@ -127,11 +131,11 @@ defaultMethodOptions =
 -- each of which is a function from the JSON value representing its parameters
 -- to a JSON value representing its response.
 newtype Method state result
-  = Method (ReaderT MethodOptions (StateT state IO) result)
+  = Method (ReaderT MethodContext (StateT state IO) result)
   deriving (Functor, Applicative, Monad, MonadIO)
 
-runMethod :: Method state result -> MethodOptions -> state -> IO (state, result)
-runMethod (Method m) opts s = flop <$> runStateT (runReaderT m opts) s
+runMethod :: Method state result -> MethodContext -> state -> IO (state, result)
+runMethod (Method m) mctx s = flop <$> runStateT (runReaderT m mctx) s
   where flop (x, y) = (y, x)
 
 
@@ -160,7 +164,7 @@ method f p =
 
 -- | Get the logger from the server
 getDebugLogger :: Method state (Text -> IO ())
-getDebugLogger = Method (asks optLogger)
+getDebugLogger = Method (asks (optLogger . mctxOptions))
 
 -- | Log a message for debugging
 debugLog :: Text -> Method state ()
@@ -170,11 +174,11 @@ debugLog message =
 
 -- | Get the file reader from the server
 getFileReader :: Method state (FilePath -> IO B.ByteString)
-getFileReader = Method (asks optFileReader)
+getFileReader = Method (asks mctxFileReader)
 
 -- | Get the file system mode from the server
 getFileSystemMode :: Method state FileSystemMode
-getFileSystemMode = Method (asks optFileSystemMode)
+getFileSystemMode = Method (asks (optFileSystemMode . mctxOptions))
 
 -- | Get the state of the server
 getState :: Method state state
@@ -422,8 +426,8 @@ rerunStep reqID app opts startState (method, params) fileReader =
   case M.lookup method $ view appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (_, m) ->
-      fst <$> runMethod (m $ JSON.Object params) mopts startState
-          where mopts = opts { optFileReader = fileReader }
+      fst <$> runMethod (m $ JSON.Object params) mctx startState
+          where mctx = MethodContext { mctxOptions = opts, mctxFileReader = fileReader }
 
 -- | A response to a command or query.
 --
@@ -503,22 +507,22 @@ methodCapture opts
 runMethodResponse ::
   Method s a ->
   RequestID ->
-  MethodOptions ->
+  MethodContext ->
   s ->
   IO (s, Response () a)
 execMethodSilently ::
   Method s a ->
-  MethodOptions ->
+  MethodContext ->
   s ->
   IO s
 (runMethodResponse, execMethodSilently) =
-  ( \m reqID opts st ->
-      tryOutErr (methodCapture opts) reqID (runMethod m opts st)
-  , \m opts st -> fst <$>
+  ( \m reqID mctx st ->
+      tryOutErr (methodCapture (mctxOptions mctx)) reqID (runMethod m mctx st)
+  , \m mctx st -> fst <$>
       tryOutErr
         hNoCapture
         IDNull
-        (runMethod m opts st) )
+        (runMethod m mctx st) )
   where
     tryOutErr ::
       (forall a. [Handle] -> IO a -> IO (Maybe String, a)) ->
@@ -564,8 +568,8 @@ handleRequest opts respond app req =
                Nothing -> throwIO $ unknownStateID stateID
                Just initAppState ->
                  do let r = (method, view requestParams req)
-                    let opts' = opts { optFileReader = freshStateReader contents stateID }
-                    (newAppState, result) <- runMethodResponse (m params) reqID opts' initAppState
+                    let mctx = MethodContext { mctxOptions = opts, mctxFileReader = freshStateReader contents stateID }
+                    (newAppState, result) <- runMethodResponse (m params) reqID mctx initAppState
                     sid' <- saveNewState contents stateID r newAppState
                     return $ addStateID sid' result
          respond (JSON.encode response)
@@ -578,8 +582,8 @@ handleRequest opts respond app req =
              \case
                Nothing -> throwIO $ unknownStateID stateID
                Just theAppState ->
-                 do let opts' = opts { optFileReader = B.readFile } -- No caching of this state
-                    (_, result) <- runMethodResponse (m params) reqID opts' theAppState
+                 do let mctx = MethodContext { mctxOptions = opts, mctxFileReader = B.readFile } -- No caching of this state
+                    (_, result) <- runMethodResponse (m params) reqID mctx theAppState
                     -- Here, we return the original state ID, because
                     -- queries don't result in new states.
                     return $ addStateID stateID result
@@ -597,7 +601,8 @@ handleRequest opts respond app req =
                  -- No reply will be sent, so there is no way of the
                  -- client re-using any resulting state. So we don't
                  -- cache file contents here.
-                 (,()) <$> execMethodSilently (m params) (opts { optFileReader = B.readFile }) theAppState
+                 let mctx = MethodContext { mctxOptions = opts, mctxFileReader = B.readFile } in
+                 (,()) <$> execMethodSilently (m params) mctx theAppState
   where
     method   = view requestMethod req
     params   = JSON.Object $ view requestParams req

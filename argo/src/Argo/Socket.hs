@@ -13,7 +13,7 @@ import System.IO                (IOMode(ReadWriteMode), hClose, stderr)
 
 import qualified Network.Socket as N
 
-import Argo (App, serveHandlesNS)
+import Argo (App, MethodOptions(..), serveHandlesNS)
 
 -- | Arbitrarily chosen value for number of connects to hold
 -- in queue during a burst of connections before they are
@@ -28,12 +28,12 @@ listenQueueDepth = 10
 -- A reasonable default host name is "::", and a reasonable default
 -- service name is a port number as a string, e.g. "10000".
 serveSocket ::
-  (Text -> IO ())   {- ^ logger            -} ->
+  MethodOptions     {- ^ options for how to execute methods -} ->
   N.HostName        {- ^ host              -} ->
   N.ServiceName     {- ^ port              -} ->
   App s             {- ^ rpc application   -} ->
   IO ()             {- ^ start application -}
-serveSocket logger hostName serviceName app =
+serveSocket opts hostName serviceName app =
 
      -- resolve listener addresses, throws exception on failure
   do infos <- N.getAddrInfo (Just hints) (Just hostName) (Just serviceName)
@@ -42,17 +42,17 @@ serveSocket logger hostName serviceName app =
      -- one per address family.
      forConcurrently_ infos $ \info ->
        do s <- startListening info
-          forever (acceptClient logger app s)
+          forever (acceptClient opts app s)
 
 -- | Start listening on a single, dynamically assigned port.
 -- The resulting worker thread and dynamically assigned port
 -- number are returned on success.
 serveSocketDynamic ::
-  (Text -> IO ())   {- ^ Logger            -} ->
+  MethodOptions     {- ^ options for how to execute methods -} ->
   N.HostName        {- ^ IP address        -} ->
   App s             {- ^ RPC application   -} ->
   IO (Async (), N.PortNumber)
-serveSocketDynamic logger hostName app =
+serveSocketDynamic opts hostName app =
 
      -- resolve listener addresses, throws exception on failure
   do let hint1 =
@@ -65,7 +65,7 @@ serveSocketDynamic logger hostName app =
        _      -> fail "serveSocketDynamic: host resolved as too many addresses"
 
      s <- startListening info
-     a <- async (forever (acceptClient logger app s))
+     a <- async (forever (acceptClient opts app s))
      p <- N.socketPort s
      return (a, p)
 
@@ -84,15 +84,16 @@ startListening addr =
 
 -- | Accept a new connection on the given listening socket and
 -- start processing rpc requests.
-acceptClient :: (Text -> IO ()) -> App s -> N.Socket -> IO ()
-acceptClient logMessage app s =
+acceptClient :: MethodOptions -> App s -> N.Socket -> IO ()
+acceptClient opts app s =
 
   do (c, peer) <- N.accept s
      h         <- N.socketToHandle c ReadWriteMode
+     let logMessage = optLogger opts
      -- don't use c after this, it is owned by h
 
      logMessage (pack ("CONNECT: " ++ show peer))
-     _ <- forkFinally (serveHandlesNS logMessage h h app) $ \res ->
+     _ <- forkFinally (serveHandlesNS opts h h app) $ \res ->
        do case res of
             Right _ -> logMessage (pack ("CLOSE: " ++ show peer))
             Left e  -> logMessage (pack ("ERROR: " ++ show peer ++ " " ++ displayException e))

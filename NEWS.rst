@@ -8,6 +8,10 @@ development artifacts can keep apprised of ongoing updates.
 
 Recent Changes
 ==============
+
+- Added a ``doc`` subcommand that causes documentation to be dumped
+  about the server.
+
 - Added a ``--public`` flag that causes the socket server to listen for
   external connections
 

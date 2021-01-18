@@ -8,6 +8,7 @@ module Argo.DefaultMain
 
 import Control.Applicative
 import Control.Monad
+import Control.Lens (view)
 import Data.Maybe
 import Data.Foldable
 import qualified Data.Text.IO as T
@@ -23,21 +24,26 @@ import System.FilePath
 import System.Exit (die)
 
 import Argo
+import qualified Argo.Doc as Doc
+import Argo.Doc.Protocol (protocolDocs)
+import Argo.Doc.ReST
 import Argo.Socket
 
 -- | The options selected by a user, including the server mode but
 -- excluding mode-specific initialization options (e.g. the HTTP port).
-data UserOptions stdIOOpts socketOpts httpOpts
+data UserOptions stdIOOpts socketOpts httpOpts docOpts
   = StdIOOpts stdIOOpts
   | SocketOpts socketOpts
   | HttpOpts httpOpts
+  | DocOpts docOpts
 
 -- | If all modes use the same user option, collapse them into a
 -- single structure.
-userOptions :: UserOptions a a a -> a
+userOptions :: UserOptions a a a a -> a
 userOptions (StdIOOpts opts) = opts
 userOptions (SocketOpts opts) = opts
 userOptions (HttpOpts opts) = opts
+userOptions (DocOpts opts) = opts
 
 -- | Run an Argo application using the default set of command-line
 -- arguments and server modes, augmented with additional command-line
@@ -49,16 +55,17 @@ userOptions (HttpOpts opts) = opts
 customMain ::
   Opt.Parser stdIOOpts {- ^ A command-line parser for the options for stdio mode -} ->
   Opt.Parser socketOpts {- ^ A command-line parser for the options for socket mode -} ->
-  Opt.Parser httpOpts {- ^ A command-line parser for the options for HTTP mode -}->
+  Opt.Parser httpOpts {- ^ A command-line parser for the options for HTTP mode -} ->
+  Opt.Parser docOpts {- ^ A command-line parser for the options for documenation -} ->
   String {- ^ A description to be shown to users in the --help text -} ->
-  (UserOptions stdIOOpts socketOpts httpOpts -> IO (App s))
+  (UserOptions stdIOOpts socketOpts httpOpts docOpts -> IO (App s))
     {- ^ An initialization procedure for the application that transforms the
          parsed custom options into an application -} ->
   IO ()
-customMain stdioOpts socketOpts httpOpts str app =
+customMain stdioOpts socketOpts httpOpts docOpts str app =
   do opts <- Opt.customExecParser
                (Opt.prefs $ Opt.showHelpOnError <> Opt.showHelpOnEmpty)
-               (options stdioOpts socketOpts httpOpts str)
+               (options stdioOpts socketOpts httpOpts docOpts str)
      realMain app opts
 
 -- | Run an Argo application using the default set of command-line
@@ -68,7 +75,7 @@ defaultMain ::
   App s {- ^ The application to be run -} ->
   IO ()
 defaultMain str app =
-  customMain parseNoOpts parseNoOpts parseNoOpts str $ const $ pure app
+  customMain parseNoOpts parseNoOpts parseNoOpts parseNoOpts str $ const $ pure app
 
 data NoOpts = NoOpts
 
@@ -90,25 +97,27 @@ data NetworkOptions =
 
 data LogOption = StdErrLog
 
-data ProgramMode stdioOpts socketOpts httpOpts
+data ProgramMode stdioOpts socketOpts httpOpts docOpts
   = StdIONetstring stdioOpts
   -- ^ NetStrings over standard IO
   | SocketNetstring NetworkOptions socketOpts
   -- ^ NetStrings over some socket
   | Http String NetworkOptions httpOpts
   -- ^ HTTP (String is path at which API is served)
+  | Doc !Format docOpts
+  -- ^ Dump protocol description to stdout
 
-data GlobalOptions stdioOpts socketOpts httpOpts =
+data GlobalOptions stdioOpts socketOpts httpOpts docOpts =
     GlobalOptions
     { methodOpts :: MethodOptions
-    , programMode :: ProgramMode stdioOpts socketOpts httpOpts
+    , programMode :: ProgramMode stdioOpts socketOpts httpOpts docOpts
     }
 
 mkGlobalOptions ::
   Maybe LogOption ->
   FileSystemMode ->
-  ProgramMode stdioOpts socketOpts httpOpts ->
-  GlobalOptions stdioOpts socketOpts httpOpts
+  ProgramMode stdioOpts socketOpts httpOpts docOpts ->
+  GlobalOptions stdioOpts socketOpts httpOpts docOpts
 mkGlobalOptions logging fsMode progMode =
   GlobalOptions
   { methodOpts = defaultMethodOptions {
@@ -124,28 +133,30 @@ mkGlobalOptions logging fsMode progMode =
 
 newtype Port = Port {unPort :: String} deriving (Eq, Ord)
 
-newtype Session
-  = Session String
+newtype Session = Session String
+
+data Format = ReST
 
 mode ::
   Opt.Parser stdioOpts ->
   Opt.Parser socketOpts ->
   Opt.Parser httpOpts ->
-  String -> Opt.Parser (ProgramMode stdioOpts socketOpts httpOpts)
-mode stdio socket http desc =
-  Opt.hsubparser $ stdioMode stdio desc <> socketMode socket desc <> httpMode http desc
+  Opt.Parser docOpts ->
+  String -> Opt.Parser (ProgramMode stdioOpts socketOpts httpOpts docOpts)
+mode stdio socket http doc desc =
+  Opt.hsubparser $ stdioMode stdio desc <> socketMode socket desc <> httpMode http desc <> docMode doc desc
 
-stdioMode :: Opt.Parser stdioOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts)
+stdioMode :: Opt.Parser stdioOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts docOpts)
 stdioMode user desc = Opt.command "stdio" $
   Opt.info (StdIONetstring <$> user) $
   Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over stdin and stdout"
 
-socketMode :: Opt.Parser socketOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts)
+socketMode :: Opt.Parser socketOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts docOpts)
 socketMode user desc = Opt.command "socket" $
   Opt.info (SocketNetstring <$> networkOptions <*> user) $
   Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over a socket"
 
-httpMode :: Opt.Parser httpOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts)
+httpMode :: Opt.Parser httpOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts docOpts)
 httpMode user desc = Opt.command "http" $
   Opt.info (Http <$> path <*> networkOptions <*> user) $
   Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over HTTP"
@@ -153,6 +164,14 @@ httpMode user desc = Opt.command "http" $
     path =
       Opt.argument Opt.str $
       Opt.metavar "PATH" <> Opt.help "The path at which to serve the API"
+
+docMode :: Opt.Parser docOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts docOpts)
+docMode user desc = Opt.command "doc" $
+  Opt.info (Doc <$> format <*> user) $
+  Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Emit protocol documentation"
+  where
+    format = pure ReST
+
 
 networkOptions :: Opt.Parser NetworkOptions
 networkOptions =
@@ -162,22 +181,24 @@ allOptions ::
   Opt.Parser stdioOpts ->
   Opt.Parser socketOpts ->
   Opt.Parser httpOpts ->
+  Opt.Parser docOpts ->
   String ->
-  Opt.Parser (GlobalOptions stdioOpts socketOpts httpOpts)
-allOptions stdioOpts socketOpts httpOpts desc =
+  Opt.Parser (GlobalOptions stdioOpts socketOpts httpOpts docOpts)
+allOptions stdioOpts socketOpts httpOpts docOpts desc =
   mkGlobalOptions <$>
   logOpt <*>
   readOnlyOpt <*>
-  (mode stdioOpts socketOpts httpOpts desc <**> Opt.helper)
+  (mode stdioOpts socketOpts httpOpts docOpts desc <**> Opt.helper)
 
 options ::
   Opt.Parser stdioOpts ->
   Opt.Parser socketOpts ->
   Opt.Parser httpOpts ->
+  Opt.Parser docOpts ->
   String ->
-  Opt.ParserInfo (GlobalOptions stdioOpts socketOpts httpOpts)
-options stdioOpts socketOpts httpOpts desc =
-  (Opt.info (allOptions stdioOpts socketOpts httpOpts desc) $
+  Opt.ParserInfo (GlobalOptions stdioOpts socketOpts httpOpts docOpts)
+options stdioOpts socketOpts httpOpts docOpts desc =
+  (Opt.info (allOptions stdioOpts socketOpts httpOpts docOpts desc) $
    Opt.fullDesc <> Opt.progDesc desc)
 
 hostOpt :: Opt.Parser (Maybe HostName)
@@ -312,8 +333,8 @@ getOrLockSession (Just (Session session)) publicity maybePort =
                      unlockFile globalLock
 
 realMain ::
-  (UserOptions stdIOOpts socketOpts httpOpts -> IO (App s)) ->
-  GlobalOptions stdIOOpts socketOpts httpOpts -> IO ()
+  (UserOptions stdIOOpts socketOpts httpOpts docOpts -> IO (App s)) ->
+  GlobalOptions stdIOOpts socketOpts httpOpts docOpts -> IO ()
 realMain makeApp globalOpts =
   case programMode globalOpts of
     StdIONetstring userOpts ->
@@ -346,4 +367,11 @@ realMain makeApp globalOpts =
            Just _ -> die "Named sessions not yet supported for HTTP"
            Nothing ->
              serveHttp opts path theApp (maybe 8080 (read . unPort) port)
+    Doc format userOpts ->
+      case format of
+        ReST ->
+          do theApp <- makeApp (DocOpts userOpts)
+             T.putStrLn $
+               restructuredText $
+                 Doc.App (view appName theApp) (protocolDocs : view appDocumentation theApp)
   where opts = methodOpts globalOpts

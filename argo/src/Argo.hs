@@ -20,11 +20,14 @@ module Argo
   ( -- * Primary interface to JSON-RPC
     App
   , mkApp
+  , appName
+  , appDocumentation
   -- * Method Options
   , FileSystemMode(..)
   , MethodOptions(..)
   , defaultMethodOptions
   -- * Defining methods
+  , AppMethod
   , MethodType(..)
   , Method(..)
   , runMethod
@@ -70,6 +73,7 @@ import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BS
 import Data.Foldable (for_)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (maybeToList)
@@ -85,6 +89,7 @@ import System.IO.Silently
 import Text.Read (readMaybe)
 import Web.Scotty hiding (raise, params, get, put)
 
+import qualified Argo.Doc as Doc
 import Argo.ServerState
 import Argo.Netstring
 
@@ -154,13 +159,24 @@ data MethodType
 -- exception.
 method ::
   forall params result state.
-  (JSON.FromJSON params, JSON.ToJSON result) =>
+  (JSON.FromJSON params, Doc.DescribedParams params, JSON.ToJSON result) =>
+  Text ->
+  MethodType ->
+  Doc.Block ->
   (params -> Method state result) ->
-  (JSON.Value -> Method state JSON.Value)
-method f p =
-  case JSON.fromJSON @params p of
-    JSON.Error msg -> raise $ invalidParams msg p
-    JSON.Success params -> JSON.toJSON <$> f params
+  AppMethod state
+method name ty doc f =
+  let impl =
+        \p ->
+         case JSON.fromJSON @params p of
+           JSON.Error msg -> raise $ invalidParams msg p
+           JSON.Success params -> JSON.toJSON <$> f params
+  in AppMethod { _methodName = name
+               , _methodType = ty
+               , _methodImplementation = impl
+               , _methodParamDocs = Doc.parameterFieldDescription @params
+               , _methodDocs = doc
+               }
 
 -- | Get the logger from the server
 getDebugLogger :: Method state (Text -> IO ())
@@ -202,6 +218,8 @@ raise = liftIO . throwIO
 data App s =
   App { _serverState :: MVar (AppServerState s)
       , _appMethods :: Map Text (MethodType, JSON.Value -> Method s JSON.Value)
+      , _appName :: Text
+      , _appDocumentation :: [Doc.Block]
       }
 
 -- | Focus on the state var in an 'App'
@@ -213,16 +231,66 @@ appMethods ::
   Lens' (App s) (Map Text (MethodType, JSON.Value -> Method s JSON.Value))
 appMethods = lens _appMethods (\a s -> a { _appMethods = s })
 
+appName :: Lens' (App s) Text
+appName = lens _appName (\a n -> a { _appName = n })
+
+appDocumentation :: Lens' (App s) [Doc.Block]
+appDocumentation = lens _appDocumentation (\a d -> a { _appDocumentation = d })
+
+data AppMethod s =
+  AppMethod
+  { _methodName :: !Text
+  , _methodType :: !MethodType
+  , _methodImplementation :: !(JSON.Value -> Method s JSON.Value)
+  , _methodParamDocs :: ![(Text, Doc.Block)]
+  , _methodDocs :: !Doc.Block
+  }
+
+
+methodName :: Lens' (AppMethod s) Text
+methodName = lens _methodName (\m n -> m { _methodName = n })
+
+methodType :: Lens' (AppMethod s) MethodType
+methodType = lens _methodType (\m t -> m { _methodType = t })
+
+methodImplementation :: Lens' (AppMethod s) (JSON.Value -> Method s JSON.Value)
+methodImplementation = lens _methodImplementation (\m impl -> m { _methodImplementation = impl })
+
+methodParamDocs :: Lens' (AppMethod s) [(Text, Doc.Block)]
+methodParamDocs = lens _methodParamDocs (\m t -> m { _methodParamDocs = t })
+
+methodDocs :: Lens' (AppMethod s) Doc.Block
+methodDocs = lens _methodDocs (\m t -> m { _methodDocs = t })
+
+
 -- | Construct an application from an initial state and a mapping from method
 -- names to methods.
 mkApp ::
+  Text {- ^ Application name -} ->
+  [Doc.Block] {- ^ Documentation -} ->
   ((FilePath -> IO B.ByteString) -> IO s) {- ^ how to get the initial state -} ->
-  [(Text, MethodType, JSON.Value -> Method s JSON.Value)]
-  {- ^ method names paired with their implementations -} ->
+  [AppMethod s]
+  {- ^ Individual methods -} ->
   IO (App s)
-mkApp initAppState methods =
+mkApp name docs initAppState methods =
   App <$> (newMVar =<< initialState initAppState)
-      <*> pure (M.fromList [ (k, (v1, v2)) | (k, v1, v2) <- methods])
+      <*> pure (M.fromList [ (name, (ty, impl)) | AppMethod name ty impl _ _ <- methods])
+      <*> pure name
+      <*> pure (docs ++
+                [Doc.Section "Methods"
+                   [ Doc.Section (name <> " " <> mt ty)
+                       [ if null paramDocs
+                         then Doc.Paragraph [Doc.Text "No parameters"]
+                         else Doc.DescriptionList
+                              [ (Doc.Literal field :| [], fieldDocs)
+                              | (field, fieldDocs) <- paramDocs
+                              ]
+                       , implDoc
+                       ]
+                   | AppMethod name ty _ paramDocs implDoc <- methods
+                   ]])
+
+  where mt ty = T.toLower (T.pack ("(" ++ show ty ++ ")"))
 
 -- | JSON RPC exceptions should be thrown by method implementations when
 -- they want to return an error.

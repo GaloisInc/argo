@@ -13,7 +13,7 @@ class LLVMIntType(LLVMType):
         return {'type': 'primitive type', 'primitive': 'integer', 'size': self.width}
 
 class LLVMArrayType(LLVMType):
-    def __init__(self, elemtype : LLVMType, size : int) -> None:
+    def __init__(self, elemtype : 'LLVMType', size : int) -> None:
         self.size = size
         self.elemtype = elemtype
 
@@ -23,7 +23,7 @@ class LLVMArrayType(LLVMType):
                  'size': self.size }
 
 class LLVMPointerType(LLVMType):
-    def __init__(self, points_to : LLVMType) -> None:
+    def __init__(self, points_to : 'LLVMType') -> None:
         self.points_to = points_to
 
     def to_json(self) -> Any:
@@ -47,14 +47,14 @@ i16 = LLVMIntType(16)
 i32 = LLVMIntType(32)
 i64 = LLVMIntType(64)
 
-def array(size : int, ty : LLVMType) -> LLVMArrayType:
+def array(size : int, ty : 'LLVMType') -> 'LLVMArrayType':
     """``[size x ty]``, i.e. an array of ``size`` elements of type ``ty``."""
     return LLVMArrayType(ty, size)
 
-def ptr(ty : LLVMType) -> LLVMPointerType:
+def ptr(ty : 'LLVMType') -> 'LLVMPointerType':
     """``ty*``, i.e. a pointer to a value of type ``ty``."""
     return LLVMPointerType(ty)
 
-def alias(name : str) -> LLVMAliasType:
+def alias(name : str) -> 'LLVMAliasType':
     """An LLVM type alias (i.e., name)."""
     return LLVMAliasType(name)

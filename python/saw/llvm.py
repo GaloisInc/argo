@@ -62,7 +62,7 @@ class CryptolTerm(SetupVal):
         return self.expression.__to_cryptol__(ty)
 
 class FreshVar(NamedSetupVal):
-    name : Optional[str]
+    __name : Optional[str]
 
     def __init__(self, spec : 'Contract', type : LLVMType, suggested_name : Optional[str] = None) -> None:
         self.__name = suggested_name
@@ -172,7 +172,7 @@ class Condition:
 class State:
     contract : 'Contract'
     fresh : List[FreshVar] = field(default_factory=list)
-    conditions : List[CryptolTerm] = field(default_factory=list)
+    conditions : List[Condition] = field(default_factory=list)
     allocated : List[Allocated] = field(default_factory=list)
     points_to : List[PointsTo] = field(default_factory=list)
 
@@ -290,7 +290,7 @@ class Contract:
         else:
             raise Exception("wrong state")
 
-        if points_to != None:
+        if points_to is not None:
             self.points_to(a, points_to)
 
         return a
@@ -304,11 +304,11 @@ class Contract:
         else:
             raise Exception("wrong state")
 
-    def proclaim(self, condition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
-        if not isinstance(condition, CryptolTerm):
-            condition = Condition(CryptolTerm(condition))
+    def proclaim(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
+        if not isinstance(proposition, CryptolTerm):
+            condition = Condition(CryptolTerm(proposition))
         else:
-            condition = Condition(condition)
+            condition = Condition(proposition)
         if self.__state == 'pre':
             self.__pre_state.conditions.append(condition)
         elif self.__state == 'post':
@@ -381,4 +381,4 @@ def cryptol(data : Any) -> 'CryptolTerm':
 
 def struct(*fields : SetupVal) -> StructVal:
     """Returns a ``StructVal`` with fields ``fields``."""
-    return StructVal(fields)
+    return StructVal(list(fields))

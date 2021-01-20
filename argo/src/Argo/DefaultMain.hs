@@ -86,12 +86,12 @@ parseNoOpts = pure NoOpts
 -- like socket and HTTP.
 data NetworkOptions =
   NetworkOptions
-  { networkSession :: Maybe Session
+  { _networkSession :: Maybe Session
     -- ^ The name of an existing session to re-establish
-  , networkHost :: Maybe HostName
+  , _networkHost :: Maybe HostName
     -- ^ The hostname on which to listen (e.g. "::" or "0.0.0.0" for
     -- public services)
-  , networkPort :: Maybe Port
+  , _networkPort :: Maybe Port
     -- ^ The port number on which to listen
   }
 
@@ -340,9 +340,9 @@ realMain makeApp globalOpts =
     StdIONetstring userOpts ->
       do theApp <- makeApp (StdIOOpts userOpts)
          serveStdIONS opts theApp
-    SocketNetstring (NetworkOptions session hostName port) userOpts ->
+    SocketNetstring (NetworkOptions session hostName netPort) userOpts ->
       do theApp <- makeApp (SocketOpts userOpts)
-         sessionResult <- getOrLockSession session hostName port
+         sessionResult <- getOrLockSession session hostName netPort
          let hostname = fromMaybe (selectHost hostName) hostName
          hSetBuffering stdout NoBuffering
          case sessionResult of
@@ -361,12 +361,12 @@ realMain makeApp globalOpts =
                    <> existingPort
                    <> ", not the specified port "
                    <> desiredPort
-    Http path (NetworkOptions session _host port) userOpts ->
+    Http path (NetworkOptions session _host netPort) userOpts ->
       do theApp <- makeApp (HttpOpts userOpts)
          case session of
            Just _ -> die "Named sessions not yet supported for HTTP"
            Nothing ->
-             serveHttp opts path theApp (maybe 8080 (read . unPort) port)
+             serveHttp opts path theApp (maybe 8080 (read . unPort) netPort)
     Doc format userOpts ->
       case format of
         ReST ->

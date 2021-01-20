@@ -62,7 +62,12 @@ module Argo
   , serveHttp
   -- * Request identifiers
   , RequestID(..)
-  , StateID
+  , StateID,
+  -- * System info
+  getFileSystemMode,
+  -- * AppMethod info
+  methodName, methodType, methodImplementation,
+  methodParamDocs, methodDocs
   ) where
 
 import Control.Concurrent
@@ -82,7 +87,7 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (maybeToList)
 import Data.Scientific (Scientific)
-import Data.Text (Text)
+import Data.Text ( Text )
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import GHC.Stack

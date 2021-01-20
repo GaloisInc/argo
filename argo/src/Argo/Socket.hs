@@ -8,8 +8,8 @@ import Control.Concurrent       (forkFinally)
 import Control.Concurrent.Async (Async, async, forConcurrently_)
 import Control.Exception        (displayException)
 import Control.Monad            (forever)
-import Data.Text                (Text, pack)
-import System.IO                (IOMode(ReadWriteMode), hClose, stderr)
+import qualified Data.Text as T
+import System.IO                (IOMode(ReadWriteMode), hClose)
 
 import qualified Network.Socket as N
 
@@ -92,11 +92,11 @@ acceptClient opts app s =
      let logMessage = optLogger opts
      -- don't use c after this, it is owned by h
 
-     logMessage (pack ("CONNECT: " ++ show peer))
+     logMessage (T.pack ("CONNECT: " ++ show peer))
      _ <- forkFinally (serveHandlesNS opts h h app) $ \res ->
        do case res of
-            Right _ -> logMessage (pack ("CLOSE: " ++ show peer))
-            Left e  -> logMessage (pack ("ERROR: " ++ show peer ++ " " ++ displayException e))
+            Right _ -> logMessage (T.pack ("CLOSE: " ++ show peer))
+            Left e  -> logMessage (T.pack ("ERROR: " ++ show peer ++ " " ++ displayException e))
           hClose h
 
      return ()

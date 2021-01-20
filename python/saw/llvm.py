@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from cryptol import cryptoltypes
+from saw.llvm_types import LLVMType
 from dataclasses import dataclass, field
 import pprint
 import re
@@ -8,49 +9,34 @@ from typing_extensions import Literal
 import inspect
 import uuid
 
-class LLVMType(metaclass=ABCMeta):
-    @abstractmethod
-    def to_json(self) -> Any: pass
-
-class LLVMIntType(LLVMType):
-    def __init__(self, width : int) -> None:
-        self.width = width
-
-    def to_json(self) -> Any:
-        return {'type': 'primitive type', 'primitive': 'integer', 'size': self.width}
-
-class LLVMArrayType(LLVMType):
-    def __init__(self, elemtype : LLVMType, size : int) -> None:
-        self.size = size
-        self.elemtype = elemtype
-
-    def to_json(self) -> Any:
-        return { 'type': 'array',
-                 'element type': self.elemtype.to_json(),
-                 'size': self.size }
-
-class LLVMPointerType(LLVMType):
-    def __init__(self, points_to : LLVMType) -> None:
-        self.points_to = points_to
-
-    def to_json(self) -> Any:
-        return {'type': 'pointer', 'points to': self.points_to.to_json()}
-
-
-uint8_t = LLVMIntType(8)
-uint32_t = LLVMIntType(32)
-
 class SetupVal(metaclass=ABCMeta):
+    """Represent a ``SetupValue`` in SawScript, which "corresponds to
+    values that can occur during symbolic execution, which includes both 'Term'
+    values, pointers, and composite types consisting of either of these
+    (both structures and arrays)."
+    """
     @abstractmethod
-    def to_json(self) -> Any: pass
+    def to_json(self) -> Any:
+        """JSON representation for this ``SetupVal`` (i.e., how it is represented in expressions, etc).
 
+        N.B., should be a JSON object with a ``'setup value'`` field with a unique tag which the
+        server will dispatch on to then interpret the rest of the JSON object.``"""
+        pass
+
+class NamedSetupVal(SetupVal):
+    """Represents those ``SetupVal``s which are a named reference to some value, e.e., a variable
+    or reference to allocated memory."""
     @abstractmethod
-    def to_ref_json(self) -> Any: pass
+    def to_init_json(self) -> Any:
+        """JSON representation with the information for those ``SetupVal``s which require additional
+        information to initialize/allocate them vs that which is required later to reference them.
 
-class SetupTerm(SetupVal):
-    pass
+        I.e., ``.to_json()`` will be used to refer to such ``SetupVal``s in expressions, and
+        ``.to_init_json() is used to initialize/allocate them.``
+        """
+        pass
 
-class CryptolTerm(SetupTerm):
+class CryptolTerm(SetupVal):
     expression : cryptoltypes.CryptolJSON
 
     def __init__(self, code : Union[str, cryptoltypes.CryptolJSON]):
@@ -70,38 +56,36 @@ class CryptolTerm(SetupTerm):
         return f"CryptolTerm({self.expression!r})"
 
     def to_json(self) -> Any:
-        return cryptoltypes.to_cryptol(self.expression)
-
-    def to_ref_json(self) -> Any:
-        return {'setup value': 'Cryptol', 'expression': self.to_json()}
+        return {'setup value': 'Cryptol', 'expression': cryptoltypes.to_cryptol(self.expression)}
 
     def __to_cryptol__(self, ty : Any) -> Any:
         return self.expression.__to_cryptol__(ty)
 
-class FreshVar(SetupTerm):
-    name : Optional[str]
+class FreshVar(NamedSetupVal):
+    __name : Optional[str]
 
-    def __init__(self, spec : 'Contract', type : LLVMType) -> None:
-        self.name = None
+    def __init__(self, spec : 'Contract', type : LLVMType, suggested_name : Optional[str] = None) -> None:
+        self.__name = suggested_name
         self.spec = spec
         self.type = type
 
     def __to_cryptol__(self, ty : Any) -> Any:
-        if self.name is None:
-            self.name = self.spec.get_fresh_name()
-        return cryptoltypes.CryptolLiteral(self.name).__to_cryptol__(ty)
+        return cryptoltypes.CryptolLiteral(self.name()).__to_cryptol__(ty)
 
-    def to_json(self) -> Any:
-        if self.name is None:
-            self.name = self.spec.get_fresh_name()
-        return {"server name": self.name,
-                "name": self.name,
+    def to_init_json(self) -> Any:
+        #FIXME it seems we don't actually use two names ever... just the one...do we actually need both?
+        name = self.name()
+        return {"server name": name,
+                "name": name,
                 "type": self.type.to_json()}
 
-    def to_ref_json(self) -> Any:
-        if self.name is None:
-            self.name = self.spec.get_fresh_name()
-        return {'setup value': 'saved', 'name': self.name}
+    def name(self) -> str:
+        if self.__name is None:
+            self.__name = self.spec.get_fresh_name()
+        return self.__name
+
+    def to_json(self) -> Any:
+        return {'setup value': 'named', 'name': self.name()}
 
     def __gt__(self, other : cryptoltypes.CryptolJSON) -> CryptolTerm:
         gt = CryptolTerm("(>)")
@@ -112,26 +96,36 @@ class FreshVar(SetupTerm):
         return lt(self, other)
 
 
-class Allocated(SetupTerm):
+class Allocated(NamedSetupVal):
     name : Optional[str]
 
-    def __init__(self, spec : 'Contract', type : LLVMType) -> None:
+    def __init__(self, spec : 'Contract', type : LLVMType, *, mutable : bool = True) -> None:
         self.name = None
         self.spec = spec
         self.type = type
+        self.mutable = mutable
 
-    def to_json(self) -> Any:
+    def to_init_json(self) -> Any:
         if self.name is None:
             self.name = self.spec.get_fresh_name()
         return {"server name": self.name,
                 "type": self.type.to_json(),
-                "mutable": True,
+                "mutable": self.mutable,
                 "alignment": None}
 
-    def to_ref_json(self) -> Any:
+    def to_json(self) -> Any:
         if self.name is None:
             self.name = self.spec.get_fresh_name()
-        return {'setup value': 'saved', 'name': self.name}
+        return {'setup value': 'named', 'name': self.name}
+
+class StructVal(SetupVal):
+    fields : List[SetupVal]
+
+    def __init__(self, fields : List[SetupVal]) -> None:
+        self.fields = fields
+
+    def to_json(self) -> Any:
+        return {'setup value': 'struct', 'fields': [fld.to_json() for fld in self.fields]}
 
 name_regexp = re.compile('^(?P<prefix>.*[^0-9])?(?P<number>[0-9]+)?$')
 
@@ -162,38 +156,41 @@ class PointsTo:
         self.target = target
 
     def to_json(self) -> Any:
-        return {"pointer": self.pointer.to_ref_json(),
-                "points to": self.target.to_ref_json()}
+        return {"pointer": self.pointer.to_json(),
+                "points to": self.target.to_json()}
 
+
+class Condition:
+    def __init__(self, condition : CryptolTerm) -> None:
+        self.cryptol_term = condition
+
+    def to_json(self) -> Any:
+        return cryptoltypes.to_cryptol(self.cryptol_term)
 
 
 @dataclass
 class State:
     contract : 'Contract'
     fresh : List[FreshVar] = field(default_factory=list)
-    conditions : List[CryptolTerm] = field(default_factory=list)
+    conditions : List[Condition] = field(default_factory=list)
     allocated : List[Allocated] = field(default_factory=list)
     points_to : List[PointsTo] = field(default_factory=list)
 
     def to_json(self) -> Any:
-        return {'variables': [v.to_json() for v in self.fresh],
+        return {'variables': [v.to_init_json() for v in self.fresh],
                 'conditions': [c.to_json() for c in self.conditions],
-                'allocated': [a.to_json() for a in self.allocated],
+                'allocated': [a.to_init_json() for a in self.allocated],
                 'points to': [p.to_json() for p in self.points_to]
                }
 
 ContractState = \
   Union[Literal['pre'],
-        Literal['call'],
         Literal['post'],
         Literal['done']]
 
 @dataclass
 class Void:
     def to_json(self) -> Any:
-        return None
-
-    def to_ref_json(self) -> Any:
         return None
 
 void = Void()
@@ -222,8 +219,6 @@ class Contract:
 
     __arguments : Optional[List[SetupVal]]
 
-    __in_post : bool
-
     __definition_lineno : Optional[int]
     __definition_filename : Optional[str]
     __unique_id : uuid.UUID
@@ -235,7 +230,6 @@ class Contract:
         self.__used_names = set()
         self.__arguments = None
         self.__returns = None
-        self.__in_post = False
         self.__unique_id = uuid.uuid4()
         self.__cached_json = None
         frame = inspect.currentframe()
@@ -247,36 +241,30 @@ class Contract:
             self.__definition_filename = None
 
     # To be overridden by users
-    def pre(self) -> None:
+    def specification(self) -> None:
         pass
-    def call(self) -> None:
-        pass
-    def post(self) -> None:
-        pass
+
+    def execute_func(self, *args : SetupVal) -> None:
+        """Denotes the end of the precondition specification portion of this ``Contract``, records that
+        the function is executed with arguments ``args``, and denotes the beginning of the postcondition
+        portion of this ``Contract``."""
+        if self.__arguments is not None:
+            raise ValueError("The function has already been called once during the specification.")
+        elif self.__state is not 'pre':
+            raise ValueError("Contract state expected to be 'pre', but found {self.__state!r} (has `execute_func` already been called for this contract?).")
+        else:
+            self.__arguments = [arg for arg in args]
+        self.__state = 'post'
 
     def get_fresh_name(self, hint : str = 'x') -> str:
         new_name = uniquify(hint, self.__used_names)
         self.__used_names.add(new_name)
         return new_name
 
-    def add_default_var_names(self) -> None:
-        for x in self.__dict__:
-            if isinstance(self.__dict__[x], FreshVar) and self.__dict__[x].name is None:
-                new_name = uniquify(x, self.__used_names)
-                self.__dict__[x].name = new_name
-                self.__used_names.add(new_name)
-            if isinstance(self.__dict__[x], Allocated) and self.__dict__[x].name is None:
-                new_name = uniquify(x, self.__used_names)
-                self.__dict__[x].name = new_name
-                self.__used_names.add(new_name)
-
-
-    def cryptol(self, data : Any) -> CryptolTerm:
-        return CryptolTerm(data)
-
-
-    def declare(self, type : LLVMType) -> FreshVar:
-        v = FreshVar(self, type)
+    def fresh_var(self, type : LLVMType, suggested_name : Optional[str] = None) -> FreshVar:
+        """Declares a fresh variable of type ``type`` (with name ``suggested_name`` if provided and available)."""
+        fresh_name = self.get_fresh_name('x' if suggested_name is None else self.get_fresh_name(suggested_name))
+        v = FreshVar(self, type, fresh_name)
         if self.__state == 'pre':
             self.__pre_state.fresh.append(v)
         elif self.__state == 'post':
@@ -285,15 +273,26 @@ class Contract:
             raise Exception("wrong state")
         return v
 
+    def alloc(self, type : LLVMType, *, read_only : bool = False, points_to : Optional[SetupVal] = None) -> SetupVal:
+        """Allocates a pointer of type ``type``.
 
-    def declare_pointer(self, type : LLVMType) -> SetupVal:
-        a = Allocated(self, type)
+        If ``read_only == True`` then the allocated memory is immutable.
+
+        If ``points_to != None``, it will also be asserted that the allocated memory contains the
+        value specified by ``points_to``.
+
+        :returns A pointer of the proper type to the allocated region."""
+        a = Allocated(self, type, mutable = not read_only)
         if self.__state == 'pre':
             self.__pre_state.allocated.append(a)
         elif self.__state == 'post':
             self.__post_state.allocated.append(a)
         else:
             raise Exception("wrong state")
+
+        if points_to is not None:
+            self.points_to(a, points_to)
+
         return a
 
     def points_to(self, pointer : SetupVal, target : SetupVal) -> None:
@@ -305,21 +304,17 @@ class Contract:
         else:
             raise Exception("wrong state")
 
-    def proclaim(self, condition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
-        if not isinstance(condition, CryptolTerm):
-            condition = CryptolTerm(condition)
+    def proclaim(self, proposition : Union[str, CryptolTerm, cryptoltypes.CryptolJSON]) -> None:
+        if not isinstance(proposition, CryptolTerm):
+            condition = Condition(CryptolTerm(proposition))
+        else:
+            condition = Condition(proposition)
         if self.__state == 'pre':
             self.__pre_state.conditions.append(condition)
         elif self.__state == 'post':
             self.__post_state.conditions.append(condition)
         else:
             raise Exception("wrong state")
-
-    def arguments(self, *args : SetupVal) -> None:
-        if self.__arguments is not None:
-            raise ValueError("The arguments are already specified")
-        else:
-            self.__arguments = [arg for arg in args]
 
     def returns(self, val : Union[Void,SetupVal]) -> None:
         if self.__state == 'post':
@@ -351,16 +346,12 @@ class Contract:
             return self.__cached_json
         else:
             if self.__state != 'pre':
-                raise Exception("Wrong state: ")
-            self.pre()
-            self.add_default_var_names()
+                raise Exception(f'Internal error: wrong contract state -- expected \'pre\', but got: {self.__state!r}')
 
-            self.__state = 'call'
-            self.call()
+            self.specification()
 
-            self.__state = 'post'
-            self.post()
-            self.add_default_var_names()
+            if self.__state != 'post':
+                raise Exception(f'Internal error: wrong contract state -- expected \'post\', but got: {self.__state!r}')
 
             self.__state = 'done'
 
@@ -368,15 +359,26 @@ class Contract:
                 raise Exception("forgot return")
 
             self.__cached_json = \
-                {'pre vars': [v.to_json() for v in self.__pre_state.fresh],
+                {'pre vars': [v.to_init_json() for v in self.__pre_state.fresh],
                  'pre conds': [c.to_json() for c in self.__pre_state.conditions],
-                 'pre allocated': [a.to_json() for a in self.__pre_state.allocated],
+                 'pre allocated': [a.to_init_json() for a in self.__pre_state.allocated],
                  'pre points tos': [pt.to_json() for pt in self.__pre_state.points_to],
-                 'argument vals': [a.to_ref_json() for a in self.__arguments] if self.__arguments is not None else [],
-                 'post vars': [v.to_json() for v in self.__post_state.fresh],
+                 'argument vals': [a.to_json() for a in self.__arguments] if self.__arguments is not None else [],
+                 'post vars': [v.to_init_json() for v in self.__post_state.fresh],
                  'post conds': [c.to_json() for c in self.__post_state.conditions],
-                 'post allocated': [a.to_json() for a in self.__post_state.allocated],
+                 'post allocated': [a.to_init_json() for a in self.__post_state.allocated],
                  'post points tos': [pt.to_json() for pt in self.__post_state.points_to],
-                 'return val': self.__returns.to_ref_json()}
+                 'return val': self.__returns.to_json()}
 
             return self.__cached_json
+
+
+
+# FIXME Is `Any` too permissive here -- can we be a little more precise?
+def cryptol(data : Any) -> 'CryptolTerm':
+    """Returns a ``CryptolTerm`` wrapper around ``data``."""
+    return CryptolTerm(data)
+
+def struct(*fields : SetupVal) -> StructVal:
+    """Returns a ``StructVal`` with fields ``fields``."""
+    return StructVal(list(fields))

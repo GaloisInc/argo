@@ -21,13 +21,13 @@ protocolDocs =
      [ Paragraph [Text "The server supports three transport methods:"]
      , DescriptionList
        [ ( Literal "stdio" :| []
-         , Paragraph [ Text "in which the server communicates over"
-                     , Literal "stdin", Text "and", Literal "stdout"
+         , Paragraph [ Text "in which the server communicates over "
+                     , Literal "stdin", Text " and ", Literal "stdout"
                      ]
          )
        , ( Text "Socket" :| []
-          , Paragraph [ Text "in which the server communicates over"
-                      , Literal "stdin", Text "and", Literal "stdout"
+          , Paragraph [ Text "in which the server communicates over "
+                      , Literal "stdin", Text " and ", Literal "stdout"
                       ]
           )
        , ( Text "HTTP" :| []
@@ -35,7 +35,7 @@ protocolDocs =
          )
        ]
      , Paragraph
-       [ Text "In both", Literal "stdio", Text "and socket mode, "
+       [ Text "In both ", Literal "stdio", Text " and socket mode, "
        , Text "messages are delimited using "
        , Link (URL "http://cr.yp.to/proto/netstrings.txt") "netstrings."
        ]

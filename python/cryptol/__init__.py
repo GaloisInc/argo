@@ -173,7 +173,7 @@ class CryptolProve(CryptolProveSat):
         super(CryptolProve, self).__init__(connection, 'prove', expr, solver, 1)
 
 class CryptolSat(CryptolProveSat):
-    def __init__(self, connection : HasProtocolState, expr : Any, solver : str, count : int) -> None:
+    def __init__(self, connection : HasProtocolState, expr : Any, solver : solver.Solver, count : int) -> None:
         super(CryptolSat, self).__init__(connection, 'sat', expr, solver, count)
 
 class CryptolNames(argo.interaction.Query):

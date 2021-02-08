@@ -8,8 +8,6 @@ author:              Galois, Inc.
 maintainer:          dtc@galois.com
 category:            Network
 data-files:          argo/**/*.py
-                     cryptol/**/*.py
-                     saw/**/*.py
                      requirements.txt
 
 library

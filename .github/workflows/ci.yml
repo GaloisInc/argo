@@ -46,7 +46,7 @@ jobs:
         if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi
     - name: Typecheck python code
       working-directory: ./python
-      run: mypy argo saw cryptol
+      run: mypy argo
     - name: Build
       run: |
         cabal build all

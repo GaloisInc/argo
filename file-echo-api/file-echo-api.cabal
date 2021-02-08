@@ -56,17 +56,3 @@ executable file-echo-api
 
   build-depends:
     file-echo-api
-
-test-suite test-file-echo-api
-  import:              deps, warnings
-  type:                exitcode-stdio-1.0
-  hs-source-dirs:      test
-  main-is:             Test.hs
-  other-modules:       Paths_file_echo_api
-  build-depends:
-    argo-python,
-    file-echo-api,
-    quickcheck-instances ^>= 0.3.19,
-    tasty                 >= 1.2.1,
-    tasty-quickcheck     ^>= 0.10,
-    tasty-script-exitcode

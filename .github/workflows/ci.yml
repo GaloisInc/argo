@@ -46,13 +46,13 @@ jobs:
         if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi
     - name: Typecheck python code
       working-directory: ./python
-      run: mypy argo
+      run: mypy argo-client
     - name: Build
       run: |
         cabal build all
     - name: Cabal argo tests
       run: cabal test argo
-    - name: Argo client (Python) unit tests
+    - name: Python argo-client unit tests
       working-directory: ./python
       run: |
         bash tests/run_test_servers.sh

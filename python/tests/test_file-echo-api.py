@@ -1,15 +1,13 @@
 import os
 from pathlib import Path
 import requests
-import signal
 import subprocess
-import sys
 import time
 import json
 import unittest
 import atexit
 
-import argo.connection as argo
+import argo_client.connection as argo
 
 dir_path = Path(os.path.dirname(os.path.realpath(__file__)))
 
@@ -21,40 +19,6 @@ if not file_dir.is_dir():
 
 # Test the custom command line argument to load a file at server start
 hello_file = file_dir.joinpath('hello.txt')
-
-# Test with both sockets and stdio
-env = os.environ.copy()
-
-# Launch a separate process for the RemoteSocketProcess test
-p = subprocess.Popen(
-    ["cabal", "v2-exec", "file-echo-api", "--verbose=0", "--", "socket", "--port", "50005"],
-    stdout=subprocess.DEVNULL,
-    stdin=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL,
-    start_new_session=True,
-    env=env)
-
-p_http = subprocess.Popen(
-           ["cabal", "v2-exec", "file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080"],
-           stdout=subprocess.DEVNULL,
-           stdin=subprocess.DEVNULL,
-           stderr=subprocess.DEVNULL,
-           start_new_session=True,
-           env=env)
-
-
-def kill_procs():
-    if p: p.kill()
-    if p_http: p_http.kill()
-
-atexit.register(kill_procs)
-
-
-time.sleep(5)
-assert(p is not None)
-assert(p.poll() is None)
-assert(p_http is not None)
-assert(p_http.poll() is None)
 
 # What the response to "show" looks like
 def show_res(*,content,uid,state):
@@ -423,4 +387,5 @@ class LoadOnLaunchTests(unittest.TestCase):
         self.assertEqual(actual, expected)
 
 
-unittest.main()
+if __name__ == '__main__':
+    unittest.main()

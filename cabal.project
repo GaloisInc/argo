@@ -1,5 +1,4 @@
 packages:
   argo/
-  python/
   file-echo-api/
   tasty-script-exitcode/

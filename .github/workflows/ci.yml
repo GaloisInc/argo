@@ -52,7 +52,8 @@ jobs:
         cabal build all
     - name: Cabal argo tests
       run: cabal test argo
-    - name: Cabal file-echo-api tests
-      run: cabal test file-echo-api
-    - name: Python unit tests
-      run: cabal test python
+    - name: Argo client (Python) unit tests
+      working-directory: ./python
+      run: |
+        bash tests/run_test_servers.sh
+        python3 -m unittest tests/test_file-echo-api.py

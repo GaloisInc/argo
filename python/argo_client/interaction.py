@@ -1,6 +1,6 @@
 """Higher-level tracking of the semantics of specific commands."""
 
-from argo.connection import ServerConnection
+from argo_client.connection import ServerConnection
 
 from abc import abstractmethod
 from typing import Any, Dict, Tuple

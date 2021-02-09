@@ -124,7 +124,7 @@ Working on the Python bindings
 
 To run the ``mypy`` type checker, enter the virtual environment and then run::
 
-    mypy argo
+    mypy argo_client
 
 from the ``python`` subdirectory.
 

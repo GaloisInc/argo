@@ -7,7 +7,7 @@ import json
 import unittest
 import atexit
 
-import argo.connection as argo
+import argo_client.connection as argo
 
 dir_path = Path(os.path.dirname(os.path.realpath(__file__)))
 

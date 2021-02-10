@@ -5,7 +5,7 @@ import subprocess
 import time
 import json
 import unittest
-import atexit
+import signal
 
 import argo_client.connection as argo
 
@@ -306,45 +306,114 @@ class GenericFileEchoTests():
 
 
 class RemoteSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
+    # Connection to cryptol
+    c = None
+    # process running the server
+    p = None
+
+    @classmethod
+    def setUpClass(self):
+        p = subprocess.Popen(
+            ["cabal", "run", "file-echo-api", "--verbose=0", "--", "socket", "--port", "50005"],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            start_new_session=True)
+        time.sleep(3)
+        assert(p is not None)
+        poll_result = p.poll()
+        if poll_result is not None:
+            print(poll_result)
+            print(p.stdout.read())
+            print(p.stderr.read())
+        assert(poll_result is None)
+
+        self.p = p
+        self.c = argo.ServerConnection(argo.RemoteSocketProcess('localhost', 50005, ipv6=True))
+
+
+    @classmethod
+    def tearDownClass(self):
+        os.killpg(os.getpgid(self.p.pid), signal.SIGKILL)
+        super().tearDownClass()
+
 
     # to be implemented by classes extending this one
     def get_connection(self):
-        return argo.ServerConnection(
-                argo.RemoteSocketProcess('localhost', 50005, ipv6=True))
+        return self.c
 
     def get_caching_iterations(self):
-        return 100
+        return 30
 
 class DynamicSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
+    # Connection to server
+    c = None
+
+    @classmethod
+    def setUpClass(self):
+        self.c = argo.ServerConnection(
+                    argo.DynamicSocketProcess("cabal v2-exec file-echo-api --verbose=0 -- socket --port 50006"))
 
     # to be implemented by classes extending this one
     def get_connection(self):
-        return argo.ServerConnection(
-                argo.DynamicSocketProcess("cabal v2-exec file-echo-api --verbose=0 -- socket --port 50005"))
+        return self.c
 
     def get_caching_iterations(self):
-        return 100
+        return 30
 
 class StdIOProcessTests(GenericFileEchoTests, unittest.TestCase):
+    # Connection to server
+    c = None
 
-    # to be implemented by classes extending this one
+    @classmethod
+    def setUpClass(self):
+        self.c = argo.ServerConnection(
+                    argo.StdIOProcess("cabal v2-exec file-echo-api --verbose=0 -- stdio"))
+
     def get_connection(self):
-        return argo.ServerConnection(
-                argo.StdIOProcess("cabal v2-exec file-echo-api --verbose=0 -- stdio"))
+        return self.c
 
     def get_caching_iterations(self):
-        return 100
+        return 30
 
 
 class HttpTests(GenericFileEchoTests, unittest.TestCase):
+    # Connection to server
+    c = None
+    # process running the server
+    p = None
 
-    # to be implemented by classes extending this one
+    @classmethod
+    def setUpClass(self):
+        p = subprocess.Popen(
+            ["cabal", "run", "file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080"],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            start_new_session=True)
+        time.sleep(3)
+        assert(p is not None)
+        poll_result = p.poll()
+        if poll_result is not None:
+            print(poll_result)
+            print(p.stdout.read())
+            print(p.stderr.read())
+        assert(poll_result is None)
+
+        self.p = p
+        self.c = argo.ServerConnection(argo.HttpProcess('http://localhost:8080/'))
+
+
+    @classmethod
+    def tearDownClass(self):
+        os.killpg(os.getpgid(self.p.pid), signal.SIGKILL)
+        super().tearDownClass()
+
     def get_connection(self):
-        return argo.ServerConnection(
-                argo.HttpProcess(url="http://localhost:8080/"))
+        return self.c
 
     def get_caching_iterations(self):
-        return 100
+        return 30
 
     def test_http_behaviors(self):
         ### Additional tests for the HTTP server ###
@@ -376,16 +445,40 @@ class HttpTests(GenericFileEchoTests, unittest.TestCase):
 
 
 class LoadOnLaunchTests(unittest.TestCase):
+    # Connection to server
+    c = None
+    # process running the server
+    p = None
+
+    @classmethod
+    def setUpClass(self):
+        p = subprocess.Popen(
+            ["cabal", "run", "file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8081", "--file", str(hello_file)],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            start_new_session=True)
+        time.sleep(3)
+        assert(p is not None)
+        poll_result = p.poll()
+        if poll_result is not None:
+            print(poll_result)
+            print(p.stdout.read())
+            print(p.stderr.read())
+        assert(poll_result is None)
+
+        self.p = p
+        self.c = argo.ServerConnection(argo.HttpProcess('http://localhost:8081/'))
+
+
+    @classmethod
+    def tearDownClass(self):
+        os.killpg(os.getpgid(self.p.pid), signal.SIGKILL)
+        super().tearDownClass()
 
     # to be implemented by classes extending this one
     def test_load_on_launch(self):
-        c_preload = argo.ServerConnection(
-                    argo.StdIOProcess("cabal v2-exec file-echo-api --verbose=0 -- stdio --file \"" + str(hello_file) + "\""))
-        uid = c_preload.send_query("show", {"state": None})
-        actual = c_preload.wait_for_reply_to(uid)
+        uid = self.c.send_query("show", {"state": None})
+        actual = self.c.wait_for_reply_to(uid)
         expected = {'result':{'state':None,'stdout':'','stderr':'','answer':{'value':'Hello World!\n'}},'jsonrpc':'2.0','id':uid}
         self.assertEqual(actual, expected)
-
-
-if __name__ == '__main__':
-    unittest.main()

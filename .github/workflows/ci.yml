@@ -54,6 +54,4 @@ jobs:
       run: cabal test argo
     - name: Python argo-client unit tests
       working-directory: ./python
-      run: |
-        bash tests/run_test_servers.sh
-        python3 -m unittest tests/test_file-echo-api.py
+      run: python3 -m unittest discover tests

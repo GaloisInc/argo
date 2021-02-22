@@ -5,7 +5,6 @@ module MutableFileEchoServer ( module MutableFileEchoServer ) where
 
 import qualified Argo as Argo
 import qualified Argo.Doc as Doc
-import Control.Exception ( throwIO )
 import Control.Monad.IO.Class ( liftIO )
 import qualified Data.Aeson as JSON
 import Data.Aeson ( (.:), (.:?), (.=), (.!=) )
@@ -45,25 +44,6 @@ newtype ServerCmd a =
 
 
 ------------------------------------------------------------------------
--- Command Execution
-
-runServerCmd :: ServerCmd a -> Argo.Method ServerState a
-runServerCmd (ServerCmd cmd) = do 
-  contentRef <-  fileContents <$> Argo.getState
-  contents <- liftIO $ readIORef contentRef
-  reader <- Argo.getFileReader
-  out <- liftIO $ cmd (reader, contents)
-  case out of
-    ServerRes (Left (ServerErr message)) ->
-      Argo.raise $ Argo.makeJSONRPCException
-       11000 "File Server exception"
-       (Just (JSON.object ["error" .= message]))
-    ServerRes (Right (x, newFileContents)) -> do
-      liftIO $ writeIORef contentRef newFileContents
-      return x
-
-
-------------------------------------------------------------------------
 -- Errors
 
 fileNotFound :: FilePath -> Argo.JSONRPCException
@@ -87,7 +67,7 @@ instance Doc.DescribedParams LoadParams where
     [("file path",
       Doc.Paragraph [Doc.Text "The file to read into memory."])]
 
-loadCmd :: LoadParams -> Argo.Method ServerState ()
+loadCmd :: LoadParams -> Argo.Command ServerState ()
 loadCmd (LoadParams file) =
   do exists <- liftIO $ Dir.doesFileExist file
      if exists
@@ -112,7 +92,7 @@ instance JSON.FromJSON ClearParams where
 instance Doc.DescribedParams ClearParams where
   parameterFieldDescription = []
 
-clearCmd :: ClearParams -> Argo.Method ServerState ()
+clearCmd :: ClearParams -> Argo.Command ServerState ()
 clearCmd _ = do
   appState <- Argo.getState
   liftIO $ writeIORef (fileContents appState) $ FileContents ""
@@ -143,7 +123,7 @@ instance Doc.DescribedParams ShowParams where
                               ]
 
 
-showCmd :: ShowParams -> Argo.Method ServerState JSON.Value
+showCmd :: ShowParams -> Argo.Command ServerState JSON.Value
 showCmd (ShowParams start end) = do
   appState <- Argo.getState
   (FileContents contents) <- liftIO $ readIORef $ fileContents appState
@@ -152,3 +132,24 @@ showCmd (ShowParams start end) = do
             Just idx -> idx - start
   pure (JSON.object [ "value" .= JSON.String (T.pack $ take len $ drop start contents)])
 
+------------------------------------------------------------------------
+-- Destroy State Command
+data DestroyStateParams =
+  DestroyStateParams
+  {
+    stateToDestroy :: !Argo.StateID
+  }
+
+instance JSON.FromJSON DestroyStateParams where
+  parseJSON =
+    JSON.withObject "params for \"destroy state\"" $
+    \o -> DestroyStateParams <$> o .: "state to destroy"
+
+instance Doc.DescribedParams DestroyStateParams where
+  parameterFieldDescription = 
+    [("state to destroy",
+       Doc.Paragraph [Doc.Text "The state to destroy in the server (so it can be released from memory)."])
+     ]
+
+destroyState :: DestroyStateParams -> Argo.Notification ()
+destroyState (DestroyStateParams stateID) = Argo.destroyState stateID

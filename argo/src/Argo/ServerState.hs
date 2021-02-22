@@ -82,9 +82,8 @@ instance JSON.FromJSON StateID where
 
 newtype FileHash = FileHash ByteString deriving (Eq, Ord, Show, Hashable)
 
--- | Given a fresh application state, save it to the (ephemeral)
---   cache and return a fresh state ID that uniquely describes the
---   resulting state.
+-- | Given a fresh application state, return a fresh state
+-- ID that uniquely describes it.
 saveNewAppState ::
   ServerState appState ->
   appState {-^ The new application state -} ->

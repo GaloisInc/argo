@@ -314,7 +314,7 @@ class RemoteSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
-            ["cabal", "run", "file-echo-api", "--verbose=0", "--", "socket", "--port", "50005"],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "socket", "--port", "50005"],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -352,7 +352,7 @@ class DynamicSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
     @classmethod
     def setUpClass(self):
         self.c = argo.ServerConnection(
-                    argo.DynamicSocketProcess("cabal run file-echo-api --verbose=0 -- socket --port 50006"))
+                    argo.DynamicSocketProcess("cabal run exe:file-echo-api --verbose=0 -- socket --port 50006"))
 
     # to be implemented by classes extending this one
     def get_connection(self):
@@ -368,7 +368,7 @@ class StdIOProcessTests(GenericFileEchoTests, unittest.TestCase):
     @classmethod
     def setUpClass(self):
         self.c = argo.ServerConnection(
-                    argo.StdIOProcess("cabal run file-echo-api --verbose=0 -- stdio"))
+                    argo.StdIOProcess("cabal run exe:file-echo-api --verbose=0 -- stdio"))
 
     def get_connection(self):
         return self.c
@@ -386,7 +386,7 @@ class HttpTests(GenericFileEchoTests, unittest.TestCase):
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
-            ["cabal", "run", "file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080"],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080"],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -453,7 +453,7 @@ class LoadOnLaunchTests(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
-            ["cabal", "run", "file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8081", "--file", str(hello_file)],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8081", "--file", str(hello_file)],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,

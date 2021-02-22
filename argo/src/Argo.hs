@@ -309,7 +309,7 @@ methodDocs = lens _methodDocs (\m t -> m { _methodDocs = t })
 mkApp ::
   Text {- ^ Application name -} ->
   [Doc.Block] {- ^ Documentation -} ->
-  ServerOpts {- ^ Server options to use at launch. -}->
+  ServerOpts {- ^ Server options to use at launch. -} ->
   ((FilePath -> IO B.ByteString) -> IO s) {- ^ how to get the initial state -} ->
   [AppMethod s]
   {- ^ Individual methods -} ->

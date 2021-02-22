@@ -12,7 +12,7 @@ data-files:          test-scripts/**/*.py
 
 common warnings
   ghc-options:
-    -Weverything
+    -Wall
     -Wno-missing-exported-signatures
     -Wno-missing-import-lists
     -Wno-missed-specialisations
@@ -47,12 +47,19 @@ library
   hs-source-dirs:      src
 
   exposed-modules:
-    FileEchoServer
+    FileEchoServer,
+    MutableFileEchoServer
 
 executable file-echo-api
   import:              deps, warnings
   main-is:             Main.hs
   hs-source-dirs:      file-echo-api
+  build-depends:
+    file-echo-api
 
+executable mutable-file-echo-api
+  import:              deps, warnings
+  main-is:             Main.hs
+  hs-source-dirs:      mutable-file-echo-api
   build-depends:
     file-echo-api

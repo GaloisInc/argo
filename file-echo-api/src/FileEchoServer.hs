@@ -167,7 +167,7 @@ instance Doc.DescribedParams ShowParams where
                               ]
 
 
-showCmd :: ShowParams -> Argo.Command ServerState JSON.Value
+showCmd :: ShowParams -> Argo.Query ServerState JSON.Value
 showCmd (ShowParams start end) =
   do (FileContents contents) <-  fileContents <$> Argo.getState
      let len = case end of
@@ -177,7 +177,7 @@ showCmd (ShowParams start end) =
 
 
 ------------------------------------------------------------------------
--- Implode Command
+-- Implode Query
 
 data ImplodeParams = ImplodeParams
 
@@ -190,7 +190,7 @@ instance Doc.DescribedParams ImplodeParams where
   parameterFieldDescription = []
 
 
-implodeCmd :: ClearParams -> Argo.Command ServerState ()
+implodeCmd :: ClearParams -> Argo.Query ServerState ()
 implodeCmd _ = liftIO $ throwIO Argo.internalError
 
 ----------------------------------------------------------------------
@@ -234,7 +234,7 @@ instance Doc.DescribedParams IgnoreParams where
     [("to be ignored",
       Doc.Paragraph [Doc.Text "The value to be ignored goes here."])]
 
-ignoreCmd :: IgnoreParams -> Argo.Command ServerState ()
+ignoreCmd :: IgnoreParams -> Argo.Query ServerState ()
 ignoreCmd _ = pure ()
 
 

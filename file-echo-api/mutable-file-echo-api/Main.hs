@@ -54,6 +54,6 @@ serverMethods :: [Argo.AppMethod MFES.ServerState]
 serverMethods =
   [ Argo.command "load" (Doc.Paragraph [Doc.Text "Load a file from disk into memory."]) MFES.loadCmd
   , Argo.command "clear" (Doc.Paragraph [Doc.Text "Forget the loaded file."]) MFES.clearCmd
-  , Argo.command "show" (Doc.Paragraph [Doc.Text "Show a substring of the file."]) MFES.showCmd
+  , Argo.query "show" (Doc.Paragraph [Doc.Text "Show a substring of the file."]) MFES.showCmd
   , Argo.notification "destroy state" (Doc.Paragraph [Doc.Text "Destroy a state."]) MFES.destroyState
   ]

@@ -58,9 +58,9 @@ serverMethods =
   , Argo.command "clear" (Doc.Paragraph [Doc.Text "Forget the loaded file."]) FES.clearCmd
   , Argo.command "prepend" (Doc.Paragraph [Doc.Text "Append a string to the left of the current contents."]) FES.prependCmd
   , Argo.command "drop" (Doc.Paragraph [Doc.Text "Drop from the left of the current contents."]) FES.dropCmd
-  , Argo.command "implode" (Doc.Paragraph [Doc.Text "Throw an error immediately."]) FES.implodeCmd
-  , Argo.command "show" (Doc.Paragraph [Doc.Text "Show a substring of the file."]) FES.showCmd
-  , Argo.command "ignore" (Doc.Paragraph [Doc.Text "Ignore an ", Doc.Link (Doc.TypeDesc (typeRep (Proxy @FES.Ignorable))) "ignorable value", Doc.Text "."]) FES.ignoreCmd
+  , Argo.query "implode" (Doc.Paragraph [Doc.Text "Throw an error immediately."]) FES.implodeCmd
+  , Argo.query "show" (Doc.Paragraph [Doc.Text "Show a substring of the file."]) FES.showCmd
+  , Argo.query "ignore" (Doc.Paragraph [Doc.Text "Ignore an ", Doc.Link (Doc.TypeDesc (typeRep (Proxy @FES.Ignorable))) "ignorable value", Doc.Text "."]) FES.ignoreCmd
   , Argo.notification "destroy state" (Doc.Paragraph [Doc.Text "Destroy a state in the server."]) FES.destroyState
   , Argo.notification "destroy all states" (Doc.Paragraph [Doc.Text "Destroy all states in the server."]) FES.destroyAllStates
   ]

@@ -6,10 +6,10 @@ module Argo.DefaultMain
     UserOptions(..),
     userOptions) where
 
-import Control.Applicative
-import Control.Monad
-import Data.Maybe
-import Data.Foldable
+import Control.Applicative ( Alternative((<|>)), (<**>) )
+import Control.Monad ( when )
+import Data.Maybe ( fromMaybe, isJust )
+import Data.Foldable ( for_ )
 import qualified Data.Text.IO as T
 import Control.Concurrent.Async (wait)
 import Control.Exception (handle, IOException)
@@ -19,8 +19,17 @@ import qualified Options.Applicative as Opt
 import Safe (readMay)
 import System.IO (BufferMode(..), hSetBuffering, stderr, stdout)
 import System.FileLock
+    ( lockFile,
+      tryLockFile,
+      unlockFile,
+      withTryFileLock,
+      SharedExclusive(Exclusive) )
 import System.Directory
-import System.FilePath
+    ( createDirectoryIfMissing,
+      getAppUserDataDirectory,
+      listDirectory,
+      removeFile )
+import System.FilePath ( (-<.>), (<.>), (</>), isExtensionOf )
 import System.Exit (die)
 
 import Argo
@@ -110,7 +119,6 @@ data ProgramMode stdioOpts socketOpts httpOpts docOpts
 data GlobalOptions stdioOpts socketOpts httpOpts docOpts =
     GlobalOptions
     { methodOpts :: MethodOptions
-     -- ^ Max number of live concurrent states the server supports.
     , programMode :: ProgramMode stdioOpts socketOpts httpOpts docOpts
     }
 

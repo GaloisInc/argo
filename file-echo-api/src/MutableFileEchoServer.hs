@@ -123,7 +123,7 @@ instance Doc.DescribedParams ShowParams where
                               ]
 
 
-showCmd :: ShowParams -> Argo.Command ServerState JSON.Value
+showCmd :: ShowParams -> Argo.Query ServerState JSON.Value
 showCmd (ShowParams start end) = do
   appState <- Argo.getState
   (FileContents contents) <- liftIO $ readIORef $ fileContents appState

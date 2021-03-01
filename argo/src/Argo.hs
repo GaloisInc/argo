@@ -32,9 +32,12 @@ module Argo
   -- * Defining methods
   , AppMethod
   , Method
+  , StatefulMethod
   , Command
+  , Query
   , Notification
   , command
+  , query
   , notification
   -- * Manipulating app state in methods
   , getState
@@ -115,7 +118,7 @@ jsonRPCVersion = "2.0"
 --------------------------------------------------------------------------------
 
 -- | Options affecting the how the server runs/supports the app.
-data AppOpts =
+newtype AppOpts =
   AppOpts
   {
     appStateMutability :: StateMutability
@@ -155,6 +158,12 @@ data CommandContext =
   , cmdCtxFileReader :: FilePath -> IO B.ByteString
   }
 
+data QueryContext =
+  QueryContext
+  { queryCtxMOptions :: MethodOptions
+  , queryCtxFileReader :: FilePath -> IO B.ByteString
+  }
+
 data NotificationContext =
   NotificationContext
   { ntfCtxMOptions :: MethodOptions
@@ -178,8 +187,15 @@ newtype Command state result
   deriving (Functor, Applicative, Monad, MonadIO, MonadState state)
 
 runCommand :: Command state result -> CommandContext -> state -> IO (state, result)
-runCommand (Command m) mctx s = flop <$> runStateT (runReaderT m mctx) s
+runCommand (Command m) cctx s = flop <$> runStateT (runReaderT m cctx) s
   where flop (x, y) = (y, x)
+
+newtype Query state result
+  = Query (ReaderT (QueryContext, state) IO result)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader (QueryContext, state))
+
+runQuery :: Query state result -> QueryContext -> state -> IO result
+runQuery (Query m) qctx s = runReaderT m (qctx, s)
 
 newtype Notification result
   = Notification (ReaderT NotificationContext IO result)
@@ -197,6 +213,14 @@ data AppCommand appState =
   , commandDocs :: !Doc.Block
   }
 
+data AppQuery appState =
+  AppQuery
+  { queryName :: !Text
+  , queryImplementation :: !(JSON.Value -> Query appState JSON.Value)
+  , queryParamDocs :: ![(Text, Doc.Block)]
+  , queryDocs :: !Doc.Block
+  }
+
 data AppNotification =
   AppNotification
   { notificationName :: !Text
@@ -207,22 +231,27 @@ data AppNotification =
 
 data AppMethod appState
   = CommandMethod (AppCommand appState)
+  | QueryMethod (AppQuery appState)
   | NotificationMethod AppNotification
 
 methodName :: AppMethod appState -> Text
 methodName (CommandMethod m) = commandName m
+methodName (QueryMethod m) = queryName m
 methodName (NotificationMethod m) = notificationName m
 
 methodKind :: AppMethod appState -> Text
 methodKind CommandMethod{} = "command"
+methodKind QueryMethod{} = "query"
 methodKind NotificationMethod{} = "notification"
 
 methodParamDocs :: AppMethod appState -> [(Text, Doc.Block)]
 methodParamDocs (CommandMethod m) = commandParamDocs m
+methodParamDocs (QueryMethod m) = queryParamDocs m
 methodParamDocs (NotificationMethod m) = notificationParamDocs m
 
 methodDocs :: AppMethod appState -> Doc.Block
 methodDocs (CommandMethod m) = commandDocs m
+methodDocs (QueryMethod m) = queryDocs m
 methodDocs (NotificationMethod m) = notificationDocs m
 
 
@@ -251,8 +280,33 @@ command name doc f =
      , commandDocs = doc
      }
 
--- | Given an arbitrary 'Notification', wrap its input and output in JSON
+-- | Given an arbitrary 'Command', wrap its input and output in JSON
 -- serialization. Note that because the JSON representation of a 'JSON.Value' is
+-- itself, you can manipulate raw JSON inputs/outputs by using 'JSON.Value' as a
+-- parameter or result type. The resultant 'Command' may throw an 'invalidParams'
+-- exception.
+query ::
+  forall params result state.
+  (JSON.FromJSON params, Doc.DescribedParams params, JSON.ToJSON result) =>
+  Text ->
+  Doc.Block ->
+  (params -> Query state result) ->
+  AppMethod state
+query name doc f =
+  let impl =
+        \p ->
+         case JSON.fromJSON @params p of
+           JSON.Error msg -> raise $ invalidParams msg p
+           JSON.Success params -> JSON.toJSON <$> f params
+  in QueryMethod $ AppQuery
+     { queryName = name
+     , queryImplementation = impl
+     , queryParamDocs = Doc.parameterFieldDescription @params
+     , queryDocs = doc
+     }
+
+-- | Given an arbitrary 'Notification', wrap its input in JSON serialization.
+-- Note that because the JSON representation of a 'JSON.Value' is
 -- itself, you can manipulate raw JSON inputs/outputs by using 'JSON.Value' as a
 -- parameter or result type. The resultant 'Notification' may throw an 'invalidParams'
 -- exception.
@@ -297,6 +351,15 @@ instance Method (Command state) where
   getFileSystemMode = Command (asks (optFileSystemMode . cmdCtxMOptions))
   raise = liftIO . throwIO
 
+instance Method (Query state) where
+  getDebugLogger = Query (asks (optLogger . queryCtxMOptions . fst))
+  debugLog message = do
+    logger <- getDebugLogger
+    liftIO $ logger message
+  getFileReader = Query (asks (queryCtxFileReader . fst))
+  getFileSystemMode = Query (asks (optFileSystemMode . queryCtxMOptions . fst))
+  raise = liftIO . throwIO
+
 instance Method Notification where
   getDebugLogger = Notification (asks (optLogger . ntfCtxMOptions))
   debugLog message = do
@@ -307,9 +370,16 @@ instance Method Notification where
   raise = liftIO . throwIO
 
 
--- | Get the state of the server
-getState :: Command s s
-getState = Command get
+class StatefulMethod s m where
+  -- | Get the app state associated with a stateful method invocation
+  getState :: m s
+
+instance StatefulMethod s (Command s) where
+  getState = Command get
+
+instance StatefulMethod s (Query s) where
+  getState = Query $ asks snd
+
 
 -- | Modify the state of the server with some function
 modifyState :: (s -> s) -> Command s ()
@@ -678,6 +748,15 @@ execCommand ::
 execCommand c reqID ctx st =
   tryOutErr (methodCapture (cmdCtxMOptions ctx)) reqID (runCommand c ctx st)
 
+execQuery ::
+  Query state result ->
+  RequestID ->
+  QueryContext ->
+  state ->
+  IO (Response () result)
+execQuery q reqID ctx st =
+  snd <$> tryOutErr (methodCapture (queryCtxMOptions ctx)) reqID (do res <- runQuery q ctx st; pure (st, res))
+
 execNotification ::
   Notification () ->
   NotificationContext ->
@@ -716,6 +795,21 @@ handleRequest opts respond app req =
               (newAppState, result) <- execCommand (cmd params) reqID cctx appState
               sid' <- nextAppState state stateID newAppState
               return $ addStateID sid' result
+      respond (JSON.encode response)
+    Just (QueryMethod m) -> withRequestID $ \reqID -> do
+      stateID <- getStateID req
+      response <- withMVar theState $ \state -> do
+        getAppState state stateID >>=
+          \case
+            Nothing -> throwIO $ unknownStateID stateID
+            Just appState -> do
+              let qctx = QueryContext
+                          { queryCtxMOptions = opts
+                          , queryCtxFileReader = B.readFile
+                          }
+              let q = queryImplementation m
+              result <- execQuery (q params) reqID qctx appState
+              return $ addStateID stateID result
       respond (JSON.encode response)
     Just (NotificationMethod m) ->
       withoutRequestID $ withoutStateID $ do

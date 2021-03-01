@@ -49,7 +49,7 @@ class GenericFileEchoTests():
         state : Optional[str],
         expected : str,
         *,
-        startEnd : Optional[Tuple[int,int]] = None) -> Tuple[int, str]:
+        startEnd : Optional[Tuple[int,int]] = None) -> int:
         """Send a `show` command from `state` and ensure it returns `expected`.
         
         Returns the request uid and state in a tuple."""
@@ -64,23 +64,21 @@ class GenericFileEchoTests():
         self.assertIn('result', actual)
         if 'result' in actual:
             self.assertIn('state', actual['result'])
-            if 'state' in actual['result']:
-                next_state = actual['result']['state']
             self.assertIn('answer', actual['result'])
             if 'answer' in actual['result']:
                 self.assertIn('value', actual['result']['answer'])
                 if 'value' in actual['result']['answer']:
                     self.assertEqual(actual['result']['answer']['value'], expected)
         
-        return (uid, next_state)
+        return uid
 
     def test_basics(self):
         c = self.get_connection()
         ## Positive tests -- make sure the server behaves as we expect with valid RPCs
 
         # Check that their is nothing to show if we haven't loaded a file yet
-        (prev_uid, prev_state) = self.assertShow(c, state=None, expected='')
-
+        prev_uid = self.assertShow(c, state=None, expected='')
+        prev_state = None
 
         # load a file
         hello_file = file_dir.joinpath('hello.txt')
@@ -97,10 +95,10 @@ class GenericFileEchoTests():
         prev_state = state
 
         # check the contents of the loaded file
-        (prev_uid, prev_state) = self.assertShow(c, state=prev_state, expected='Hello World!\n')
+        prev_uid = self.assertShow(c, state=prev_state, expected='Hello World!\n')
 
         # check a _portion_ of the contents of the loaded file
-        (prev_uid, prev_state) = self.assertShow(c, state=prev_state, expected='ello', startEnd=(1,5))
+        prev_uid = self.assertShow(c, state=prev_state, expected='ello', startEnd=(1,5))
 
         # clear the loaded file
         uid = c.send_command("clear", {"state": prev_state})
@@ -115,7 +113,7 @@ class GenericFileEchoTests():
         prev_state = state
 
         # check that the file contents cleared
-        (prev_uid, prev_state) = self.assertShow(c, state=prev_state, expected='')
+        prev_uid = self.assertShow(c, state=prev_state, expected='')
 
         ## Negative tests -- make sure the server errors as we expect
 
@@ -409,7 +407,7 @@ class OccupancyTests(unittest.TestCase):
         # kill connection 1's state
         c1.send_notification("destroy state", {"state to destroy": state1})
         # ensure connection 1's state is dead
-        uid1 = c1.send_command("show", {"state": state1})
+        uid1 = c1.send_query("show", {"state": state1})
         actual1 = c1.wait_for_reply_to(uid1)
         expected = {'error':{'data':{'stdout':None,'data':state1,'stderr':None},'code':20,'message':'Unknown state ID'},'jsonrpc':'2.0','id':uid1}
         self.assertEqual(actual1, expected)
@@ -425,13 +423,13 @@ class OccupancyTests(unittest.TestCase):
         c1.send_notification("destroy all states", {})
 
         # ensure connection 2's state is dead
-        uid2 = c2.send_command("show", {"state": state2})
+        uid2 = c2.send_query("show", {"state": state2})
         actual2 = c2.wait_for_reply_to(uid2)
         expected = {'error':{'data':{'stdout':None,'data':state2,'stderr':None},'code':20,'message':'Unknown state ID'},'jsonrpc':'2.0','id':uid2}
         self.assertEqual(actual2, expected)
 
         # ensure connection 3's state is dead
-        uid3 = c3.send_command("show", {"state": state3})
+        uid3 = c3.send_query("show", {"state": state3})
         actual3 = c3.wait_for_reply_to(uid3)
         expected = {'error':{'data':{'stdout':None,'data':state3,'stderr':None},'code':20,'message':'Unknown state ID'},'jsonrpc':'2.0','id':uid3}
         self.assertEqual(actual3, expected)

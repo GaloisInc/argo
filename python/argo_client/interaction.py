@@ -7,6 +7,9 @@ from typing import Any, Dict, Tuple
 from typing_extensions import Protocol
 
 
+class HasServerConnection(Protocol):
+    server_connection: ServerConnection
+
 class HasProtocolState(Protocol):
     def protocol_state(self) -> Any: ...
     server_connection: ServerConnection
@@ -35,8 +38,8 @@ class ArgoException(Exception):
 
 
 class Interaction:
-    """A representation of a concrete interaction with the
-    server. Applications should subclass this according to their needs.
+    """A representation of a concrete stateful interaction (i.e., a command or query)
+    with the server. Applications should subclass this according to their needs.
 
     Subclasses should call the superclass constructor with the method
     name and the parameters. They should additionally implement methods
@@ -138,11 +141,13 @@ class Command(Interaction):
         res = self.raw_result()
         if 'error' in res:
             msg = res['error']['message']
-            if 'data' in res['error']:
-                msg += " " + str(res['error']['data']['data'])
+            error_data = None
+            if 'data' in res['error'] and 'data' in res['error']['data']:
+                error_data = res['error']['data']['data']
+                msg += " " + str(error_data)
             exception = ArgoException(res['error']['code'],
                                       msg,
-                                      res['error'].get('data').get('data'),
+                                      error_data,
                                       res['error']['data']['stdout'],
                                       res['error']['data']['stderr'])
             raise self.process_error(exception)
@@ -221,3 +226,23 @@ class Query(Interaction):
     def stderr(self) -> str:
         """Return the stderr printed during the execution of the command."""
         return self._result_and_out_err()[2]
+
+
+class Notification:
+    """A representation of a concrete stateless interaction with the server.
+    Applications should subclass this according to their needs.
+
+    Subclasses should call the superclass constructor with the method
+    name and the parameters. 
+
+    """
+    _method: str
+    _params: Dict[str, Any]
+
+    def __init__(self, method: str, params: Dict[str, Any],
+                 connection: HasServerConnection) -> None:
+        self.connection = connection
+        self._method = method
+        self._params = params
+        connection.server_connection.send_notification(self._method, self._params)
+

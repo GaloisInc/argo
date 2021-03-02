@@ -40,24 +40,6 @@ newtype ServerCmd a =
 
 
 ------------------------------------------------------------------------
--- Command Execution
-
-runServerCmd :: ServerCmd a -> Argo.Method ServerState a
-runServerCmd (ServerCmd cmd) =
-    do s <- Argo.getState
-       reader <- Argo.getFileReader
-       out <- liftIO $ cmd (reader, fileContents s)
-       case out of
-         ServerRes (Left (ServerErr message)) ->
-           Argo.raise $ Argo.makeJSONRPCException
-            11000 "File Server exception"
-            (Just (JSON.object ["error" .= message]))
-         ServerRes (Right (x, newFileContents)) ->
-           do Argo.setState (s { fileContents = newFileContents})
-              return x
-
-
-------------------------------------------------------------------------
 -- Errors
 
 fileNotFound :: FilePath -> Argo.JSONRPCException
@@ -81,7 +63,7 @@ instance Doc.DescribedParams LoadParams where
     [("file path",
       Doc.Paragraph [Doc.Text "The file to read into memory."])]
 
-loadCmd :: LoadParams -> Argo.Method ServerState ()
+loadCmd :: LoadParams -> Argo.Command ServerState ()
 loadCmd (LoadParams file) =
   do exists <- liftIO $ Dir.doesFileExist file
      if exists
@@ -109,7 +91,7 @@ instance Doc.DescribedParams PrependParams where
     [("content",
       Doc.Paragraph [Doc.Text "The string to append to the left of the current file content on the server."])]
 
-prependCmd :: PrependParams -> Argo.Method ServerState ()
+prependCmd :: PrependParams -> Argo.Command ServerState ()
 prependCmd (PrependParams str) =
   do (FileContents contents) <-  fileContents <$> Argo.getState
      Argo.setState $ ServerState
@@ -132,7 +114,7 @@ instance Doc.DescribedParams DropParams where
     [("count",
       Doc.Paragraph [Doc.Text "The number of characters to drop from the left of the current file content on the server."])]
 
-dropCmd :: DropParams -> Argo.Method ServerState ()
+dropCmd :: DropParams -> Argo.Command ServerState ()
 dropCmd (DropParams n) =
   do (FileContents contents) <-  fileContents <$> Argo.getState
      Argo.setState $ ServerState
@@ -153,7 +135,7 @@ instance JSON.FromJSON ClearParams where
 instance Doc.DescribedParams ClearParams where
   parameterFieldDescription = []
 
-clearCmd :: ClearParams -> Argo.Method ServerState ()
+clearCmd :: ClearParams -> Argo.Command ServerState ()
 clearCmd _ =
   do Argo.setState $ ServerState
       { loadedFile = Nothing
@@ -185,7 +167,7 @@ instance Doc.DescribedParams ShowParams where
                               ]
 
 
-showCmd :: ShowParams -> Argo.Method ServerState JSON.Value
+showCmd :: ShowParams -> Argo.Query ServerState JSON.Value
 showCmd (ShowParams start end) =
   do (FileContents contents) <-  fileContents <$> Argo.getState
      let len = case end of
@@ -195,7 +177,7 @@ showCmd (ShowParams start end) =
 
 
 ------------------------------------------------------------------------
--- Implode Command
+-- Implode Query
 
 data ImplodeParams = ImplodeParams
 
@@ -208,7 +190,7 @@ instance Doc.DescribedParams ImplodeParams where
   parameterFieldDescription = []
 
 
-implodeCmd :: ClearParams -> Argo.Method ServerState ()
+implodeCmd :: ClearParams -> Argo.Query ServerState ()
 implodeCmd _ = liftIO $ throwIO Argo.internalError
 
 ----------------------------------------------------------------------
@@ -252,92 +234,47 @@ instance Doc.DescribedParams IgnoreParams where
     [("to be ignored",
       Doc.Paragraph [Doc.Text "The value to be ignored goes here."])]
 
-ignoreCmd :: IgnoreParams -> Argo.Method ServerState ()
+ignoreCmd :: IgnoreParams -> Argo.Query ServerState ()
 ignoreCmd _ = pure ()
 
 
-
 ------------------------------------------------------------------------
--- Pin State Command
-data PinStateParams =
-  PinStateParams
+-- Destroy State Command
+data DestroyStateParams =
+  DestroyStateParams
   {
-    stateToPin :: !Argo.StateID
+    stateToDestroy :: !Argo.StateID
   }
 
-instance JSON.FromJSON PinStateParams where
+instance JSON.FromJSON DestroyStateParams where
   parseJSON =
-    JSON.withObject "params for \"pin state\"" $
-    \o -> PinStateParams <$> o .: "state to pin"
+    JSON.withObject "params for \"destroy state\"" $
+    \o -> DestroyStateParams <$> o .: "state to destroy"
 
-instance Doc.DescribedParams PinStateParams where
+instance Doc.DescribedParams DestroyStateParams where
   parameterFieldDescription = 
-    [("state to pin",
-       Doc.Paragraph [Doc.Text "The state to pin in the server so it is available until unpinned."])
+    [("state to destroy",
+       Doc.Paragraph [Doc.Text "The state to destroy in the server (so it can be released from memory)."])
      ]
 
-pinState :: PinStateParams -> Argo.Method ServerState ()
-pinState (PinStateParams stateID) = Argo.pinState stateID
-
-
-------------------------------------------------------------------------
--- Unpin State Command
-data UnpinStateParams =
-  UnpinStateParams
-  {
-    stateToUnpin :: !Argo.StateID
-  }
-
-instance JSON.FromJSON UnpinStateParams where
-  parseJSON =
-    JSON.withObject "params for \"unpin state\"" $
-    \o -> UnpinStateParams <$> o .: "state to unpin"
-
-instance Doc.DescribedParams UnpinStateParams where
-  parameterFieldDescription = 
-    [("state to unpin",
-       Doc.Paragraph [Doc.Text "The state to unpin in the server (so it can be released from memory)."])
-     ]
-
-unpinState :: UnpinStateParams -> Argo.Method ServerState ()
-unpinState (UnpinStateParams stateID) = Argo.unpinState stateID
+destroyState :: DestroyStateParams -> Argo.Notification ()
+destroyState (DestroyStateParams stateID) = Argo.destroyState stateID
 
 
 
 ------------------------------------------------------------------------
--- Unpin All States Command
-data UnpinAllStatesParams = UnpinAllStatesParams
+-- Destroy All States Command
+data DestroyAllStatesParams = DestroyAllStatesParams
 
-instance JSON.FromJSON UnpinAllStatesParams where
+instance JSON.FromJSON DestroyAllStatesParams where
   parseJSON =
-    JSON.withObject "params for \"unpin all states\"" $
-    \_ -> pure UnpinAllStatesParams
+    JSON.withObject "params for \"destroy all states\"" $
+    \_ -> pure DestroyAllStatesParams
 
-instance Doc.DescribedParams UnpinAllStatesParams where
+instance Doc.DescribedParams DestroyAllStatesParams where
   parameterFieldDescription = []
 
 
-unpinAllStates :: UnpinAllStatesParams -> Argo.Method ServerState ()
-unpinAllStates _ = Argo.unpinAllStates
-
-------------------------------------------------------------------------
--- Set Cache Limit Command
-data SetCacheLimitParams =
-  SetCacheLimitParams
-  {
-    desiredCacheLimit :: !Int
-  }
-
-instance JSON.FromJSON SetCacheLimitParams where
-  parseJSON =
-    JSON.withObject "params for \"set cache limit\"" $
-    \o -> SetCacheLimitParams <$> o .: "cache limit"
-
-instance Doc.DescribedParams SetCacheLimitParams where
-  parameterFieldDescription = 
-    [("cache limit",
-      Doc.Paragraph [Doc.Text "Limit how many temporarily cached states can accumulate."])]
-
-setCacheLimit :: SetCacheLimitParams -> Argo.Method ServerState ()
-setCacheLimit (SetCacheLimitParams n) = Argo.setCacheLimit n
+destroyAllStates :: DestroyAllStatesParams -> Argo.Notification ()
+destroyAllStates _ = Argo.destroyAllStates
 

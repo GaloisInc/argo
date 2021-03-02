@@ -6,21 +6,30 @@ module Argo.DefaultMain
     UserOptions(..),
     userOptions) where
 
-import Control.Applicative
-import Control.Monad
-import Control.Lens (view)
-import Data.Maybe
-import Data.Foldable
+import Control.Applicative ( Alternative((<|>)), (<**>) )
+import Control.Monad ( when )
+import Data.Maybe ( fromMaybe, isJust )
+import Data.Foldable ( for_ )
 import qualified Data.Text.IO as T
 import Control.Concurrent.Async (wait)
 import Control.Exception (handle, IOException)
 import Network.Socket (HostName)
+import Numeric.Natural ( Natural )
 import qualified Options.Applicative as Opt
 import Safe (readMay)
 import System.IO (BufferMode(..), hSetBuffering, stderr, stdout)
 import System.FileLock
+    ( lockFile,
+      tryLockFile,
+      unlockFile,
+      withTryFileLock,
+      SharedExclusive(Exclusive) )
 import System.Directory
-import System.FilePath
+    ( createDirectoryIfMissing,
+      getAppUserDataDirectory,
+      listDirectory,
+      removeFile )
+import System.FilePath ( (-<.>), (<.>), (</>), isExtensionOf )
 import System.Exit (die)
 
 import Argo
@@ -116,9 +125,10 @@ data GlobalOptions stdioOpts socketOpts httpOpts docOpts =
 mkGlobalOptions ::
   Maybe LogOption ->
   FileSystemMode ->
+  Natural {- ^ max occupancy -} ->
   ProgramMode stdioOpts socketOpts httpOpts docOpts ->
   GlobalOptions stdioOpts socketOpts httpOpts docOpts
-mkGlobalOptions logging fsMode progMode =
+mkGlobalOptions logging fsMode occupancy progMode =
   GlobalOptions
   { methodOpts = defaultMethodOptions {
                    optFileSystemMode = fsMode
@@ -126,6 +136,7 @@ mkGlobalOptions logging fsMode progMode =
                      case logging of
                        Just StdErrLog -> T.hPutStrLn stderr
                        _ -> const (return ())
+                 , optMaxOccupancy = occupancy
                  }
   , programMode = progMode
   }
@@ -188,6 +199,7 @@ allOptions stdioOpts socketOpts httpOpts docOpts desc =
   mkGlobalOptions <$>
   logOpt <*>
   readOnlyOpt <*>
+  maxOccupancyOpt <*>
   (mode stdioOpts socketOpts httpOpts docOpts desc <**> Opt.helper)
 
 options ::
@@ -247,6 +259,14 @@ readOnlyOpt =
   (Opt.flag ReadWrite ReadOnly
    (Opt.long "read-only" <>
     Opt.help "Do not generate any output files, for use on a read-only file system."))
+
+maxOccupancyOpt :: Opt.Parser Natural
+maxOccupancyOpt =
+  (Opt.option Opt.auto
+   (Opt.long "max-occupancy" <>
+    Opt.help "Maximum number of active sessions allowed at once." <>
+    Opt.showDefault <>
+    Opt.value 10))
 
 selectHost :: Maybe HostName -> HostName
 selectHost (Just name) = name
@@ -373,5 +393,5 @@ realMain makeApp globalOpts =
           do theApp <- makeApp (DocOpts userOpts)
              T.putStrLn $
                restructuredText $
-                 Doc.App (view appName theApp) (protocolDocs : view appDocumentation theApp)
+                 Doc.App (appName theApp) (protocolDocs : appDocumentation theApp)
   where opts = methodOpts globalOpts

@@ -18,7 +18,12 @@ main :: IO ()
 main = customMain parseServerOptions parseServerOptions parseServerOptions parseServerOptions description getApp
   where
     getApp opts =
-      Argo.mkDefaultApp "file-echo-api" docs (mkInitState $ userOptions opts) serverMethods
+      Argo.mkApp
+        "file-echo-api"
+        docs
+        (Argo.defaultAppOpts Argo.PureState)
+        (mkInitState $ userOptions opts)
+        serverMethods
 
 docs :: [Doc.Block]
 docs =
@@ -49,15 +54,13 @@ parseServerOptions = ServerOptions <$> filename
 
 serverMethods :: [Argo.AppMethod FES.ServerState]
 serverMethods =
-  [ Argo.method "load" Argo.Command (Doc.Paragraph [Doc.Text "Load a file from disk into memory."]) FES.loadCmd
-  , Argo.method "clear" Argo.Command (Doc.Paragraph [Doc.Text "Forget the loaded file."]) FES.clearCmd
-  , Argo.method "prepend" Argo.Command (Doc.Paragraph [Doc.Text "Append a string to the left of the current contents."]) FES.prependCmd
-  , Argo.method "drop" Argo.Command (Doc.Paragraph [Doc.Text "Drop from the left of the current contents."]) FES.dropCmd
-  , Argo.method "implode" Argo.Query (Doc.Paragraph [Doc.Text "Throw an error immediately."]) FES.implodeCmd
-  , Argo.method "show" Argo.Query (Doc.Paragraph [Doc.Text "Show a substring of the file."]) FES.showCmd
-  , Argo.method "ignore" Argo.Query (Doc.Paragraph [Doc.Text "Ignore an ", Doc.Link (Doc.TypeDesc (typeRep (Proxy @FES.Ignorable))) "ignorable value", Doc.Text "."]) FES.ignoreCmd
-  , Argo.method "pin state" Argo.Notification (Doc.Paragraph [Doc.Text "Pins a state in the server so it is available until unpinned."]) FES.pinState
-  , Argo.method "unpin state" Argo.Notification (Doc.Paragraph [Doc.Text "Unpins a state in the server."]) FES.unpinState
-  , Argo.method "unpin all states" Argo.Notification (Doc.Paragraph [Doc.Text "Unpin all states in the server."]) FES.unpinAllStates
-  , Argo.method "set cache limit" Argo.Notification (Doc.Paragraph [Doc.Text "Unpin all states in the server."]) FES.setCacheLimit
+  [ Argo.command "load" (Doc.Paragraph [Doc.Text "Load a file from disk into memory."]) FES.loadCmd
+  , Argo.command "clear" (Doc.Paragraph [Doc.Text "Forget the loaded file."]) FES.clearCmd
+  , Argo.command "prepend" (Doc.Paragraph [Doc.Text "Append a string to the left of the current contents."]) FES.prependCmd
+  , Argo.command "drop" (Doc.Paragraph [Doc.Text "Drop from the left of the current contents."]) FES.dropCmd
+  , Argo.query "implode" (Doc.Paragraph [Doc.Text "Throw an error immediately."]) FES.implodeCmd
+  , Argo.query "show" (Doc.Paragraph [Doc.Text "Show a substring of the file."]) FES.showCmd
+  , Argo.query "ignore" (Doc.Paragraph [Doc.Text "Ignore an ", Doc.Link (Doc.TypeDesc (typeRep (Proxy @FES.Ignorable))) "ignorable value", Doc.Text "."]) FES.ignoreCmd
+  , Argo.notification "destroy state" (Doc.Paragraph [Doc.Text "Destroy a state in the server."]) FES.destroyState
+  , Argo.notification "destroy all states" (Doc.Paragraph [Doc.Text "Destroy all states in the server."]) FES.destroyAllStates
   ]

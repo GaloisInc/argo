@@ -19,26 +19,33 @@
 module Argo
   ( -- * Primary interface to JSON-RPC
     App
-  , mkApp, mkDefaultApp
+  , mkApp
   , appName
   , appDocumentation
+  , defaultAppOpts
+  , StateMutability(..)
+  , AppOpts
   -- * Method Options
   , FileSystemMode(..)
   , MethodOptions(..)
   , defaultMethodOptions
   -- * Defining methods
   , AppMethod
-  , MethodType(..)
-  , Method(..)
-  , runMethod
-  , method
-  -- * Manipulating state in methods
+  , Method
+  , StatefulMethod
+  , Command
+  , Query
+  , Notification
+  , command
+  , query
+  , notification
+  -- * Manipulating app state in methods
   , getState
   , modifyState
   , setState
-  -- * Manipulating internal server state
-  , pinState, unpinState
-  , unpinAllStates, setCacheLimit
+  -- * Manipulating internal server state in notifications
+  , destroyState
+  , destroyAllStates
   -- * File I/O in methods that respects caching
   , getFileReader
   -- * "printf"-style debugging in methods
@@ -66,8 +73,9 @@ module Argo
   -- * System info
   getFileSystemMode,
   -- * AppMethod info
-  methodName, methodType, methodImplementation,
-  methodParamDocs, methodDocs
+  methodName,
+  methodParamDocs,
+  methodDocs
   ) where
 
 import Control.Concurrent
@@ -75,7 +83,6 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Exception hiding (TypeError)
-import Control.Lens hiding ((.=))
 import qualified Data.Aeson as JSON
 import Data.Aeson ((.:), (.:!), (.=))
 import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
@@ -85,12 +92,14 @@ import Data.Foldable (for_)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
 import qualified Data.Map as M
+import qualified Data.HashMap.Strict as HM
 import Data.Maybe (maybeToList)
 import Data.Scientific (Scientific)
 import Data.Text ( Text )
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import GHC.Stack
+import Numeric.Natural ( Natural )
 import Network.HTTP.Types.Method (StdMethod(..))
 import Network.HTTP.Types.Status
 import System.IO
@@ -108,6 +117,17 @@ jsonRPCVersion = "2.0"
 
 --------------------------------------------------------------------------------
 
+-- | Options affecting the how the server runs/supports the app.
+newtype AppOpts =
+  AppOpts
+  {
+    appStateMutability :: StateMutability
+    -- ^ Whether or not the underlying application state is mutable
+  }
+
+defaultAppOpts :: StateMutability -> AppOpts
+defaultAppOpts stateMut = AppOpts { appStateMutability = stateMut}
+
 data FileSystemMode
   = ReadOnly
   | ReadWrite
@@ -120,22 +140,8 @@ data MethodOptions =
     -- ReadOnly prohibits creating or writing files.
     , optLogger :: Text -> IO ()
     -- ^ A function to use for logging debug messages.
-    }
-
-data MethodContext =
-  MethodContext
-    { mctxOptions :: MethodOptions
-    , mctxFileReader :: FilePath -> IO B.ByteString
-    -- ^ A function returning the contents of the named file,
-    -- potentially from a cache.
-    , mctxStatePin :: StateID -> IO ()
-    -- ^ A function for pinning a state (i.e., adding it to the persistent cache).
-    , mctxStateUnpin :: StateID -> IO ()
-    -- ^ A function for unpinning a state (i.e., removing it from the persistent cache).
-    , mctxStateUnpinAll :: IO ()
-    -- ^ A function for unpinning all pinned states (i.e., clearing the persistent cache).
-    , mctxSetECacheLimit :: Int -> IO ()
-    -- ^ A function for setting the max size of the ephemeral cache.
+    , optMaxOccupancy :: Natural
+    -- ^ How many simultaneous states can be live at once?
     }
 
 defaultMethodOptions :: MethodOptions
@@ -143,208 +149,307 @@ defaultMethodOptions =
   MethodOptions
     { optFileSystemMode = ReadWrite
     , optLogger = const (return ())
+    , optMaxOccupancy = 10
     }
+
+data CommandContext =
+  CommandContext
+  { cmdCtxMOptions :: MethodOptions
+  , cmdCtxFileReader :: FilePath -> IO B.ByteString
+  }
+
+data QueryContext =
+  QueryContext
+  { queryCtxMOptions :: MethodOptions
+  , queryCtxFileReader :: FilePath -> IO B.ByteString
+  }
+
+data NotificationContext =
+  NotificationContext
+  { ntfCtxMOptions :: MethodOptions
+  , ntfCtxFileReader :: FilePath -> IO B.ByteString
+  -- ^ A function returning the contents of the named file,
+  -- potentially from a cache.
+  , ntfCtxDestroyState :: StateID -> IO ()
+  -- ^ A function for unpinning a state (i.e., removing it from the persistent cache).
+  , ntfCtxDestroyAllStates :: IO ()
+  -- ^ A function for unpinning all pinned states (i.e., clearing the persistent cache).
+  }
+
 
 --------------------------------------------------------------------------------
 
 -- | A server has /state/, and a collection of (potentially) stateful /methods/,
 -- each of which is a function from the JSON value representing its parameters
 -- to a JSON value representing its response.
-newtype Method state result
-  = Method (ReaderT MethodContext (StateT state IO) result)
-  deriving (Functor, Applicative, Monad, MonadIO)
+newtype Command state result
+  = Command (ReaderT CommandContext (StateT state IO) result)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadState state)
 
-runMethod :: Method state result -> MethodContext -> state -> IO (state, result)
-runMethod (Method m) mctx s = flop <$> runStateT (runReaderT m mctx) s
+runCommand :: Command state result -> CommandContext -> state -> IO (state, result)
+runCommand (Command m) cctx s = flop <$> runStateT (runReaderT m cctx) s
   where flop (x, y) = (y, x)
 
+newtype Query state result
+  = Query (ReaderT (QueryContext, state) IO result)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader (QueryContext, state))
+
+runQuery :: Query state result -> QueryContext -> state -> IO result
+runQuery (Query m) qctx s = runReaderT m (qctx, s)
+
+newtype Notification result
+  = Notification (ReaderT NotificationContext IO result)
+  deriving (Functor, Applicative, Monad, MonadIO)
+
+runNotification :: Notification () -> NotificationContext -> IO ()
+runNotification (Notification m) mctx = void $ runReaderT m mctx
 
 
--- | A 'Method' may be one of three different sorts
-data MethodType
-  = Command  -- ^ can modify state and can reply to the client
-  | Query    -- ^ can /not/ modify state, but can reply to the client
-  | Notification  -- ^ can modify state, but can /not/ reply to the client
-  deriving (Eq, Ord, Show)
+data AppCommand appState =
+  AppCommand
+  { commandName :: !Text
+  , commandImplementation :: !(JSON.Value -> Command appState JSON.Value)
+  , commandParamDocs :: ![(Text, Doc.Block)]
+  , commandDocs :: !Doc.Block
+  }
 
--- | Given an arbitrary 'Method', wrap its input and output in JSON
+data AppQuery appState =
+  AppQuery
+  { queryName :: !Text
+  , queryImplementation :: !(JSON.Value -> Query appState JSON.Value)
+  , queryParamDocs :: ![(Text, Doc.Block)]
+  , queryDocs :: !Doc.Block
+  }
+
+data AppNotification =
+  AppNotification
+  { notificationName :: !Text
+  , notificationImplementation :: !(JSON.Value -> Notification ())
+  , notificationParamDocs :: ![(Text, Doc.Block)]
+  , notificationDocs :: !Doc.Block
+  }
+
+data AppMethod appState
+  = CommandMethod (AppCommand appState)
+  | QueryMethod (AppQuery appState)
+  | NotificationMethod AppNotification
+
+methodName :: AppMethod appState -> Text
+methodName (CommandMethod m) = commandName m
+methodName (QueryMethod m) = queryName m
+methodName (NotificationMethod m) = notificationName m
+
+methodKind :: AppMethod appState -> Text
+methodKind CommandMethod{} = "command"
+methodKind QueryMethod{} = "query"
+methodKind NotificationMethod{} = "notification"
+
+methodParamDocs :: AppMethod appState -> [(Text, Doc.Block)]
+methodParamDocs (CommandMethod m) = commandParamDocs m
+methodParamDocs (QueryMethod m) = queryParamDocs m
+methodParamDocs (NotificationMethod m) = notificationParamDocs m
+
+methodDocs :: AppMethod appState -> Doc.Block
+methodDocs (CommandMethod m) = commandDocs m
+methodDocs (QueryMethod m) = queryDocs m
+methodDocs (NotificationMethod m) = notificationDocs m
+
+
+-- | Given an arbitrary 'Command', wrap its input and output in JSON
 -- serialization. Note that because the JSON representation of a 'JSON.Value' is
 -- itself, you can manipulate raw JSON inputs/outputs by using 'JSON.Value' as a
--- parameter or result type. The resultant 'Method' may throw an 'invalidParams'
+-- parameter or result type. The resultant 'Command' may throw an 'invalidParams'
 -- exception.
-method ::
+command ::
   forall params result state.
   (JSON.FromJSON params, Doc.DescribedParams params, JSON.ToJSON result) =>
   Text ->
-  MethodType ->
   Doc.Block ->
-  (params -> Method state result) ->
+  (params -> Command state result) ->
   AppMethod state
-method name ty doc f =
+command name doc f =
   let impl =
         \p ->
          case JSON.fromJSON @params p of
            JSON.Error msg -> raise $ invalidParams msg p
            JSON.Success params -> JSON.toJSON <$> f params
-  in AppMethod { _methodName = name
-               , _methodType = ty
-               , _methodImplementation = impl
-               , _methodParamDocs = Doc.parameterFieldDescription @params
-               , _methodDocs = doc
-               }
+  in CommandMethod $ AppCommand
+     { commandName = name
+     , commandImplementation = impl
+     , commandParamDocs = Doc.parameterFieldDescription @params
+     , commandDocs = doc
+     }
 
--- | Get the logger from the server
-getDebugLogger :: Method state (Text -> IO ())
-getDebugLogger = Method (asks (optLogger . mctxOptions))
+-- | Given an arbitrary 'Command', wrap its input and output in JSON
+-- serialization. Note that because the JSON representation of a 'JSON.Value' is
+-- itself, you can manipulate raw JSON inputs/outputs by using 'JSON.Value' as a
+-- parameter or result type. The resultant 'Command' may throw an 'invalidParams'
+-- exception.
+query ::
+  forall params result state.
+  (JSON.FromJSON params, Doc.DescribedParams params, JSON.ToJSON result) =>
+  Text ->
+  Doc.Block ->
+  (params -> Query state result) ->
+  AppMethod state
+query name doc f =
+  let impl =
+        \p ->
+         case JSON.fromJSON @params p of
+           JSON.Error msg -> raise $ invalidParams msg p
+           JSON.Success params -> JSON.toJSON <$> f params
+  in QueryMethod $ AppQuery
+     { queryName = name
+     , queryImplementation = impl
+     , queryParamDocs = Doc.parameterFieldDescription @params
+     , queryDocs = doc
+     }
 
--- | Log a message for debugging
-debugLog :: Text -> Method state ()
-debugLog message =
-  do logger <- getDebugLogger
-     liftIO $ logger message
+-- | Given an arbitrary 'Notification', wrap its input in JSON serialization.
+-- Note that because the JSON representation of a 'JSON.Value' is
+-- itself, you can manipulate raw JSON inputs/outputs by using 'JSON.Value' as a
+-- parameter or result type. The resultant 'Notification' may throw an 'invalidParams'
+-- exception.
+notification ::
+  forall params state.
+  (JSON.FromJSON params, Doc.DescribedParams params) =>
+  Text ->
+  Doc.Block ->
+  (params -> Notification ()) ->
+  AppMethod state
+notification name doc f =
+  let impl =
+        \p ->
+         case JSON.fromJSON @params p of
+           JSON.Error msg -> raise $ invalidParams msg p
+           JSON.Success params -> f params
+  in NotificationMethod $ AppNotification
+     { notificationName = name
+     , notificationImplementation = impl
+     , notificationParamDocs = Doc.parameterFieldDescription @params
+     , notificationDocs = doc
+     }
 
--- | Get the file reader from the server
-getFileReader :: Method state (FilePath -> IO B.ByteString)
-getFileReader = Method (asks mctxFileReader)
+class Method m where
+  -- | Get the logger from the server
+  getDebugLogger :: m (Text -> IO ())
+  -- | Log a message for debugging
+  debugLog :: Text -> m ()
+  -- | Get the file reader from the server
+  getFileReader :: m (FilePath -> IO B.ByteString)
+  -- | Get the file system mode from the server
+  getFileSystemMode :: m FileSystemMode
+  -- | Raise a 'JSONRPCException' within a 'Method'
+  raise :: JSONRPCException -> m a
 
--- | Get the file system mode from the server
-getFileSystemMode :: Method state FileSystemMode
-getFileSystemMode = Method (asks (optFileSystemMode . mctxOptions))
+instance Method (Command state) where
+  getDebugLogger = Command (asks (optLogger . cmdCtxMOptions))
+  debugLog message = do
+    logger <- getDebugLogger
+    liftIO $ logger message
+  getFileReader = Command (asks cmdCtxFileReader)
+  getFileSystemMode = Command (asks (optFileSystemMode . cmdCtxMOptions))
+  raise = liftIO . throwIO
 
--- | Get the state of the server
-getState :: Method state state
-getState = Method get
+instance Method (Query state) where
+  getDebugLogger = Query (asks (optLogger . queryCtxMOptions . fst))
+  debugLog message = do
+    logger <- getDebugLogger
+    liftIO $ logger message
+  getFileReader = Query (asks (queryCtxFileReader . fst))
+  getFileSystemMode = Query (asks (optFileSystemMode . queryCtxMOptions . fst))
+  raise = liftIO . throwIO
+
+instance Method Notification where
+  getDebugLogger = Notification (asks (optLogger . ntfCtxMOptions))
+  debugLog message = do
+    logger <- getDebugLogger
+    liftIO $ logger message
+  getFileReader = Notification (asks ntfCtxFileReader)
+  getFileSystemMode = Notification (asks (optFileSystemMode . ntfCtxMOptions))
+  raise = liftIO . throwIO
+
+
+class StatefulMethod s m where
+  -- | Get the app state associated with a stateful method invocation
+  getState :: m s
+
+instance StatefulMethod s (Command s) where
+  getState = Command get
+
+instance StatefulMethod s (Query s) where
+  getState = Query $ asks snd
+
 
 -- | Modify the state of the server with some function
-modifyState :: (state -> state) -> Method state ()
-modifyState f = Method (modify f)
+modifyState :: (s -> s) -> Command s ()
+modifyState f = Command (modify f)
 
 -- | Set the state of the server
-setState :: state -> Method state ()
-setState = Method . put
-
--- | Raise a 'JSONRPCException' within a 'Method'
-raise :: JSONRPCException -> Method state a
-raise = liftIO . throwIO
-
--- | Pin the specified state.
-pinState :: StateID -> Method state ()
-pinState sid = Method $ do
-  pin <- asks mctxStatePin
-  liftIO $ pin sid
-
--- | Unpin the specified state.
-unpinState :: StateID -> Method state ()
-unpinState sid = Method $ do
-  unpin <- asks mctxStateUnpin
-  liftIO $ unpin sid
-
--- | Unpin all states.
-unpinAllStates :: Method state ()
-unpinAllStates = Method $ do
-  unpinAll <- asks mctxStateUnpinAll
-  liftIO $ unpinAll
+setState :: s -> Command s ()
+setState = Command . put
 
 
--- | Set the limit for the ephemeral cache.
-setCacheLimit :: Int -> Method state ()
-setCacheLimit n = Method $ do
-  setCacheSize <- asks mctxSetECacheLimit
-  liftIO $ setCacheSize n
+-- | Destroy a state.
+destroyState :: StateID -> Notification ()
+destroyState sid = Notification $ do
+  destroy <- asks ntfCtxDestroyState
+  liftIO $ destroy sid
+
+
+-- | Destroy all states.
+destroyAllStates :: Notification ()
+destroyAllStates = Notification $ do
+  destroyAll <- asks ntfCtxDestroyAllStates
+  liftIO $ destroyAll
 
 
 --------------------------------------------------------------------------------
 
 -- | An application is a state and a mapping from names to methods.
 data App s =
-  App { _serverState :: MVar (ServerState s)
-      , _appMethods :: Map Text (MethodType, JSON.Value -> Method s JSON.Value)
-      , _appName :: Text
-      , _appDocumentation :: [Doc.Block]
-      }
-
--- | Focus on the state var in an 'App'
-serverState :: Lens' (App s) (MVar (ServerState s))
-serverState = lens _serverState (\a s -> a { _serverState = s })
-
--- | Focus on the 'Method's in an 'App'
-appMethods ::
-  Lens' (App s) (Map Text (MethodType, JSON.Value -> Method s JSON.Value))
-appMethods = lens _appMethods (\a s -> a { _appMethods = s })
-
-appName :: Lens' (App s) Text
-appName = lens _appName (\a n -> a { _appName = n })
-
-appDocumentation :: Lens' (App s) [Doc.Block]
-appDocumentation = lens _appDocumentation (\a d -> a { _appDocumentation = d })
-
-data AppMethod s =
-  AppMethod
-  { _methodName :: !Text
-  , _methodType :: !MethodType
-  , _methodImplementation :: !(JSON.Value -> Method s JSON.Value)
-  , _methodParamDocs :: ![(Text, Doc.Block)]
-  , _methodDocs :: !Doc.Block
+  App 
+  { serverState :: MVar (ServerState s)
+  , appMethods :: Map Text (AppMethod s)
+  , appName :: Text
+  , appDocumentation :: [Doc.Block]
   }
 
 
-methodName :: Lens' (AppMethod s) Text
-methodName = lens _methodName (\m n -> m { _methodName = n })
-
-methodType :: Lens' (AppMethod s) MethodType
-methodType = lens _methodType (\m t -> m { _methodType = t })
-
-methodImplementation :: Lens' (AppMethod s) (JSON.Value -> Method s JSON.Value)
-methodImplementation = lens _methodImplementation (\m impl -> m { _methodImplementation = impl })
-
-methodParamDocs :: Lens' (AppMethod s) [(Text, Doc.Block)]
-methodParamDocs = lens _methodParamDocs (\m t -> m { _methodParamDocs = t })
-
-methodDocs :: Lens' (AppMethod s) Doc.Block
-methodDocs = lens _methodDocs (\m t -> m { _methodDocs = t })
-
-
 -- | Construct an application from an initial state and a mapping from method
--- names to methods.
+-- names to methods. This app's state is assumed to be pure.
 mkApp ::
   Text {- ^ Application name -} ->
   [Doc.Block] {- ^ Documentation -} ->
-  ServerOpts {- ^ Server options to use at launch. -}->
+  AppOpts {- ^ App options to use at launch affecting how the server operates. -} ->
   ((FilePath -> IO B.ByteString) -> IO s) {- ^ how to get the initial state -} ->
   [AppMethod s]
   {- ^ Individual methods -} ->
   IO (App s)
-mkApp name docs opts initAppState methods =
-  App <$> (newMVar =<< initServerState opts initAppState)
-      <*> pure (M.fromList [ (name, (ty, impl)) | AppMethod name ty impl _ _ <- methods])
-      <*> pure name
-      <*> pure (docs ++
-                [Doc.Section "Methods"
-                   [ Doc.Section (name <> " " <> mt ty)
-                       [ if null paramDocs
-                         then Doc.Paragraph [Doc.Text "No parameters"]
-                         else Doc.DescriptionList
-                              [ (Doc.Literal field :| [], fieldDocs)
-                              | (field, fieldDocs) <- paramDocs
-                              ]
-                       , implDoc
-                       ]
-                   | AppMethod name ty _ paramDocs implDoc <- methods
-                   ]])
+mkApp name docs opts initAppState methods = do
+  initialState <- newMVar =<< initServerState (appStateMutability opts) initAppState
+  pure $ App
+    { serverState = initialState
+    , appMethods = M.fromList [ (methodName m, m)
+                              | m <- methods]
+    , appName = name
+    , appDocumentation = appDocs
+    }
+  where appDocs = 
+          docs ++
+          [Doc.Section "Methods"
+            [ Doc.Section (name <> " (" <> methodKind m <> ")")
+                [ if null (methodParamDocs m)
+                  then Doc.Paragraph [Doc.Text "No parameters"]
+                  else Doc.DescriptionList
+                        [ (Doc.Literal field :| [], fieldDocs)
+                        | (field, fieldDocs) <- (methodParamDocs m)
+                        ]
+                , (methodDocs m)
+                ]
+            | m <- methods
+            ]]
 
-  where mt ty = T.toLower (T.pack ("(" ++ show ty ++ ")"))
-
-
--- | Like @mkApp@ but uses Argo's default server options (see @defaultServerOpts@
---   in @Argo.ServerState@).
-mkDefaultApp ::
-  Text {- ^ Application name -} ->
-  [Doc.Block] {- ^ Documentation -} ->
-  ((FilePath -> IO B.ByteString) -> IO s) {- ^ how to get the initial state -} ->
-  [AppMethod s]
-  {- ^ method names paired with their implementations -} ->
-  IO (App s)
-mkDefaultApp nm docs initAppState methods = mkApp nm docs defaultServerOpts initAppState methods
 
 -- | JSON RPC exceptions should be thrown by method implementations when
 -- they want to return an error.
@@ -453,6 +558,28 @@ unknownStateID sid =
                    , errorStdErr = Nothing
                    }
 
+-- | The provided State ID is not one that the server has previously sent.
+unexpectedStateID :: JSONRPCException
+unexpectedStateID =
+  JSONRPCException { errorCode = 21
+                   , message = "Unexpected state ID"
+                   , errorData = Nothing
+                   , errorID = Nothing
+                   , errorStdOut = Nothing
+                   , errorStdErr = Nothing
+                   }
+
+-- | The server is already at capacity and cannot allocate a new state.
+serverAtCapacity :: JSONRPCException
+serverAtCapacity =
+  JSONRPCException { errorCode = 22
+                   , message   = "Server at max capacity"
+                   , errorData = Nothing
+                   , errorID   = Nothing
+                   , errorStdOut = Nothing
+                   , errorStdErr = Nothing
+                   }
+
 -- | Construct a 'JSONRPCException' from an error code, error text, and perhaps
 -- some data item to attach
 makeJSONRPCException :: JSON.ToJSON a => Integer -> Text -> Maybe a -> JSONRPCException
@@ -490,26 +617,17 @@ instance JSON.ToJSON RequestID where
   toJSON IDNull       = JSON.Null
 
 data Request =
-  Request { _requestMethod :: !Text
+  Request { requestMethod :: !Text
           -- ^ The method name to invoke
-          , _requestID :: !(Maybe RequestID)
+          , requestID :: !(Maybe RequestID)
           -- ^ Because the presence of null and the absence of the key are
           -- distinct, we have both a null constructor and wrap it in a Maybe.
           -- When the request ID is not present, the request is a notification
           -- and the field is Nothing.
-          , _requestParams :: !JSON.Object
+          , requestParams :: !JSON.Object
           -- ^ The parameters to the method, if any exist
           }
   deriving (Show)
-
-requestMethod :: Lens' Request Text
-requestMethod = lens _requestMethod (\r m -> r { _requestMethod = m })
-
-requestID :: Lens' Request (Maybe RequestID)
-requestID = lens _requestID (\r i -> r { _requestID = i })
-
-requestParams :: Lens' Request JSON.Object
-requestParams = lens _requestParams (\r m -> r { _requestParams = m })
 
 
 suchThat :: HasCallStack => JSON.Parser a -> (a -> Bool) -> JSON.Parser a
@@ -530,15 +648,15 @@ instance JSON.ToJSON Request where
   toJSON req =
     JSON.object
       [ "jsonrpc" .= jsonRPCVersion
-      , "method"  .= view requestMethod req
-      , "id"      .= view requestID     req
-      , "params"  .= view requestParams req ]
+      , "method"  .= requestMethod req
+      , "id"      .= requestID     req
+      , "params"  .= requestParams req ]
   toEncoding req =
     JSON.pairs $
       "jsonrpc" .= jsonRPCVersion         <>
-      "method"  .= view requestMethod req <>
-      "id"      .= view requestID     req <>
-      "params"  .= view requestParams req
+      "method"  .= requestMethod req <>
+      "id"      .= requestID     req <>
+      "params"  .= requestParams req
 
 -- | A response to a command or query.
 --
@@ -549,27 +667,12 @@ instance JSON.ToJSON Request where
 -- to exist, and the lack of a generalized 'ToJSON' instance prevents
 -- us from forgetting the ID when we encode it.
 data Response stateID a
-  = Response { _responseID :: !RequestID
-             , _responseAnswer :: !a
-             , _responseStdOut :: !(Maybe String)
-             , _responseStdErr :: !(Maybe String)
-             , _responseStateID :: !stateID
+  = Response { responseID :: !RequestID
+             , responseAnswer :: !a
+             , responseStdOut :: !(Maybe String)
+             , responseStdErr :: !(Maybe String)
+             , responseStateID :: !stateID
              } deriving (Eq, Ord, Show)
-
-responseID :: Lens' (Response stateID a) RequestID
-responseID = lens _responseID (\r m -> r { _responseID = m })
-
-responseAnswer :: Lens (Response stateID a) (Response stateID b) a b
-responseAnswer = lens _responseAnswer (\r m -> r { _responseAnswer = m })
-
-responseStdOut :: Lens' (Response stateID a) (Maybe String)
-responseStdOut = lens _responseStdOut (\r m -> r { _responseStdOut = m })
-
-responseStdErr :: Lens' (Response stateID a) (Maybe String)
-responseStdErr = lens _responseStdOut (\r m -> r { _responseStdOut = m })
-
-responseStateID :: Lens (Response stateID a) (Response stateID' a) stateID stateID'
-responseStateID = lens _responseStateID (\r sid -> r { _responseStateID = sid })
 
 instance JSON.FromJSON a => JSON.FromJSON (Response StateID a) where
   parseJSON =
@@ -588,12 +691,12 @@ instance JSON.ToJSON a => JSON.ToJSON (Response StateID a) where
   toJSON resp =
     JSON.object
       [ "jsonrpc" .= jsonRPCVersion
-      , "id"      .= view responseID resp
+      , "id"      .= responseID resp
       , "result"  .= JSON.object
-        [ "answer" .= view responseAnswer resp
-        , "stdout" .= view responseStdOut resp
-        , "stderr" .= view responseStdErr resp
-        , "state"  .= view responseStateID resp
+        [ "answer" .= responseAnswer resp
+        , "stdout" .= responseStdOut resp
+        , "stderr" .= responseStdErr resp
+        , "state"  .= responseStateID resp
         ]
       ]
 
@@ -615,48 +718,52 @@ methodCapture opts
    | optFileSystemMode opts == ReadOnly = hNoCapture
    | otherwise = hCaptureWrap
 
-runMethodResponse ::
-  Method s a ->
+tryOutErr ::
+  (forall a. [Handle] -> IO a -> IO (Maybe String, a)) ->
   RequestID ->
-  MethodContext ->
-  s ->
+  IO (s, a) ->
   IO (s, Response () a)
-execMethodSilently ::
-  Method s a ->
-  MethodContext ->
-  s ->
-  IO s
-(runMethodResponse, execMethodSilently) =
-  ( \m reqID mctx st ->
-      tryOutErr (methodCapture (mctxOptions mctx)) reqID (runMethod m mctx st)
-  , \m mctx st -> fst <$>
-      tryOutErr
-        hNoCapture
-        IDNull
-        (runMethod m mctx st) )
+tryOutErr capturer reqID action = do
+  (err, (out, res)) <-
+     capturer [stderr] . capturer [stdout] $
+     try @SomeException (try @JSONRPCException action)
+  tryPutOutErr out err
+  case res of
+    Left e -> let message = Just (JSON.String (T.pack (displayException e)))
+                in throwIO $ internalError { errorData = message }
+    Right (Left e) -> throwIO $ e { errorStdOut = out, errorStdErr = err }
+    Right (Right (st, answer)) -> pure (st, Response reqID answer out err ())
   where
-    tryOutErr ::
-      (forall a. [Handle] -> IO a -> IO (Maybe String, a)) ->
-      RequestID ->
-      IO (s, a) ->
-      IO (s, Response () a)
-    tryOutErr capturer reqID action =
-      do (err, (out, res)) <-
-           capturer [stderr] . capturer [stdout] $
-           try @SomeException (try @JSONRPCException action)
-         tryPutOutErr out err
-         either
-           (\e -> let message = Just (JSON.String (T.pack (displayException e)))
-                  in throwIO $ internalError { errorData = message })
-           (either
-              (\e -> throwIO $ e { errorStdOut = out, errorStdErr = err })
-              (\(st, answer) -> pure (st, Response reqID answer out err ())))
-           res
-      where
-        tryPutOutErr :: Maybe String -> Maybe String -> IO ()
-        tryPutOutErr out err =
-          do void $ try @IOException (traverse (hPutStr stdout) out)
-             void $ try @IOException (traverse (hPutStr stderr) err)
+    tryPutOutErr :: Maybe String -> Maybe String -> IO ()
+    tryPutOutErr out err = do
+      void $ try @IOException (traverse (hPutStr stdout) out)
+      void $ try @IOException (traverse (hPutStr stderr) err)
+
+execCommand ::
+  Command state result ->
+  RequestID ->
+  CommandContext ->
+  state ->
+  IO (state, Response () result)
+execCommand c reqID ctx st =
+  tryOutErr (methodCapture (cmdCtxMOptions ctx)) reqID (runCommand c ctx st)
+
+execQuery ::
+  Query state result ->
+  RequestID ->
+  QueryContext ->
+  state ->
+  IO (Response () result)
+execQuery q reqID ctx st =
+  snd <$> tryOutErr (methodCapture (queryCtxMOptions ctx)) reqID (do res <- runQuery q ctx st; pure (st, res))
+
+execNotification ::
+  Notification () ->
+  NotificationContext ->
+  IO ()
+execNotification n nctx = do
+  void $ tryOutErr hNoCapture IDNull (do runNotification n nctx; pure ((),()))
+
 
 handleRequest ::
   forall s.
@@ -667,82 +774,62 @@ handleRequest ::
   Request ->
   IO ()
 handleRequest opts respond app req =
-  case M.lookup method $ view appMethods app of
+  case M.lookup method $ appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
-    Just (Command, m) -> do
-      withRequestID $ \reqID ->
-        do stateID <- getStateID req
-           response <- withMVar theState $
-             \state -> do
-               getAppState state stateID >>=
-                 \case
-                   Nothing -> throwIO $ unknownStateID stateID
-                   Just initAppState ->
-                     do let mctx = MethodContext
-                                   { mctxOptions = opts
-                                   , mctxFileReader = freshStateFileReader state stateID
-                                   , mctxStatePin = pinAppState state
-                                   , mctxStateUnpin = unpinAppState state
-                                   , mctxStateUnpinAll = clearPersistentCache state
-                                   , mctxSetECacheLimit = setEphemeralCacheLimit state
-                                   }
-                        (newAppState, result) <- runMethodResponse (m params) reqID mctx initAppState
-                        sid' <- saveNewAppState state newAppState
-                        return $ addStateID sid' result
-           respond (JSON.encode response)
-    Just (Query, m) -> do
-      withRequestID $ \reqID ->
-        do stateID <- getStateID req
-           response <- withMVar theState $
-             \state -> do
-               getAppState state stateID >>=
-                 \case
-                   Nothing -> throwIO $ unknownStateID stateID
-                   Just theAppState ->
-                     do let mctx = MethodContext
-                                   { mctxOptions = opts
-                                   , mctxFileReader = B.readFile -- No caching of this state
-                                   , mctxStatePin = pinAppState state
-                                   , mctxStateUnpin = unpinAppState state
-                                   , mctxStateUnpinAll = clearPersistentCache state
-                                   , mctxSetECacheLimit = setEphemeralCacheLimit state
-                                   }
-                        (_, result) <- runMethodResponse (m params) reqID mctx theAppState
-                        -- Here, we return the original state ID, because
-                        -- queries don't result in new states.
-                        return $ addStateID stateID result
-           respond (JSON.encode response)
-    Just (Notification, m) -> do
-      withoutRequestID $
-       void $
-        do stateID <- getStateID req
-           withMVar theState $
-             \state -> do
-               getAppState state stateID >>=
-                 \case
-                   Nothing -> throwIO $ unknownStateID stateID
-                   Just theAppState ->
-                     -- No reply will be sent, so there is no way of the
-                     -- client re-using any resulting state. So we don't
-                     -- cache file contents here.
-                     let mctx = MethodContext
-                                { mctxOptions = opts
-                                , mctxFileReader = B.readFile -- No caching of this state
-                                , mctxStatePin = pinAppState state
-                                , mctxStateUnpin = unpinAppState state
-                                , mctxStateUnpinAll = clearPersistentCache state
-                                , mctxSetECacheLimit = setEphemeralCacheLimit state
-                                }
-                     in (,()) <$> execMethodSilently (m params) mctx theAppState
+    Just (CommandMethod m) -> withRequestID $ \reqID -> do
+      stateID <- getStateID req
+      response <- withMVar theState $ \state -> do
+        when (stateID == initialStateID) $ do
+          stateCount <- statePoolCount state
+          when (stateCount >= (optMaxOccupancy opts)) $
+            throwIO serverAtCapacity
+        getAppState state stateID >>=
+          \case
+            Nothing -> throwIO $ unknownStateID stateID
+            Just appState -> do
+              let cctx = CommandContext
+                          { cmdCtxMOptions = opts
+                          , cmdCtxFileReader = B.readFile
+                          }
+              let cmd = commandImplementation m
+              (newAppState, result) <- execCommand (cmd params) reqID cctx appState
+              sid' <- nextAppState state stateID newAppState
+              return $ addStateID sid' result
+      respond (JSON.encode response)
+    Just (QueryMethod m) -> withRequestID $ \reqID -> do
+      stateID <- getStateID req
+      response <- withMVar theState $ \state -> do
+        getAppState state stateID >>=
+          \case
+            Nothing -> throwIO $ unknownStateID stateID
+            Just appState -> do
+              let qctx = QueryContext
+                          { queryCtxMOptions = opts
+                          , queryCtxFileReader = B.readFile
+                          }
+              let q = queryImplementation m
+              result <- execQuery (q params) reqID qctx appState
+              return $ addStateID stateID result
+      respond (JSON.encode response)
+    Just (NotificationMethod m) ->
+      withoutRequestID $ withoutStateID $ do
+        withMVar theState $ \state ->
+          let nctx = NotificationContext
+                      { ntfCtxMOptions = opts
+                      , ntfCtxFileReader = B.readFile
+                      , ntfCtxDestroyState = destroyAppState state
+                      , ntfCtxDestroyAllStates = destroyAllAppStates state
+                      }
+              notify = notificationImplementation m
+          in execNotification (notify params) nctx
   where
-    method   = view requestMethod req
-    params   = JSON.Object $ view requestParams req
-    reqID    = view requestID req
-    theState = view serverState app
+    method   = requestMethod req
+    params   = JSON.Object $ requestParams req
+    reqID    = requestID req
+    theState = serverState app
 
     addStateID :: StateID -> Response anyOldStateID a -> Response StateID a
-    addStateID sid answer =
-      set responseStateID sid answer
+    addStateID sid answer = answer {responseStateID = sid}
 
     withRequestID :: (RequestID -> IO a) -> IO a
     withRequestID act =
@@ -756,6 +843,12 @@ handleRequest opts respond app req =
 
     requireID   = maybe (throwIO invalidRequest) return reqID
     requireNoID = maybe (return ()) (const (throwIO invalidRequest)) reqID
+
+    withoutStateID :: IO a -> IO a
+    withoutStateID act =
+      if HM.member "state" (requestParams req)
+      then throwIO unexpectedStateID
+      else act
 
 
 -- | Given an IO action, return an atomic-ified version of that same action,
@@ -775,7 +868,7 @@ serveStdIO opts = serveHandles opts stdin stdout
 
 getStateID :: Request -> IO StateID
 getStateID req =
-  case view (requestParams . at "state") req of
+  case HM.lookup "state" (requestParams req) of
     Just sid ->
       case JSON.fromJSON sid of
         JSON.Success i -> pure i
@@ -784,8 +877,7 @@ getStateID req =
   where
     noStateID msg =
       throwIO $
-        invalidParams msg $ JSON.Object $ view requestParams req
-
+        invalidParams msg $ JSON.Object $ requestParams req
 
 -- | Serve an application, listening for input on one handle and
 -- sending output to another. Each request must be on a line for

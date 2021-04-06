@@ -93,54 +93,109 @@ Methods
 load (command)
 ~~~~~~~~~~~~~~
 
+Load a file from disk into memory.
+
+Parameter fields
+++++++++++++++++
+
 
 ``file path``
   The file to read into memory.
   
   
-Load a file from disk into memory.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 clear (command)
 ~~~~~~~~~~~~~~~
 
+Forget the loaded file.
+
+Parameter fields
+++++++++++++++++
+
 No parameters
 
-Forget the loaded file.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 prepend (command)
 ~~~~~~~~~~~~~~~~~
+
+Append a string to the left of the current contents.
+
+Parameter fields
+++++++++++++++++
 
 
 ``content``
   The string to append to the left of the current file content on the server.
   
   
-Append a string to the left of the current contents.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 drop (command)
 ~~~~~~~~~~~~~~
+
+Drop from the left of the current contents.
+
+Parameter fields
+++++++++++++++++
 
 
 ``count``
   The number of characters to drop from the left of the current file content on the server.
   
   
-Drop from the left of the current contents.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 implode (query)
 ~~~~~~~~~~~~~~~
 
+Throw an error immediately.
+
+Parameter fields
+++++++++++++++++
+
 No parameters
 
-Throw an error immediately.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 show (query)
 ~~~~~~~~~~~~
+
+Show a substring of the file.
+
+Parameter fields
+++++++++++++++++
 
 
 ``start``
@@ -152,37 +207,75 @@ show (query)
   End index (exclusive). If not provided, the remainder of the file is returned.
   
   
-Show a substring of the file.
+
+Return fields
++++++++++++++
+
+
+``value``
+  The substring ranging from ``start`` to ``end``.
+  
+  
 
 
 ignore (query)
 ~~~~~~~~~~~~~~
+
+Ignore an :ref:`ignorable value <Ignorable>`.
+
+Parameter fields
+++++++++++++++++
 
 
 ``to be ignored``
   The value to be ignored goes here.
   
   
-Ignore an :ref:`ignorable value <Ignorable>`.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 destroy state (notification)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Destroy a state in the server.
+
+Parameter fields
+++++++++++++++++
 
 
 ``state to destroy``
   The state to destroy in the server (so it can be released from memory).
   
   
-Destroy a state in the server.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 destroy all states (notification)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+Destroy all states in the server.
+
+Parameter fields
+++++++++++++++++
+
 No parameters
 
-Destroy all states in the server.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 

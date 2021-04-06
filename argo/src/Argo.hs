@@ -408,7 +408,7 @@ destroyAllStates = Notification $ do
 
 -- | An application is a state and a mapping from names to methods.
 data App s =
-  App 
+  App
   { serverState :: MVar (ServerState s)
   , appMethods :: Map Text (AppMethod s)
   , appName :: Text
@@ -435,10 +435,10 @@ mkApp name docs opts initAppState methods = do
     , appName = name
     , appDocumentation = appDocs
     }
-  where appDocs = 
+  where appDocs =
           docs ++
           [Doc.Section "Methods"
-            [ Doc.Section (name <> " (" <> methodKind m <> ")")
+            [ Doc.Section (methodName m <> " (" <> methodKind m <> ")")
                 [ if null (methodParamDocs m)
                   then Doc.Paragraph [Doc.Text "No parameters"]
                   else Doc.DescriptionList

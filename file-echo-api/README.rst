@@ -13,12 +13,12 @@ The server supports three transport methods:
 
 
 ``stdio``
-  in which the server communicates over``stdin``and``stdout``
+  in which the server communicates over ``stdin`` and ``stdout``
   
   
 
 Socket
-  in which the server communicates over``stdin``and``stdout``
+  in which the server communicates over ``stdin`` and ``stdout``
   
   
 
@@ -26,7 +26,7 @@ HTTP
   in which the server communicates over HTTP
   
   
-In both``stdio``and socket mode, messages are delimited using `netstrings. <http://cr.yp.to/proto/netstrings.txt>`_
+In both ``stdio`` and socket mode, messages are delimited using `netstrings. <http://cr.yp.to/proto/netstrings.txt>`_
 
 
 Application State
@@ -166,42 +166,25 @@ ignore (query)
 Ignore an :ref:`ignorable value <Ignorable>`.
 
 
-pin state (notification)
-~~~~~~~~~~~~~~~~~~~~~~~~
+destroy state (notification)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-``state to pin``
-  The state to pin in the server so it is available until unpinned.
+``state to destroy``
+  The state to destroy in the server (so it can be released from memory).
   
   
-Pins a state in the server so it is available until unpinned.
+Destroy a state in the server.
 
 
-unpin state (notification)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
-``state to unpin``
-  The state to unpin in the server (so it can be released from memory).
-  
-  
-Unpins a state in the server.
-
-
-unpin all states (notification)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+destroy all states (notification)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 No parameters
 
-Unpin all states in the server.
+Destroy all states in the server.
 
 
-set cache limit (notification)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-``cache limit``
-  Limit how many temporarily cached states can accumulate.
-  
-  
-Unpin all states in the server.
+

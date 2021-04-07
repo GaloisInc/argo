@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 module FileEchoServer ( module FileEchoServer ) where
 
@@ -58,7 +59,7 @@ instance JSON.FromJSON LoadParams where
     JSON.withObject "params for \"load\"" $
     \o -> LoadParams <$> o .: "file path"
 
-instance Doc.DescribedParams LoadParams where
+instance Doc.DescribedMethod LoadParams () where
   parameterFieldDescription =
     [("file path",
       Doc.Paragraph [Doc.Text "The file to read into memory."])]
@@ -86,7 +87,7 @@ instance JSON.FromJSON PrependParams where
     JSON.withObject "params for \"prepend\"" $
     \o -> PrependParams <$> o .: "content"
 
-instance Doc.DescribedParams PrependParams where
+instance Doc.DescribedMethod PrependParams () where
   parameterFieldDescription =
     [("content",
       Doc.Paragraph [Doc.Text "The string to append to the left of the current file content on the server."])]
@@ -109,7 +110,7 @@ instance JSON.FromJSON DropParams where
     JSON.withObject "params for \"drop\"" $
     \o -> DropParams <$> o .: "count"
 
-instance Doc.DescribedParams DropParams where
+instance Doc.DescribedMethod DropParams () where
   parameterFieldDescription =
     [("count",
       Doc.Paragraph [Doc.Text "The number of characters to drop from the left of the current file content on the server."])]
@@ -132,7 +133,7 @@ instance JSON.FromJSON ClearParams where
     JSON.withObject "params for \"show\"" $
     \_ -> pure ClearParams
 
-instance Doc.DescribedParams ClearParams where
+instance Doc.DescribedMethod ClearParams () where
   parameterFieldDescription = []
 
 clearCmd :: ClearParams -> Argo.Command ServerState ()
@@ -159,12 +160,19 @@ instance JSON.FromJSON ShowParams where
              end <- o   .:? "end"
              pure $ ShowParams start end
 
-instance Doc.DescribedParams ShowParams where
+instance Doc.DescribedMethod ShowParams JSON.Value where
   parameterFieldDescription =
     [ ("start",
        Doc.Paragraph [Doc.Text "Start index (inclusive). If not provided, the substring is from the beginning of the file."])
     , ("end", Doc.Paragraph [Doc.Text "End index (exclusive). If not provided, the remainder of the file is returned."])
                               ]
+
+  resultFieldDescription =
+    [ ("value",
+      Doc.Paragraph [ Doc.Text "The substring ranging from "
+                    , Doc.Literal "start", Doc.Text " to ", Doc.Literal "end"
+                    , Doc.Text "." ])
+    ]
 
 
 showCmd :: ShowParams -> Argo.Query ServerState JSON.Value
@@ -186,7 +194,7 @@ instance JSON.FromJSON ImplodeParams where
     JSON.withObject "params for \"implode\"" $
     \_ -> pure ImplodeParams
 
-instance Doc.DescribedParams ImplodeParams where
+instance Doc.DescribedMethod ImplodeParams () where
   parameterFieldDescription = []
 
 
@@ -229,7 +237,7 @@ instance JSON.FromJSON IgnoreParams where
     JSON.withObject "params for \"ignore\"" $
       \o -> IgnoreParams <$> o .: "to be ignored"
 
-instance Doc.DescribedParams IgnoreParams where
+instance Doc.DescribedMethod IgnoreParams () where
   parameterFieldDescription =
     [("to be ignored",
       Doc.Paragraph [Doc.Text "The value to be ignored goes here."])]
@@ -251,8 +259,8 @@ instance JSON.FromJSON DestroyStateParams where
     JSON.withObject "params for \"destroy state\"" $
     \o -> DestroyStateParams <$> o .: "state to destroy"
 
-instance Doc.DescribedParams DestroyStateParams where
-  parameterFieldDescription = 
+instance Doc.DescribedMethod DestroyStateParams () where
+  parameterFieldDescription =
     [("state to destroy",
        Doc.Paragraph [Doc.Text "The state to destroy in the server (so it can be released from memory)."])
      ]
@@ -271,7 +279,7 @@ instance JSON.FromJSON DestroyAllStatesParams where
     JSON.withObject "params for \"destroy all states\"" $
     \_ -> pure DestroyAllStatesParams
 
-instance Doc.DescribedParams DestroyAllStatesParams where
+instance Doc.DescribedMethod DestroyAllStatesParams () where
   parameterFieldDescription = []
 
 

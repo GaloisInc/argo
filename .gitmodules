@@ -1,3 +1,0 @@
-[submodule "deps/llvm-verifier"]
-	path = deps/llvm-verifier
-	url = https://github.com/GaloisInc/llvm-verifier.git

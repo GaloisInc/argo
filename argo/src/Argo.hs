@@ -106,6 +106,7 @@ import System.IO
 import System.IO.Silently
 import Text.Read (readMaybe)
 import Web.Scotty hiding (raise, params, get, put)
+import Web.Scotty.TLS (scottyTLS)
 
 import qualified Argo.Doc as Doc
 import Argo.ServerState
@@ -982,7 +983,7 @@ serveHttp ::
   Int               {- ^ port number  -} ->
   IO ()
 serveHttp opts path app port =
-    scotty port $
+    scottyTLS port "server.key" "server.crt" $
       do post (literal path) $
            do ensureTextJSON "Content-Type" unsupportedMediaType415
               ensureTextJSON "Accept" badRequest400

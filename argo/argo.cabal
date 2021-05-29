@@ -74,6 +74,18 @@ library
   hs-source-dirs: src
   default-language: Haskell2010
 
+library scotty-tls
+  hs-source-dirs: scotty-tls
+  exposed-modules:     Web.Scotty.TLS
+  other-extensions:    RankNTypes
+  build-depends:       base >=4.3.1 && < 5,
+                       scotty >=0.10.0,
+                       warp >= 1.3.4.1,
+                       warp-tls >= 3.1.0,
+                       wai >= 1.3.0.1,
+                       transformers >= 0.3.0.0
+  GHC-options: -Wall -fno-warn-orphans
+  default-language:    Haskell2010
 
 test-suite test-argo
   import:              deps, warnings, errors

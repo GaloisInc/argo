@@ -23,21 +23,16 @@ protocolDocs =
        [ ( Literal "stdio" :| []
          , Paragraph [ Text "in which the server communicates over "
                      , Literal "stdin", Text " and ", Literal "stdout"
-                     ]
+                     , Text " using ", Link (URL "http://cr.yp.to/proto/netstrings.txt") "netstrings."]
          )
-       , ( Text "Socket" :| []
-          , Paragraph [ Text "in which the server communicates over "
-                      , Literal "stdin", Text " and ", Literal "stdout"
+       , ( Literal "socket" :| []
+          , Paragraph [ Text "in which the server communicates over a socket using "
+                      , Link (URL "http://cr.yp.to/proto/netstrings.txt") "netstrings."
                       ]
           )
-       , ( Text "HTTP" :| []
-         , Paragraph [Text "in which the server communicates over HTTP"]
+       , ( Literal "http" :| []
+         , Paragraph [Text "in which the server communicates over a socket using HTTP."]
          )
-       ]
-     , Paragraph
-       [ Text "In both ", Literal "stdio", Text " and socket mode, "
-       , Text "messages are delimited using "
-       , Link (URL "http://cr.yp.to/proto/netstrings.txt") "netstrings."
        ]
      ]
    , Section "Application State"
@@ -51,9 +46,7 @@ protocolDocs =
        , Literal "state", Text " parameter should be initialized to the JSON null value "
        , Literal "null", Text ". Replies from the server may contain a new state that should "
        , Text "be used in subsequent requests, so that state changes executed by the "
-       , Text "request are visible. Prior versions of this protocol represented the "
-       , Text "initial state as the empty array ", Literal "[]", Text ", but this is now deprecated "
-       , Text "and will be removed."
+       , Text "request are visible."
        ]
      , Paragraph
        [ Text "In particular, per JSON-RPC, non-error replies are always a JSON "
@@ -66,13 +59,14 @@ protocolDocs =
        | (k, v) <-
          [ ( Literal "answer" :| []
            , [ Text "The value returned as a response to the request "
-             , Text "(the precise contents depend on which request was sent)"
+             , Text "(the precise contents depend on which request was sent)."
              ]
            )
          , ( Literal "state" :| []
            , [ Text "The state, to be sent in subsequent requests. If the server did not "
              , Text "modify its state in response to the command, then this state may be "
-             , Text "the same as the one sent by the client."
+             , Text "the same as the one sent by the client. When a new state is in a server response"
+             , Text ", the previous state may no longer be available for requests."
              ]
            )
          , ( Literal "stdout" :| [Text " and ", Literal "stderr"]

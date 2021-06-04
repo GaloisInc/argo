@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -75,6 +76,7 @@ module Argo
   -- * AppMethod info
   methodName,
   methodParamDocs,
+  methodReturnFieldDocs,
   methodDocs
   ) where
 
@@ -211,6 +213,7 @@ data AppCommand appState =
   { commandName :: !Text
   , commandImplementation :: !(JSON.Value -> Command appState JSON.Value)
   , commandParamDocs :: ![(Text, Doc.Block)]
+  , commandReturnFieldDocs :: ![(Text, Doc.Block)]
   , commandDocs :: !Doc.Block
   }
 
@@ -219,6 +222,7 @@ data AppQuery appState =
   { queryName :: !Text
   , queryImplementation :: !(JSON.Value -> Query appState JSON.Value)
   , queryParamDocs :: ![(Text, Doc.Block)]
+  , queryReturnFieldDocs :: ![(Text, Doc.Block)]
   , queryDocs :: !Doc.Block
   }
 
@@ -250,6 +254,11 @@ methodParamDocs (CommandMethod m) = commandParamDocs m
 methodParamDocs (QueryMethod m) = queryParamDocs m
 methodParamDocs (NotificationMethod m) = notificationParamDocs m
 
+methodReturnFieldDocs :: AppMethod appState -> [(Text, Doc.Block)]
+methodReturnFieldDocs (CommandMethod m) = commandReturnFieldDocs m
+methodReturnFieldDocs (QueryMethod m) = queryReturnFieldDocs m
+methodReturnFieldDocs NotificationMethod{} = []
+
 methodDocs :: AppMethod appState -> Doc.Block
 methodDocs (CommandMethod m) = commandDocs m
 methodDocs (QueryMethod m) = queryDocs m
@@ -263,7 +272,7 @@ methodDocs (NotificationMethod m) = notificationDocs m
 -- exception.
 command ::
   forall params result state.
-  (JSON.FromJSON params, Doc.DescribedParams params, JSON.ToJSON result) =>
+  (JSON.FromJSON params, Doc.DescribedMethod params result, JSON.ToJSON result) =>
   Text ->
   Doc.Block ->
   (params -> Command state result) ->
@@ -278,6 +287,7 @@ command name doc f =
      { commandName = name
      , commandImplementation = impl
      , commandParamDocs = Doc.parameterFieldDescription @params
+     , commandReturnFieldDocs = Doc.resultFieldDescription @params @result
      , commandDocs = doc
      }
 
@@ -288,7 +298,7 @@ command name doc f =
 -- exception.
 query ::
   forall params result state.
-  (JSON.FromJSON params, Doc.DescribedParams params, JSON.ToJSON result) =>
+  (JSON.FromJSON params, Doc.DescribedMethod params result, JSON.ToJSON result) =>
   Text ->
   Doc.Block ->
   (params -> Query state result) ->
@@ -303,6 +313,7 @@ query name doc f =
      { queryName = name
      , queryImplementation = impl
      , queryParamDocs = Doc.parameterFieldDescription @params
+     , queryReturnFieldDocs = Doc.resultFieldDescription @params @result
      , queryDocs = doc
      }
 
@@ -313,7 +324,7 @@ query name doc f =
 -- exception.
 notification ::
   forall params state.
-  (JSON.FromJSON params, Doc.DescribedParams params) =>
+  (JSON.FromJSON params, Doc.DescribedMethod params ()) =>
   Text ->
   Doc.Block ->
   (params -> Notification ()) ->
@@ -409,7 +420,7 @@ destroyAllStates = Notification $ do
 
 -- | An application is a state and a mapping from names to methods.
 data App s =
-  App 
+  App
   { serverState :: MVar (ServerState s)
   , appMethods :: Map Text (AppMethod s)
   , appName :: Text
@@ -436,17 +447,27 @@ mkApp name docs opts initAppState methods = do
     , appName = name
     , appDocumentation = appDocs
     }
-  where appDocs = 
+  where appDocs =
           docs ++
           [Doc.Section "Methods"
-            [ Doc.Section (name <> " (" <> methodKind m <> ")")
-                [ if null (methodParamDocs m)
-                  then Doc.Paragraph [Doc.Text "No parameters"]
-                  else Doc.DescriptionList
-                        [ (Doc.Literal field :| [], fieldDocs)
-                        | (field, fieldDocs) <- (methodParamDocs m)
-                        ]
-                , (methodDocs m)
+            [ Doc.Section (methodName m <> " (" <> methodKind m <> ")")
+                [ methodDocs m
+                , Doc.Section "Parameter fields"
+                  [ if null (methodParamDocs m)
+                    then Doc.Paragraph [Doc.Text "No parameters"]
+                    else Doc.DescriptionList
+                           [ (Doc.Literal field :| [], fieldDocs)
+                           | (field, fieldDocs) <- methodParamDocs m
+                           ]
+                  ]
+                , Doc.Section "Return fields"
+                  [ if null (methodReturnFieldDocs m)
+                    then Doc.Paragraph [Doc.Text "No return fields"]
+                    else Doc.DescriptionList
+                           [ (Doc.Literal field :| [], fieldDocs)
+                           | (field, fieldDocs) <- methodReturnFieldDocs m
+                           ]
+                  ]
                 ]
             | m <- methods
             ]]

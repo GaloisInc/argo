@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {- Like FileEchoServer but the underlying state uses mutability
    to update the loaded file contents. -}
@@ -32,7 +33,7 @@ initialState ::
 initialState Nothing _reader = do
   contentRef <- newIORef (FileContents "")
   pure $ ServerState Nothing contentRef
-initialState (Just path) reader = do 
+initialState (Just path) reader = do
   contents <- FileContents . Char8.unpack <$> reader path
   contentRef <- newIORef contents
   pure $ ServerState (Just path) contentRef
@@ -62,7 +63,7 @@ instance JSON.FromJSON LoadParams where
     JSON.withObject "params for \"load\"" $
     \o -> LoadParams <$> o .: "file path"
 
-instance Doc.DescribedParams LoadParams where
+instance Doc.DescribedMethod LoadParams () where
   parameterFieldDescription =
     [("file path",
       Doc.Paragraph [Doc.Text "The file to read into memory."])]
@@ -89,7 +90,7 @@ instance JSON.FromJSON ClearParams where
     JSON.withObject "params for \"show\"" $
     \_ -> pure ClearParams
 
-instance Doc.DescribedParams ClearParams where
+instance Doc.DescribedMethod ClearParams () where
   parameterFieldDescription = []
 
 clearCmd :: ClearParams -> Argo.Command ServerState ()
@@ -115,12 +116,19 @@ instance JSON.FromJSON ShowParams where
              end <- o   .:? "end"
              pure $ ShowParams start end
 
-instance Doc.DescribedParams ShowParams where
+instance Doc.DescribedMethod ShowParams JSON.Value where
   parameterFieldDescription =
     [ ("start",
        Doc.Paragraph [Doc.Text "Start index (inclusive). If not provided, the substring is from the beginning of the file."])
     , ("end", Doc.Paragraph [Doc.Text "End index (exclusive). If not provided, the remainder of the file is returned."])
                               ]
+
+  resultFieldDescription =
+    [ ("value",
+      Doc.Paragraph [ Doc.Text "The substring ranging from "
+                    , Doc.Literal "start", Doc.Text " to ", Doc.Literal "end"
+                    , Doc.Text "." ])
+    ]
 
 
 showCmd :: ShowParams -> Argo.Query ServerState JSON.Value
@@ -145,8 +153,8 @@ instance JSON.FromJSON DestroyStateParams where
     JSON.withObject "params for \"destroy state\"" $
     \o -> DestroyStateParams <$> o .: "state to destroy"
 
-instance Doc.DescribedParams DestroyStateParams where
-  parameterFieldDescription = 
+instance Doc.DescribedMethod DestroyStateParams () where
+  parameterFieldDescription =
     [("state to destroy",
        Doc.Paragraph [Doc.Text "The state to destroy in the server (so it can be released from memory)."])
      ]

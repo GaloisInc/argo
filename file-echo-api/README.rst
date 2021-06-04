@@ -13,12 +13,12 @@ The server supports three transport methods:
 
 
 ``stdio``
-  in which the server communicates over``stdin``and``stdout``
+  in which the server communicates over ``stdin`` and ``stdout``
   
   
 
 Socket
-  in which the server communicates over``stdin``and``stdout``
+  in which the server communicates over ``stdin`` and ``stdout``
   
   
 
@@ -26,7 +26,7 @@ HTTP
   in which the server communicates over HTTP
   
   
-In both``stdio``and socket mode, messages are delimited using `netstrings. <http://cr.yp.to/proto/netstrings.txt>`_
+In both ``stdio`` and socket mode, messages are delimited using `netstrings. <http://cr.yp.to/proto/netstrings.txt>`_
 
 
 Application State
@@ -93,54 +93,109 @@ Methods
 load (command)
 ~~~~~~~~~~~~~~
 
+Load a file from disk into memory.
+
+Parameter fields
+++++++++++++++++
+
 
 ``file path``
   The file to read into memory.
   
   
-Load a file from disk into memory.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 clear (command)
 ~~~~~~~~~~~~~~~
 
+Forget the loaded file.
+
+Parameter fields
+++++++++++++++++
+
 No parameters
 
-Forget the loaded file.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 prepend (command)
 ~~~~~~~~~~~~~~~~~
+
+Append a string to the left of the current contents.
+
+Parameter fields
+++++++++++++++++
 
 
 ``content``
   The string to append to the left of the current file content on the server.
   
   
-Append a string to the left of the current contents.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 drop (command)
 ~~~~~~~~~~~~~~
+
+Drop from the left of the current contents.
+
+Parameter fields
+++++++++++++++++
 
 
 ``count``
   The number of characters to drop from the left of the current file content on the server.
   
   
-Drop from the left of the current contents.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 implode (query)
 ~~~~~~~~~~~~~~~
 
+Throw an error immediately.
+
+Parameter fields
+++++++++++++++++
+
 No parameters
 
-Throw an error immediately.
+
+Return fields
++++++++++++++
+
+No return fields
+
 
 
 show (query)
 ~~~~~~~~~~~~
+
+Show a substring of the file.
+
+Parameter fields
+++++++++++++++++
 
 
 ``start``
@@ -152,56 +207,77 @@ show (query)
   End index (exclusive). If not provided, the remainder of the file is returned.
   
   
-Show a substring of the file.
+
+Return fields
++++++++++++++
+
+
+``value``
+  The substring ranging from ``start`` to ``end``.
+  
+  
 
 
 ignore (query)
 ~~~~~~~~~~~~~~
+
+Ignore an :ref:`ignorable value <Ignorable>`.
+
+Parameter fields
+++++++++++++++++
 
 
 ``to be ignored``
   The value to be ignored goes here.
   
   
-Ignore an :ref:`ignorable value <Ignorable>`.
+
+Return fields
++++++++++++++
+
+No return fields
 
 
-pin state (notification)
-~~~~~~~~~~~~~~~~~~~~~~~~
+
+destroy state (notification)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Destroy a state in the server.
+
+Parameter fields
+++++++++++++++++
 
 
-``state to pin``
-  The state to pin in the server so it is available until unpinned.
+``state to destroy``
+  The state to destroy in the server (so it can be released from memory).
   
   
-Pins a state in the server so it is available until unpinned.
+
+Return fields
++++++++++++++
+
+No return fields
 
 
-unpin state (notification)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+destroy all states (notification)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``state to unpin``
-  The state to unpin in the server (so it can be released from memory).
-  
-  
-Unpins a state in the server.
+Destroy all states in the server.
 
-
-unpin all states (notification)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Parameter fields
+++++++++++++++++
 
 No parameters
 
-Unpin all states in the server.
+
+Return fields
++++++++++++++
+
+No return fields
 
 
-set cache limit (notification)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-``cache limit``
-  Limit how many temporarily cached states can accumulate.
-  
-  
-Unpin all states in the server.
+
+

@@ -2,8 +2,3 @@ packages:
   argo/
   file-echo-api/
   tasty-script-exitcode/
-
-source-repository-package
-    type: git
-    location: https://github.com/ldettwy/scotty-tls.git
-    tag: patch-2

@@ -106,6 +106,7 @@ import Network.HTTP.Types.Method (StdMethod(..))
 import Network.HTTP.Types.Status
 import System.IO
 import System.IO.Silently
+import System.Environment (lookupEnv)
 import Text.Read (readMaybe)
 import Web.Scotty hiding (raise, params, get, put)
 import Web.Scotty.TLS (scottyTLS)
@@ -1003,8 +1004,12 @@ serveHttp ::
   App s             {- ^ JSON-RPC app -} ->
   Int               {- ^ port number  -} ->
   IO ()
-serveHttp opts path app port =
-    scottyTLS port "server.key" "server.crt" $
+serveHttp opts path app port = do
+    tls_enable <- lookupEnv "TLS_ENABLE"
+    let http_mode = case tls_enable of
+                        Just val | val `notElem` ["0", ""] -> scottyTLS port "server.key" "server.crt"
+                        _ -> scotty port
+    http_mode $
       do post (literal path) $
            do ensureTextJSON "Content-Type" unsupportedMediaType415
               ensureTextJSON "Accept" badRequest400

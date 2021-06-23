@@ -70,14 +70,17 @@ module Argo
   , serveHttp
   -- * Request identifiers
   , RequestID(..)
-  , StateID,
+  , StateID
   -- * System info
-  getFileSystemMode,
+  , getFileSystemMode
   -- * AppMethod info
-  methodName,
-  methodParamDocs,
-  methodReturnFieldDocs,
-  methodDocs
+  , methodName
+  , methodParamDocs
+  , methodReturnFieldDocs
+  , methodDocs
+  -- * HTTP options
+  , HttpOptions(..)
+  , tlsEnvVar
   ) where
 
 import Control.Concurrent
@@ -105,10 +108,21 @@ import Numeric.Natural ( Natural )
 import Network.HTTP.Types.Method (StdMethod(..))
 import Network.HTTP.Types.Status
 import System.IO
-import System.IO.Silently
+import System.IO.Silently ( hCapture, hSilence )
 import System.Environment (lookupEnv)
 import Text.Read (readMaybe)
-import Web.Scotty hiding (raise, params, get, put)
+import Web.Scotty
+    ( addroute,
+      body,
+      finish,
+      header,
+      literal,
+      post,
+      raw,
+      scotty,
+      setHeader,
+      status,
+      text )
 import Web.Scotty.TLS (scottyTLS)
 
 import qualified Argo.Doc as Doc
@@ -995,22 +1009,37 @@ serveHandlesNS opts hIn hOut app =
                     }
 
 
+-- | Environment variable which, when set to a non-empty value not equal to "0",
+-- enables TLS connections over HTTPS.
+tlsEnvVar :: String
+tlsEnvVar = "TLS_ENABLE"
+
+-- | HTTP-specific options.
+data HttpOptions =
+  HttpOptions
+  { -- | Path at which the API is served.
+    httpServerPath :: String,
+    -- | Whether or not to use TLS/HTTPS.
+    httpUseTLS :: Bool
+  }
+
 -- | Serve the application over HTTP, according to the specification
 -- at https://www.simple-is-better.org/json-rpc/transport_http.html
 serveHttp ::
   HasCallStack =>
   MethodOptions     {- ^ options for how methods should execute -} ->
-  String            {- ^ Request path -} ->
+  HttpOptions            {- ^ Request path -} ->
   App s             {- ^ JSON-RPC app -} ->
   Int               {- ^ port number  -} ->
   IO ()
-serveHttp opts path app port = do
-    tls_enable <- lookupEnv "TLS_ENABLE"
-    let http_mode = case tls_enable of
-                        Just val | val `notElem` ["0", ""] -> scottyTLS port "server.key" "server.crt"
-                        _ -> scotty port
+serveHttp opts httpOpts app port = do
+    tls_enable <- lookupEnv tlsEnvVar
+    let http_mode = let tlsSetup = scottyTLS port "server.key" "server.crt"
+                    in case tls_enable of
+                         Just val | val `notElem` ["0", ""] -> tlsSetup
+                         _ -> if (httpUseTLS httpOpts) then tlsSetup else scotty port
     http_mode $
-      do post (literal path) $
+      do post (literal (httpServerPath httpOpts)) $
            do ensureTextJSON "Content-Type" unsupportedMediaType415
               ensureTextJSON "Accept" badRequest400
               validateLength
@@ -1043,7 +1072,7 @@ serveHttp opts path app port = do
          -- Return a more informative status code when the wrong HTTP method is used
          for_ [GET, HEAD, PUT, DELETE, TRACE, CONNECT, OPTIONS] $
            \method ->
-             addroute method (literal path) $
+             addroute method (literal (httpServerPath httpOpts)) $
              do status methodNotAllowed405
                 text "Please use POST requests to access the API."
 

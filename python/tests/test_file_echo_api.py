@@ -306,7 +306,7 @@ class HttpTests(GenericFileEchoTests, unittest.TestCase):
         self.assertEqual(post_response.status_code, 200)
 
 
-class TLSTests(GenericFileEchoTests, unittest.TestCase):
+class TLSTests1(GenericFileEchoTests, unittest.TestCase):
     # Connection to server
     c = None
     # process running the server
@@ -350,6 +350,46 @@ class TLSTests(GenericFileEchoTests, unittest.TestCase):
     def get_caching_iterations(self):
         return 30
 
+class TLSTests2(GenericFileEchoTests, unittest.TestCase):
+    # Connection to server
+    c = None
+    # process running the server
+    p = None
+
+    @classmethod
+    def setUpClass(self):
+        os.system('openssl req -nodes -newkey rsa:2048 -keyout server.key -out server.csr'\
+                  + ' -subj "/C=GB/ST=London/L=London/O=Acme Widgets/OU=IT Department/CN=localhost"')
+        os.system('openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt')
+        p = subprocess.Popen(
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8083", "--tls"],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            start_new_session=True)
+        time.sleep(3)
+        assert(p is not None)
+        poll_result = p.poll()
+        if poll_result is not None:
+            print(poll_result)
+            print(p.stdout.read())
+            print(p.stderr.read())
+        assert(poll_result is None)
+
+        self.p = p
+        self.c = argo.ServerConnection(argo.HttpProcess('https://localhost:8083', verify=False))
+
+
+    @classmethod
+    def tearDownClass(self):
+        os.killpg(os.getpgid(self.p.pid), signal.SIGKILL)
+        super().tearDownClass()
+
+    def get_connection(self):
+        return self.c
+
+    def get_caching_iterations(self):
+        return 30
 
 class LoadOnLaunchTests(unittest.TestCase):
     # Connection to server

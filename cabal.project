@@ -2,3 +2,4 @@ packages:
   argo/
   file-echo-api/
   tasty-script-exitcode/
+  deps/scotty-tls

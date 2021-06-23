@@ -283,7 +283,7 @@ class HttpProcess(ServerProcess):
     waiting_replies: List[str]
     verify: Union[bool, str]
 
-    def __init__(self, url: str, *, verify = True):
+    def __init__(self, url: str, *, verify : Union[bool, str] = True):
         """
            :param url: The URL to connect to an HTTP server on (e.g. ``"http://localhost:8080/"``).
            :param verify: Determines whether a secure connection should verify the SSL certificates.

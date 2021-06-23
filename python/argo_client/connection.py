@@ -11,9 +11,7 @@ import requests
 import socket
 import subprocess
 import signal
-import sys
 import threading
-import time
 from typing import Any, Dict, List, IO, Mapping, Optional, Union
 
 from . import netstring
@@ -283,15 +281,17 @@ class HttpProcess(ServerProcess):
     socket: socket.socket
     ipv6: bool
     waiting_replies: List[str]
+    verify: Union[bool, str]
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, *, verify : Union[bool, str] = True):
         """
-           :param host: The hostname to connect to (e.g. ``"localhost"``)
-           :param port: The port on which to connect
-           :param path: The path to send requests to
+           :param url: The URL to connect to an HTTP server on (e.g. ``"http://localhost:8080/"``).
+           :param verify: Determines whether a secure connection should verify the SSL certificates.
+                          Corresponds to the ``verify`` keyword parameter on ``requests.post``.
         """
         self.url = url
         self.waiting_replies = []
+        self.verify = verify
         super().__init__()
 
     def setup(self) -> None:
@@ -306,7 +306,8 @@ class HttpProcess(ServerProcess):
     def send_one_message(self, message: str, *, expecting_response : bool = True) -> None:
         r = requests.post(self.url,
                           headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
-                          data=message).text
+                          data=message,
+                          verify=self.verify).text
         if expecting_response:
             self.waiting_replies.append(r)
 

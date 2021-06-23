@@ -106,12 +106,13 @@ data NetworkOptions =
 
 data LogOption = StdErrLog
 
+
 data ProgramMode stdioOpts socketOpts httpOpts docOpts
   = StdIONetstring stdioOpts
   -- ^ NetStrings over standard IO
   | SocketNetstring NetworkOptions socketOpts
   -- ^ NetStrings over some socket
-  | Http String NetworkOptions httpOpts
+  | Http HttpOptions NetworkOptions httpOpts
   -- ^ HTTP (String is path at which API is served)
   | Doc !Format docOpts
   -- ^ Dump protocol description to stdout
@@ -169,12 +170,8 @@ socketMode user desc = Opt.command "socket" $
 
 httpMode :: Opt.Parser httpOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts docOpts)
 httpMode user desc = Opt.command "http" $
-  Opt.info (Http <$> path <*> networkOptions <*> user) $
+  Opt.info (Http <$> httpOptionsParser <*> networkOptions <*> user) $
   Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Communicate over HTTP"
-  where
-    path =
-      Opt.argument Opt.str $
-      Opt.metavar "PATH" <> Opt.help "The path at which to serve the API"
 
 docMode :: Opt.Parser docOpts -> String -> Opt.Mod Opt.CommandFields (ProgramMode stdioOpts socketOpts httpOpts docOpts)
 docMode user desc = Opt.command "doc" $
@@ -182,6 +179,14 @@ docMode user desc = Opt.command "doc" $
   Opt.header desc <> Opt.fullDesc <> Opt.progDesc "Emit protocol documentation"
   where
     format = pure ReST
+
+httpOptionsParser :: Opt.Parser HttpOptions
+httpOptionsParser =
+  HttpOptions <$> path <*> tlsOpt
+  where
+    path =
+      Opt.argument Opt.str $
+      Opt.metavar "PATH" <> Opt.help "The path at which to serve the API"
 
 
 networkOptions :: Opt.Parser NetworkOptions
@@ -267,6 +272,12 @@ maxOccupancyOpt =
     Opt.help "Maximum number of active sessions allowed at once." <>
     Opt.showDefault <>
     Opt.value 10))
+
+tlsOpt :: Opt.Parser Bool
+tlsOpt =
+  (Opt.switch
+   (Opt.long "tls" <>
+    (Opt.help $ "Enable TLS mode for the connection (i.e., HTTPS), which can also be enabled via environment variable " ++ tlsEnvVar ++ ".")))
 
 selectHost :: Maybe HostName -> HostName
 selectHost (Just name) = name
@@ -359,7 +370,7 @@ realMain makeApp globalOpts =
   case programMode globalOpts of
     StdIONetstring userOpts ->
       do theApp <- makeApp (StdIOOpts userOpts)
-         serveStdIONS opts theApp
+         serveStdIONS gOpts theApp
     SocketNetstring (NetworkOptions session hostName netPort) userOpts ->
       do theApp <- makeApp (SocketOpts userOpts)
          sessionResult <- getOrLockSession session hostName netPort
@@ -370,9 +381,9 @@ realMain makeApp globalOpts =
              putStrLn ("PORT " ++ port)
            MakeNew (Port port) ->
              do putStrLn ("PORT " ++ port)
-                serveSocket opts hostname port theApp
+                serveSocket gOpts hostname port theApp
            MakeNewDyn registerPort ->
-             do (a, port) <- serveSocketDynamic opts hostname theApp
+             do (a, port) <- serveSocketDynamic gOpts hostname theApp
                 registerPort (Port (show port))
                 putStrLn ("PORT " ++ show port)
                 wait a
@@ -381,12 +392,12 @@ realMain makeApp globalOpts =
                    <> existingPort
                    <> ", not the specified port "
                    <> desiredPort
-    Http path (NetworkOptions session _host netPort) userOpts ->
+    Http hOpts (NetworkOptions session _host netPort) userOpts ->
       do theApp <- makeApp (HttpOpts userOpts)
          case session of
            Just _ -> die "Named sessions not yet supported for HTTP"
            Nothing ->
-             serveHttp opts path theApp (maybe 8080 (read . unPort) netPort)
+             serveHttp gOpts hOpts theApp (maybe 8080 (read . unPort) netPort)
     Doc format userOpts ->
       case format of
         ReST ->
@@ -394,4 +405,4 @@ realMain makeApp globalOpts =
              T.putStrLn $
                restructuredText $
                  Doc.App (appName theApp) (protocolDocs : appDocumentation theApp)
-  where opts = methodOpts globalOpts
+  where gOpts = methodOpts globalOpts

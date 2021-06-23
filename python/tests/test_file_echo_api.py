@@ -320,7 +320,7 @@ class TLSTests(GenericFileEchoTests, unittest.TestCase):
         server_env = os.environ.copy()
         server_env["TLS_ENABLE"] = "1"
         p = subprocess.Popen(
-            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "443"],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8083"],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -336,7 +336,7 @@ class TLSTests(GenericFileEchoTests, unittest.TestCase):
         assert(poll_result is None)
 
         self.p = p
-        self.c = argo.ServerConnection(argo.HttpProcess('https://localhost', verify=False))
+        self.c = argo.ServerConnection(argo.HttpProcess('https://localhost:8083', verify=False))
 
 
     @classmethod

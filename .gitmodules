@@ -1,3 +1,0 @@
-[submodule "deps/scotty-tls"]
-	path = deps/scotty-tls
-	url = https://github.com/scotty-web/scotty-tls.git

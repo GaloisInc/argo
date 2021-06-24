@@ -120,10 +120,13 @@ import Web.Scotty
       post,
       raw,
       scotty,
+      scottyApp,
+      ScottyM,
       setHeader,
       status,
       text )
-import Web.Scotty.TLS (scottyTLS)
+import Network.Wai.Handler.Warp (Port, defaultSettings, setPort)
+import Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
 
 import qualified Argo.Doc as Doc
 import Argo.ServerState
@@ -1023,6 +1026,12 @@ data HttpOptions =
     httpUseTLS :: Bool
   }
 
+-- | Essentially run `scotty` but using TLS.
+scottyTLS :: Port -> ScottyM () -> IO ()
+scottyTLS port = runTLS
+  (tlsSettings "server.crt" "server.key")
+  (setPort port defaultSettings) <=< scottyApp
+
 -- | Serve the application over HTTP, according to the specification
 -- at https://www.simple-is-better.org/json-rpc/transport_http.html
 serveHttp ::
@@ -1033,48 +1042,47 @@ serveHttp ::
   Int               {- ^ port number  -} ->
   IO ()
 serveHttp opts httpOpts app port = do
-    tls_enable <- lookupEnv tlsEnvVar
-    let http_mode = let tlsSetup = scottyTLS port "server.key" "server.crt"
-                    in case tls_enable of
-                         Just val | val `notElem` ["0", ""] -> tlsSetup
-                         _ -> if (httpUseTLS httpOpts) then tlsSetup else scotty port
-    http_mode $
-      do post (literal (httpServerPath httpOpts)) $
-           do ensureTextJSON "Content-Type" unsupportedMediaType415
-              ensureTextJSON "Accept" badRequest400
-              validateLength
-              b <- body
-              replyBodyContents <- liftIO $ newMVar mempty
-              let respond = \str -> modifyMVar replyBodyContents $ \old -> pure (old <> str, ())
-              res <-
-                liftIO $
-                  (case JSON.eitherDecode b of
-                    Left msg ->
-                      throwIO (parseError (T.pack msg))
-                    Right req ->
-                      Right <$> handleRequest opts respond app req)
-                      `catch` (\ (exn :: JSONRPCException) ->
-                                 pure $ Left $ JSON.encode exn)
-                      `catch` (\ (exn :: SomeException) ->
-                                 pure $ Left $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) }))
-              case res of
-                Left err ->
-                  do setHeader "Content-Type" "application/json"
-                     status badRequest400
-                     raw $ err <> BS.singleton newline
-                Right () ->
-                  do setHeader "Content-Type" "application/json"
-                     body <- liftIO (readMVar replyBodyContents)
-                     status $ if body == ""
-                              then status204
-                              else ok200
-                     raw body
-         -- Return a more informative status code when the wrong HTTP method is used
-         for_ [GET, HEAD, PUT, DELETE, TRACE, CONNECT, OPTIONS] $
-           \method ->
-             addroute method (literal (httpServerPath httpOpts)) $
-             do status methodNotAllowed405
-                text "Please use POST requests to access the API."
+  tls_enable <- lookupEnv tlsEnvVar
+  let http_mode = case tls_enable of
+                    Just val | val `notElem` ["0", ""] -> scottyTLS
+                    _ -> if (httpUseTLS httpOpts) then scottyTLS else scotty
+  http_mode port $
+    do post (literal (httpServerPath httpOpts)) $
+         do ensureTextJSON "Content-Type" unsupportedMediaType415
+            ensureTextJSON "Accept" badRequest400
+            validateLength
+            b <- body
+            replyBodyContents <- liftIO $ newMVar mempty
+            let respond = \str -> modifyMVar replyBodyContents $ \old -> pure (old <> str, ())
+            res <-
+              liftIO $
+                (case JSON.eitherDecode b of
+                  Left msg ->
+                    throwIO (parseError (T.pack msg))
+                  Right req ->
+                    Right <$> handleRequest opts respond app req)
+                    `catch` (\ (exn :: JSONRPCException) ->
+                               pure $ Left $ JSON.encode exn)
+                    `catch` (\ (exn :: SomeException) ->
+                               pure $ Left $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) }))
+            case res of
+              Left err ->
+                do setHeader "Content-Type" "application/json"
+                   status badRequest400
+                   raw $ err <> BS.singleton newline
+              Right () ->
+                do setHeader "Content-Type" "application/json"
+                   body <- liftIO (readMVar replyBodyContents)
+                   status $ if body == ""
+                            then status204
+                            else ok200
+                   raw body
+       -- Return a more informative status code when the wrong HTTP method is used
+       for_ [GET, HEAD, PUT, DELETE, TRACE, CONNECT, OPTIONS] $
+         \method ->
+           addroute method (literal (httpServerPath httpOpts)) $
+           do status methodNotAllowed405
+              text "Please use POST requests to access the API."
 
   where
     newline = 0x0a -- ASCII/UTF8

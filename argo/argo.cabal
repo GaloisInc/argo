@@ -48,11 +48,12 @@ common deps
     safe                        ^>= 0.3,
     scientific                  ^>= 0.3,
     scotty                      ^>= 0.12,
-    scotty-tls,
     silently                    ^>= 1.2,
     text                        ^>= 1.2.3,
     unordered-containers        ^>= 0.2,
     uuid                        ^>= 1.3,
+    warp                        >= 3.0.14,
+    warp-tls                    >= 3.1.0
 
 
 library

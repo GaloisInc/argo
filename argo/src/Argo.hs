@@ -1027,6 +1027,9 @@ data HttpOptions =
   }
 
 -- | Essentially run `scotty` but using TLS.
+--   Derived from `scotty-tls` method `scottyTLS` with
+--   slight tweaks to suit our needs (and avoid a dependency
+--   for this one function).
 scottyTLS :: Port -> ScottyM () -> IO ()
 scottyTLS port = runTLS
   (tlsSettings "server.crt" "server.key")

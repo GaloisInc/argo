@@ -25,7 +25,7 @@ common warnings
 
 common deps
   build-depends:
-    base                 >=4.11.1.0 && <4.15,
+    base                 >=4.11.1.0 && <4.16,
     argo,
     aeson                >= 1.4.2,
     bytestring           ^>= 0.10.8,

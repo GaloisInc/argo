@@ -18,6 +18,7 @@ module Argo.ServerState (
   StateID, initialStateID,
   ) where
 
+import Control.Concurrent
 import Numeric.Natural ( Natural )
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -122,24 +123,35 @@ nextAppState ::
   appState {-^ The new application state -} ->
   IO StateID
 nextAppState server prevStateID newAppState = do
-  destroyAppState server prevStateID
+  destroyAppState' server prevStateID
   uuid <- UUID.nextRandom
   modifyIORef' (serverStatePool server) $ HM.insert uuid newAppState
   return $ StateID uuid
 
 -- | Desctroy an app state so it is no longer available for requests.
-destroyAppState ::
-  ServerState appState ->
+destroyAppState' ::
+  ServerState s ->
   StateID ->
   IO ()
-destroyAppState _server InitialStateID = pure ()
-destroyAppState server (StateID uuid) = modifyIORef' (serverStatePool server) $ HM.delete uuid
+destroyAppState' _server InitialStateID = pure ()
+destroyAppState' server (StateID uuid) = modifyIORef' (serverStatePool server) $ HM.delete uuid
+
+-- | Desctroy an app state so it is no longer available for requests.
+destroyAppState ::
+  MVar (ServerState s) ->
+  StateID ->
+  IO ()
+destroyAppState serverMVar sid =
+  withMVar serverMVar $ \server -> destroyAppState' server sid
+
 
 -- | Destroy all app states so they are no longer available for requests.
 destroyAllAppStates ::
-  ServerState appState ->
+  MVar (ServerState s) ->
   IO ()
-destroyAllAppStates server = writeIORef (serverStatePool server) $ HM.empty
+destroyAllAppStates serverMVar =
+  withMVar serverMVar $ \server ->
+    writeIORef (serverStatePool server) $ HM.empty
 
 -- | Retrieve the application state that corresponds to a given state ID.
 --

@@ -136,7 +136,7 @@ destroyAppState' ::
 destroyAppState' _server InitialStateID = pure ()
 destroyAppState' server (StateID uuid) = modifyIORef' (serverStatePool server) $ HM.delete uuid
 
--- | Desctroy an app state so it is no longer available for requests.
+-- | Destroy an app state so it is no longer available for requests.
 destroyAppState ::
   MVar (ServerState s) ->
   StateID ->

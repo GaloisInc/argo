@@ -114,9 +114,10 @@ statePoolCount :: ServerState appState -> IO Natural
 statePoolCount server =
   fromInteger . toInteger . HM.size <$> readIORef (serverStatePool server)
 
--- | Given a fresh application state and the StateID it was derived from,
--- return a fresh state ID that uniquely describes the new state and
--- destroy the previous state (if possible).
+-- | Given a fresh application state and the StateID it was derived from, return
+-- a fresh state ID that uniquely describes the new state and destroy the
+-- previous state (if possible). This ASSUMES the server state MVar is
+-- already locked elsewhere thus preventing inconsistent server states.
 nextAppState ::
   ServerState appState ->
   StateID {-^ State ID from which the new state originated (i.e., its parent) -} ->
@@ -128,7 +129,9 @@ nextAppState server prevStateID newAppState = do
   modifyIORef' (serverStatePool server) $ HM.insert uuid newAppState
   return $ StateID uuid
 
--- | Destroy an app state so it is no longer available for requests.
+-- | Like @destroyAppState@ but ASSUMES the concerns regarding server state
+-- consistency have already been handled (i.e., someone has already acquired the
+-- MVar for the server state).
 destroyAppState' ::
   ServerState s ->
   StateID ->
@@ -136,7 +139,11 @@ destroyAppState' ::
 destroyAppState' _server InitialStateID = pure ()
 destroyAppState' server (StateID uuid) = modifyIORef' (serverStatePool server) $ HM.delete uuid
 
--- | Destroy an app state so it is no longer available for requests.
+-- | Destroy a non-initial app state so it is no longer available for requests.
+-- Explicitly requires the @MVar (ServerState s)@ so a notification---an action
+-- which does not inherently require a lock on the server's state per se---can
+-- delete a state while being sure some process isn't actively operating on it
+-- as well.
 destroyAppState ::
   MVar (ServerState s) ->
   StateID ->
@@ -145,7 +152,7 @@ destroyAppState serverMVar sid =
   withMVar serverMVar $ \server -> destroyAppState' server sid
 
 
--- | Destroy all app states so they are no longer available for requests.
+-- | Like @destroyAppState@ but destroys all non-initial app states.
 destroyAllAppStates ::
   MVar (ServerState s) ->
   IO ()

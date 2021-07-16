@@ -169,7 +169,7 @@ destroyState (DestroyStateParams stateID) = Argo.destroyState stateID
 ------------------------------------------------------------------------
 -- Sleep Query
 
-data SleepParams = SleepParams Int
+newtype SleepParams = SleepParams Int
 
 instance JSON.FromJSON SleepParams where
   parseJSON =

@@ -36,6 +36,35 @@ def gen_misc_states(c, iterations):
         uid = c.send_command("drop", {"count":3, "state": state})
         state = c.wait_for_reply_to(uid)['result']['state']
 
+def assertShow(
+    self : unittest.TestCase,
+    connection : argo.ServerConnection,
+    state : Optional[str],
+    expected : str,
+    *,
+    startEnd : Optional[Tuple[int,int]] = None) -> int:
+    """Send a `show` command from `state` and ensure it returns `expected`.
+
+    Returns the request uid and state in a tuple."""
+
+    next_state = None
+    if startEnd is None:
+        uid = connection.send_query("show", {"state": state})
+    else:
+        (start, end) = startEnd
+        uid = connection.send_query("show", {"start":start, "end":end, "state": state})
+    actual = connection.wait_for_reply_to(uid)
+    self.assertIn('result', actual)
+    if 'result' in actual:
+        self.assertIn('state', actual['result'])
+        self.assertIn('answer', actual['result'])
+        if 'answer' in actual['result']:
+            self.assertIn('value', actual['result']['answer'])
+            if 'value' in actual['result']['answer']:
+                self.assertEqual(actual['result']['answer']['value'], expected)
+
+    return uid
+
 class GenericFileEchoTests():
 
 
@@ -43,41 +72,13 @@ class GenericFileEchoTests():
     def get_connection(self): pass
     def get_caching_iterations(self): pass
 
-    def assertShow(
-        self : unittest.TestCase,
-        connection : argo.ServerConnection,
-        state : Optional[str],
-        expected : str,
-        *,
-        startEnd : Optional[Tuple[int,int]] = None) -> int:
-        """Send a `show` command from `state` and ensure it returns `expected`.
-        
-        Returns the request uid and state in a tuple."""
-
-        next_state = None
-        if startEnd is None:
-            uid = connection.send_query("show", {"state": state})
-        else:
-            (start, end) = startEnd
-            uid = connection.send_query("show", {"start":start, "end":end, "state": state})
-        actual = connection.wait_for_reply_to(uid)
-        self.assertIn('result', actual)
-        if 'result' in actual:
-            self.assertIn('state', actual['result'])
-            self.assertIn('answer', actual['result'])
-            if 'answer' in actual['result']:
-                self.assertIn('value', actual['result']['answer'])
-                if 'value' in actual['result']['answer']:
-                    self.assertEqual(actual['result']['answer']['value'], expected)
-        
-        return uid
 
     def test_basics(self):
         c = self.get_connection()
         ## Positive tests -- make sure the server behaves as we expect with valid RPCs
 
         # Check that their is nothing to show if we haven't loaded a file yet
-        prev_uid = self.assertShow(c, state=None, expected='')
+        prev_uid = assertShow(self, c, state=None, expected='')
         prev_state = None
 
         # load a file
@@ -95,10 +96,10 @@ class GenericFileEchoTests():
         prev_state = state
 
         # check the contents of the loaded file
-        prev_uid = self.assertShow(c, state=prev_state, expected='Hello World!\n')
+        prev_uid = assertShow(self, c, state=prev_state, expected='Hello World!\n')
 
         # check a _portion_ of the contents of the loaded file
-        prev_uid = self.assertShow(c, state=prev_state, expected='ello', startEnd=(1,5))
+        prev_uid = assertShow(self, c, state=prev_state, expected='ello', startEnd=(1,5))
 
         # clear the loaded file
         uid = c.send_command("clear", {"state": prev_state})
@@ -113,7 +114,7 @@ class GenericFileEchoTests():
         prev_state = state
 
         # check that the file contents cleared
-        prev_uid = self.assertShow(c, state=prev_state, expected='')
+        prev_uid = assertShow(self, c, state=prev_state, expected='')
 
         ## Negative tests -- make sure the server errors as we expect
 
@@ -537,3 +538,102 @@ class OccupancyTests(unittest.TestCase):
         expected = {'error':{'data':{'stdout':None,'stderr':None},'code':22,'message':'Server at max capacity'},'jsonrpc':'2.0','id':uid3}
         self.assertEqual(actual3, expected)
 
+
+
+
+class InterruptTests(unittest.TestCase):
+    # Connection to server
+    c = None
+    # process running the server
+    p = None
+
+    @classmethod
+    def setUpClass(self):
+        p = subprocess.Popen(
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "--max-occupancy", "2", "http", "/", "--port", "8083", "--file", str(hello_file)],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            start_new_session=True)
+        time.sleep(3)
+        assert(p is not None)
+        poll_result = p.poll()
+        if poll_result is not None:
+            print(poll_result)
+            print(p.stdout.read())
+            print(p.stderr.read())
+        assert(poll_result is None)
+
+        self.p = p
+
+    @classmethod
+    def tearDownClass(self):
+        os.killpg(os.getpgid(self.p.pid), signal.SIGKILL)
+        super().tearDownClass()
+
+    # to be implemented by classes extending this one
+    def test_interrupts(self):
+        c1 = argo.ServerConnection(argo.HttpProcess('http://localhost:8083/'))
+        c2 = argo.ServerConnection(argo.HttpProcess('http://localhost:8083/'))
+        # load a file
+        hello_file = file_dir.joinpath('hello.txt')
+        self.assertTrue(False if not hello_file.is_file() else True)
+        uid1 = c1.send_command("load", {"file path": str(hello_file), "state": None})
+        uid2 = c2.send_command("load", {"file path": str(hello_file), "state": None})
+        actual1 = c1.wait_for_reply_to(uid1)
+        self.assertIn('result', actual1)
+        self.assertIn('state', actual1['result'])
+        state1 = actual1['result']['state']
+        actual2 = c2.wait_for_reply_to(uid2)
+        self.assertIn('result', actual2)
+        self.assertIn('state', actual2['result'])
+        state2 = actual2['result']['state']
+
+        # simple sleep for 3 seconds
+        t1 = time.time()
+        uid1 = c1.send_query("sleep", {"microseconds": 3000000, "state": state1})
+        actual1 = c1.wait_for_reply_to(uid1)
+        t2 = time.time()
+        self.assertIn('result', actual1)
+        if 'result' in actual1:
+            self.assertIn('state', actual1['result'])
+            self.assertIn('answer', actual1['result'])
+            if 'answer' in actual1['result']:
+                self.assertIn('value', actual1['result']['answer'])
+                if 'value' in actual1['result']['answer']:
+                    self.assertGreater(actual1['result']['answer']['value'], 2.9)
+        self.assertGreater(t2 - t1, 2.9)
+
+
+        # Sleep for 100 seconds, but then interrupt!
+        newpid = os.fork()
+        if newpid == 0:
+            time.sleep(3)
+            uid2 = c2.send_notification("interrupt", {})
+            os._exit(0)
+        else:
+            one_hundred_sec = 100000000
+            t1 = time.time()
+            uid1 = c1.send_query("sleep", {"microseconds": one_hundred_sec, "state": state1})
+
+        # check contents...?
+        uid1 = assertShow(self, c1, state=state1, expected='Hello World!\n')
+        uid2 = assertShow(self, c2, state=state2, expected='Hello World!\n')
+
+        # mutation/interrupt test
+        newpid = os.fork()
+        if newpid != 0:
+            # parent tries to clean up
+            two_sec = 2000000
+            t1 = time.time()
+            uid1 = c1.send_command("slow clear", {"pause microseconds": two_sec, "state": state1})
+        else:
+            # child allows cleanup to start but not finish
+            time.sleep(4)
+            uid2 = c2.send_notification("interrupt", {})
+            os._exit(0)
+
+        # check contents (N.B., there is no mutable state, so interrupts which stop a command mean
+        # the state is not updated by the argo server backend).
+        uid1 = assertShow(self, c1, state=state1, expected='Hello World!\n')
+        uid2 = assertShow(self, c2, state=state2, expected='Hello World!\n')

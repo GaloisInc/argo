@@ -47,6 +47,7 @@ module Argo
   -- * Manipulating internal server state in notifications
   , destroyState
   , destroyAllStates
+  , interruptAllThreads
   -- * File I/O in methods that respects caching
   , getFileReader
   -- * "printf"-style debugging in methods
@@ -94,12 +95,15 @@ import qualified Data.Aeson.Types as JSON (Parser, typeMismatch)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BS
 import Data.Foldable (for_)
+import Data.IORef
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
 import qualified Data.Map as M
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe (maybeToList)
 import Data.Scientific (Scientific)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text ( Text )
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
@@ -192,9 +196,11 @@ data NotificationContext =
   -- ^ A function returning the contents of the named file,
   -- potentially from a cache.
   , ntfCtxDestroyState :: StateID -> IO ()
-  -- ^ A function for unpinning a state (i.e., removing it from the persistent cache).
+  -- ^ A function for clearing a state.
   , ntfCtxDestroyAllStates :: IO ()
-  -- ^ A function for unpinning all pinned states (i.e., clearing the persistent cache).
+  -- ^ A function for clearing all states.
+  , ntfCtxInterruptAllThreads :: IO ()
+  -- ^ A function for interrupting all executing threads.
   }
 
 
@@ -434,6 +440,16 @@ destroyAllStates = Notification $ do
   liftIO $ destroyAll
 
 
+-- | Interrupts all threads currently executing requests in the server. N.B., if
+-- the server state is immutable then cancelled threads will have no affect on
+-- the server state. If any parts of the server state are mutable, those parts
+-- will include mutations caused by the cancelled threads since there is no
+-- general purpose way to roll those back or omit them.
+interruptAllThreads :: Notification ()
+interruptAllThreads = Notification $ do
+  interruptAll <- asks ntfCtxInterruptAllThreads
+  liftIO $ interruptAll
+
 --------------------------------------------------------------------------------
 
 -- | An application is a state and a mapping from names to methods.
@@ -443,6 +459,8 @@ data App s =
   , appMethods :: Map Text (AppMethod s)
   , appName :: Text
   , appDocumentation :: [Doc.Block]
+  , appActiveThreads :: !(MVar (IORef (Set ThreadId)))
+  -- ^ Thread currently active processing requests or waiting to do so.
   }
 
 
@@ -458,12 +476,14 @@ mkApp ::
   IO (App s)
 mkApp name docs opts initAppState methods = do
   initialState <- newMVar =<< initServerState (appStateMutability opts) initAppState
+  initThreadPool <- newMVar =<< newIORef Set.empty
   pure $ App
     { serverState = initialState
     , appMethods = M.fromList [ (methodName m, m)
                               | m <- methods]
     , appName = name
     , appDocumentation = appDocs
+    , appActiveThreads = initThreadPool
     }
   where appDocs =
           docs ++
@@ -805,6 +825,19 @@ execNotification n nctx = do
   void $ tryOutErr hNoCapture IDNull (do runNotification n nctx; pure ((),()))
 
 
+-- | Execute an IO action, during which the thread's @ThreadId@ is stored
+-- in the @appActiveThreads@ of the application.
+withActiveThread :: App s -> IO () -> IO ()
+withActiveThread app action = do
+  threadId <- myThreadId
+  withMVar (appActiveThreads app) $ \threadsRef -> do
+    modifyIORef' threadsRef $ Set.insert threadId
+  action
+  withMVar (appActiveThreads app) $ \threadsRef -> do
+    modifyIORef' threadsRef $ Set.delete threadId
+
+
+
 handleRequest ::
   forall s.
   HasCallStack =>
@@ -816,7 +849,7 @@ handleRequest ::
 handleRequest opts respond app req =
   case M.lookup method $ appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
-    Just (CommandMethod m) -> withRequestID $ \reqID -> do
+    Just (CommandMethod m) -> withActiveThread app $ withRequestID $ \reqID -> do
       stateID <- getStateID req
       response <- withMVar theState $ \state -> do
         when (stateID == initialStateID) $ do
@@ -836,7 +869,7 @@ handleRequest opts respond app req =
               sid' <- nextAppState state stateID newAppState
               return $ addStateID sid' result
       respond (JSON.encode response)
-    Just (QueryMethod m) -> withRequestID $ \reqID -> do
+    Just (QueryMethod m) -> withActiveThread app $ withRequestID $ \reqID -> do
       stateID <- getStateID req
       response <- withMVar theState $ \state -> do
         getAppState state stateID >>=
@@ -853,15 +886,15 @@ handleRequest opts respond app req =
       respond (JSON.encode response)
     Just (NotificationMethod m) ->
       withoutRequestID $ withoutStateID $ do
-        withMVar theState $ \state ->
-          let nctx = NotificationContext
-                      { ntfCtxMOptions = opts
-                      , ntfCtxFileReader = B.readFile
-                      , ntfCtxDestroyState = destroyAppState state
-                      , ntfCtxDestroyAllStates = destroyAllAppStates state
-                      }
-              notify = notificationImplementation m
-          in execNotification (notify params) nctx
+        let nctx = NotificationContext
+                    { ntfCtxMOptions = opts
+                    , ntfCtxFileReader = B.readFile
+                    , ntfCtxDestroyState = destroyAppState theState
+                    , ntfCtxDestroyAllStates = destroyAllAppStates theState
+                    , ntfCtxInterruptAllThreads = interruptAllAppThreads app
+                    }
+            notify = notificationImplementation m
+        execNotification (notify params) nctx
   where
     method   = requestMethod req
     params   = JSON.Object $ requestParams req
@@ -890,6 +923,16 @@ handleRequest opts respond app req =
       then throwIO unexpectedStateID
       else act
 
+-- | Interrupts all threads currently executing requests in the server. N.B., if
+-- the server state is immutable then cancelled threads will have no affect on
+-- the server state. If any parts of the server state are mutable, those parts
+-- will include mutations caused by the cancelled threads since there is no
+-- general purpose way to roll those back or omit them.
+interruptAllAppThreads :: App s -> IO ()
+interruptAllAppThreads app = do
+  withMVar (appActiveThreads app) $ \threadsRef -> do
+    mapM_ killThread =<< readIORef threadsRef
+    writeIORef threadsRef Set.empty
 
 -- | Given an IO action, return an atomic-ified version of that same action,
 -- such that it closes over a lock. This is useful for synchronizing on output

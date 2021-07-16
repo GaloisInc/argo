@@ -4,6 +4,7 @@ module FileEchoServer ( module FileEchoServer ) where
 
 import qualified Argo as Argo
 import qualified Argo.Doc as Doc
+import Control.Concurrent ( threadDelay )
 import Control.Exception ( throwIO )
 import Control.Monad.IO.Class ( liftIO )
 import qualified Data.Aeson as JSON
@@ -11,6 +12,8 @@ import Data.Aeson ( (.:), (.:?), (.=), (.!=) )
 import Data.ByteString ( ByteString )
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Text as T
+import Data.Time.Clock.POSIX
+import Data.Scientific (scientific)
 import qualified System.Directory as Dir
 
 
@@ -286,3 +289,75 @@ instance Doc.DescribedMethod DestroyAllStatesParams () where
 destroyAllStates :: DestroyAllStatesParams -> Argo.Notification ()
 destroyAllStates _ = Argo.destroyAllStates
 
+
+------------------------------------------------------------------------
+-- Sleep Query
+
+newtype SleepParams = SleepParams Int
+
+instance JSON.FromJSON SleepParams where
+  parseJSON =
+    JSON.withObject "params for \"sleep\"" $
+    \o -> SleepParams <$> o .: "microseconds"
+
+instance Doc.DescribedMethod SleepParams JSON.Value where
+  parameterFieldDescription =
+    [("microseconds",
+      Doc.Paragraph [Doc.Text "The duration to sleep in microseconds."])]
+
+  resultFieldDescription =
+    [ ("value",
+      Doc.Paragraph [ Doc.Text "Duration in seconds sleep lasted."])
+    ]
+
+sleepQuery :: SleepParams -> Argo.Query ServerState JSON.Value
+sleepQuery (SleepParams ms) = liftIO $ do
+  t1 <- round `fmap` getPOSIXTime
+  threadDelay ms
+  t2 <- round `fmap` getPOSIXTime
+  pure (JSON.object [ "value" .= (JSON.Number (scientific (t2 - t1) 0))])
+
+
+
+------------------------------------------------------------------------
+-- Interrupt All Threads Command
+data InterruptAllThreadsParams = InterruptAllThreadsParams
+
+instance JSON.FromJSON InterruptAllThreadsParams where
+  parseJSON =
+    JSON.withObject "params for \"interrupt all threads\"" $
+    \_ -> pure InterruptAllThreadsParams
+
+instance Doc.DescribedMethod InterruptAllThreadsParams () where
+  parameterFieldDescription = []
+
+
+interruptAllThreads :: InterruptAllThreadsParams -> Argo.Notification ()
+interruptAllThreads _ = Argo.interruptAllThreads
+
+
+------------------------------------------------------------------------
+-- SlowClear Command
+
+newtype SlowClear = SlowClear Int
+
+instance JSON.FromJSON SlowClear where
+  parseJSON =
+    JSON.withObject "params for \"slow clear\"" $
+    \o -> SlowClear <$> o .: "pause microseconds"
+
+instance Doc.DescribedMethod SlowClear () where
+  parameterFieldDescription =
+    [("pause microseconds",
+      Doc.Paragraph [Doc.Text "The duration to sleep in microseconds between each character being cleared."])]
+
+slowClear :: SlowClear -> Argo.Command ServerState ()
+slowClear (SlowClear ms) = do
+  let go = do (FileContents contents) <- fileContents <$> Argo.getState
+              case contents of
+                [] -> Argo.modifyState $ \s -> s { loadedFile = Nothing }
+                (_:cs) -> do
+                  Argo.modifyState $ \s -> s { fileContents = FileContents cs }
+                  liftIO $ threadDelay ms
+                  go
+  go

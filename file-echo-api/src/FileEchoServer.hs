@@ -339,7 +339,7 @@ interruptAllThreads _ = Argo.interruptAllThreads
 ------------------------------------------------------------------------
 -- SlowClear Command
 
-data SlowClear = SlowClear Int
+newtype SlowClear = SlowClear Int
 
 instance JSON.FromJSON SlowClear where
   parseJSON =

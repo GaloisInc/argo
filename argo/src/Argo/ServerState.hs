@@ -128,7 +128,7 @@ nextAppState server prevStateID newAppState = do
   modifyIORef' (serverStatePool server) $ HM.insert uuid newAppState
   return $ StateID uuid
 
--- | Desctroy an app state so it is no longer available for requests.
+-- | Destroy an app state so it is no longer available for requests.
 destroyAppState' ::
   ServerState s ->
   StateID ->

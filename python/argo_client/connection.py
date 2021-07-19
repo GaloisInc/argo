@@ -439,28 +439,34 @@ class ServerConnection:
             self.replies[the_reply['id']] = the_reply
             reply_bytes = self.process.get_one_reply()
 
-    def send_command(self, method: str, params: dict) -> int:
+    def send_command(self, method: str, params: dict, *, timeout : Optional[float] = None) -> int:
         """Send a message to the server with the given JSONRPC command
            method and parameters. The return value is the unique request
            ID that was used for the message, which can be used to find
            replies.
+
+           A timeout (in seconds) may be specified for the request.
         """
         request_id = self.get_id()
         msg = {'jsonrpc': '2.0',
                'method': method,
                'id': request_id,
                'params': params}
+        if timeout:
+            msg['timeout'] = round(timeout * 1_000_000)
         msg_string = json.dumps(msg)
         self.process.send_one_message(msg_string)
         return request_id
 
-    def send_query(self, method: str, params: dict) -> int:
+    def send_query(self, method: str, params: dict, timeout : Optional[float] = None) -> int:
         """Send a message to the server with the given JSONRPC query
            method and parameters. The return value is the unique request
            ID that was used for the message, which can be used to find
            replies.
+
+           A timeout (in seconds) may be specified for the request.
         """
-        return self.send_command(method, params)
+        return self.send_command(method, params, timeout=timeout)
 
     def send_notification(self, method: str, params: dict) -> None:
         """Send a message to the server with the given JSONRPC notification

@@ -197,6 +197,21 @@ class GenericFileEchoTests():
         expected = {'error':{'data':{'stdout':None,'data':'Error in $: Failed reading: not a valid json value at \'BAAAAADJSON\'','stderr':None},'code':-32700,'message':'Parse error'},'jsonrpc':'2.0','id':None}
         self.assertEqual(actual, expected)
 
+        # test timeout
+        uid = c.send_command("load", {"file path": str(hello_file), "state": prev_state})
+        actual = c.wait_for_reply_to(uid)
+        state = actual['result']['state']
+        ten_sec = 10000000
+        t1 = time.time()
+        uid = c.send_query("sleep query", {"microseconds": ten_sec, "state": state}, timeout=2.5)
+        actual = c.wait_for_reply_to(uid)
+        expected = {'error':{'data':{'stdout':None,'stderr':None},'code':23,'message':'Request timed out'},'jsonrpc':'2.0','id':uid}
+        t2 = time.time()
+        self.assertLess(t2 - t1, 5.0)
+        self.assertEqual(actual, expected)
+        uid = assertShow(self, c, state=state, expected='Hello World!\n')
+
+
 class RemoteSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
     # Connection to cryptol
     c = None
@@ -734,6 +749,10 @@ class InterruptTests(unittest.TestCase):
             one_hundred_sec = 100000000
             t1 = time.time()
             uid1 = c1.send_query("sleep query", {"microseconds": one_hundred_sec, "state": state1})
+            actual1 = c1.wait_for_reply_to(uid1)
+            expected = {'error':{'data':{'stdout':None,'stderr':None},'code':24,'message':'Request interrupted'},'jsonrpc':'2.0','id':uid1}
+            self.assertEqual(actual1, expected)
+
 
         # check contents...?
         uid1 = assertShow(self, c1, state=state1, expected='Hello World!\n')
@@ -746,6 +765,9 @@ class InterruptTests(unittest.TestCase):
             two_sec = 2000000
             t1 = time.time()
             uid1 = c1.send_command("slow clear", {"pause microseconds": two_sec, "state": state1})
+            actual1 = c1.wait_for_reply_to(uid1)
+            expected = {'error':{'data':{'stdout':None,'stderr':None},'code':24,'message':'Request interrupted'},'jsonrpc':'2.0','id':uid1}
+            self.assertEqual(actual1, expected)
         else:
             # child allows cleanup to start but not finish
             time.sleep(4)

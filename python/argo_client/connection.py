@@ -12,7 +12,8 @@ import socket
 import subprocess
 import signal
 import threading
-from typing import Any, Dict, List, IO, Mapping, Optional, Union
+import sys
+from typing import Any, Dict, List, IO, Mapping, Optional, Union, TextIO
 
 from . import netstring
 
@@ -51,11 +52,13 @@ class ServerProcess(metaclass=ABCMeta):
        3. Implement ``send_one_message``, which sends a string that
           contains a serialized JSON message to the process.
     """
+    _logging_dest: Optional[TextIO]
 
 
     def __init__(self) -> None:
         """Start the process using the given command.
         """
+        self._logging_dest = None
         self.setup()
 
     @abstractmethod
@@ -68,6 +71,27 @@ class ServerProcess(metaclass=ABCMeta):
 
     @abstractmethod
     def send_one_message(self, the_message: str, *, expecting_response : bool = True) -> None: pass
+
+    @abstractmethod
+    def logging(self, on : bool, *, dest : TextIO = sys.stderr) -> None:
+        """Whether to log received and transmitted JSON."""
+        pass
+
+    def logging(self, on : bool, *, dest : TextIO = sys.stderr) -> None:
+        """Whether to log received and transmitted JSON."""
+        if on:
+            self._logging_dest = dest
+        else:
+            self._logging_dest = None
+
+    def _log_tx(self, contents : str):
+        if self._logging_dest:
+            self._logging_dest.write("[TX] " + contents.strip() + "\n")
+
+    def _log_rx(self, contents : str):
+        if self._logging_dest:
+            self._logging_dest.write("[RX] " + contents.strip() + "\n")
+
 
 class ManagedProcess(ServerProcess, metaclass=ABCMeta):
     """A ``ServerProcess`` that is responsible for starting and stopping
@@ -161,13 +185,16 @@ class SocketProcess(ManagedProcess):
         try:
             (msg, rest) = netstring.decode(self.buf)
             self.buf = bytearray(rest)
+            self._log_rx(msg)
             return msg
         except (ValueError, IndexError):
             return None
 
     def send_one_message(self, message: str, expecting_response : bool = True) -> None:
+        self._log_tx(message)
         msg_bytes = netstring.encode(message)
         self.socket.send(msg_bytes)
+
 
     def __del__(self) -> None:
         if self.proc is not None:
@@ -265,11 +292,13 @@ class RemoteSocketProcess(ServerProcess):
         try:
             (msg, rest) = netstring.decode(self.buf)
             self.buf = bytearray(rest)
+            self._log_rx(msg)
             return msg
         except (ValueError, IndexError):
             return None
 
     def send_one_message(self, message: str, *, expecting_response : bool = True) -> None:
+        self._log_tx(message)
         msg_bytes = netstring.encode(message)
         self.socket.send(msg_bytes)
 
@@ -304,10 +333,12 @@ class HttpProcess(ServerProcess):
             return self.waiting_replies.pop()
 
     def send_one_message(self, message: str, *, expecting_response : bool = True) -> None:
+        self._log_tx(message)
         r = requests.post(self.url,
                           headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
                           data=message,
                           verify=self.verify).text
+        self._log_rx(r)
         if expecting_response:
             self.waiting_replies.append(r)
 
@@ -330,7 +361,6 @@ class StdIOProcess(ManagedProcess):
     and ``stdout``.
     """
     __messages: queue.Queue[str] # multiprocessing.Queue[str] #
-    __proc_thread: threading.Thread #multiprocessing.Process #
 
     def setup(self) -> None:
         super().setup()
@@ -360,6 +390,7 @@ class StdIOProcess(ManagedProcess):
             self.proc_thread.start()
 
     def send_one_message(self, the_message: str, *, expecting_response : bool = True) -> None:
+        self._log_tx(the_message)
         if self.proc is not None and self.proc.stdin is not None:
             self.proc.stdin.write(netstring.encode(the_message))
             self.proc.stdin.flush()
@@ -370,7 +401,9 @@ class StdIOProcess(ManagedProcess):
         """If a complete reply has been buffered, parse it from the buffer and
            return it as a bytestring."""
         try:
-            return self.__messages.get(timeout=0.1)
+            msg = self.__messages.get(timeout=0.1)
+            self._log_rx(msg)
+            return msg
         except queue.Empty:
             return None
 
@@ -453,3 +486,7 @@ class ServerConnection:
             self._process_replies()
 
         return self.replies[request_id] #self.replies.pop(request_id)  # delete reply while returning it
+
+    def logging(self, on : bool, *, dest : TextIO = sys.stderr) -> None:
+        """Whether to log received and transmitted JSON."""
+        self.process.logging(on, dest = dest)

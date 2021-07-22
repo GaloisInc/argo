@@ -28,6 +28,7 @@ import System.Directory
     ( createDirectoryIfMissing,
       getAppUserDataDirectory,
       listDirectory,
+      doesFileExist,
       removeFile )
 import System.FilePath ( (-<.>), (<.>), (</>), isExtensionOf )
 import System.Exit (die)
@@ -75,6 +76,11 @@ customMain stdioOpts socketOpts httpOpts docOpts str app =
   do opts <- Opt.customExecParser
                (Opt.prefs $ Opt.showHelpOnError <> Opt.showHelpOnEmpty)
                (options stdioOpts socketOpts httpOpts docOpts str)
+     case optLogFile $ methodOpts opts of
+       Just path -> do
+         alreadyExists <- doesFileExist path
+         when alreadyExists (removeFile path)
+       _ -> pure ()
      realMain app opts
 
 -- | Run an Argo application using the default set of command-line
@@ -104,7 +110,9 @@ data NetworkOptions =
     -- ^ The port number on which to listen
   }
 
-data LogOption = StdErrLog
+data LogOption
+  = StdErrLog
+  | FileLog !FilePath
 
 
 data ProgramMode stdioOpts socketOpts httpOpts docOpts
@@ -136,7 +144,12 @@ mkGlobalOptions logging fsMode occupancy progMode =
                  , optLogger =
                      case logging of
                        Just StdErrLog -> T.hPutStrLn stderr
+                       Just (FileLog path) -> \msg -> do T.appendFile path msg; T.appendFile path "\n"
                        _ -> const (return ())
+                 , optLogFile =
+                     case logging of
+                       Just (FileLog path) -> Just path
+                       _ -> Nothing
                  , optMaxOccupancy = occupancy
                  }
   , programMode = progMode
@@ -257,7 +270,7 @@ logOpt =
       Opt.eitherReader $
         \case
           "stderr" -> Right StdErrLog
-          other -> Left $ "Unknown log option '" ++ other ++ "'"
+          other -> Right $ FileLog other
 
 readOnlyOpt :: Opt.Parser FileSystemMode
 readOnlyOpt =

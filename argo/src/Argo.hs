@@ -106,6 +106,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text ( Text )
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
 import GHC.Stack
 import Numeric.Natural ( Natural )
@@ -165,6 +166,8 @@ data MethodOptions =
     -- ReadOnly prohibits creating or writing files.
     , optLogger :: Text -> IO ()
     -- ^ A function to use for logging debug messages.
+    , optLogFile :: Maybe FilePath
+    -- ^ Where things are being logged _if_ a log file was specified.
     , optMaxOccupancy :: Natural
     -- ^ How many simultaneous states can be live at once?
     }
@@ -174,6 +177,7 @@ defaultMethodOptions =
   MethodOptions
     { optFileSystemMode = ReadWrite
     , optLogger = const (return ())
+    , optLogFile = Nothing
     , optMaxOccupancy = 10
     }
 
@@ -846,7 +850,7 @@ handleRequest ::
   App s ->
   Request ->
   IO ()
-handleRequest opts respond app req =
+handleRequest opts respond app req = do
   case M.lookup method $ appMethods app of
     Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
     Just (CommandMethod m) -> withActiveThread app $ withRequestID $ \reqID -> do
@@ -976,20 +980,21 @@ serveHandles opts hIn hOut app = init >>= loop
   where
     newline = 0x0a -- ASCII/UTF8
 
-    init = (,) <$> synchronized (BS.hPutStr hOut)
-               <*> (BS.split newline <$> BS.hGetContents hIn)
+    init = do respond <- synchronized (BS.hPutStr hOut)
+              input <- (BS.split newline <$> BS.hGetContents hIn)
+              pure (respond, input)
 
-    loop (out, input) =
+    loop (respond, input) =
       case input of
         [] -> return ()
         l:rest ->
           do _ <- forkIO $
                (case JSON.eitherDecode l of
                   Left msg -> throw (parseError (T.pack msg))
-                  Right req -> handleRequest opts out app req)
-               `catch` reportError out
-               `catch` reportOtherException out
-             loop (out, rest)
+                  Right req -> handleRequest opts respond app req)
+               `catch` reportError respond
+               `catch` reportOtherException respond
+             loop (respond, rest)
 
     reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
     reportError out exn =
@@ -1018,33 +1023,33 @@ serveHandlesNS opts hIn hOut app =
   do hSetBinaryMode hIn True
      hSetBuffering hIn NoBuffering
      input <- newMVar hIn
-     output <- synchronized (\msg ->
-                               do optLogger opts (T.pack (show msg))
+     respond <- synchronized (\msg ->
+                               do logTx opts msg
                                   BS.hPut hOut $ encodeNetstring $ netstring msg
                                   hFlush hOut)
-     loop output input
+     loop respond input
   where
     loop :: (BS.ByteString -> IO ()) -> MVar Handle -> IO ()
-    loop output input =
+    loop respond input =
       do mbLine <- withMVar input $ netstringFromHandle
          case mbLine of
            Nothing   -> return ()
            Just line ->
-             do _ <- processLine output line
-                loop output input
+             do _ <- processLine respond line
+                loop respond input
 
-    processLine output line =
-      do optLogger opts (T.pack (show line))
+    processLine respond line =
+      do logRx opts $ decodeNetstring line
          forkIO $
            case JSON.eitherDecode (decodeNetstring line) of
              Left  msg -> throwIO (parseError (T.pack msg))
-             Right req -> handleRequest opts output app req
-           `catch` reportError output
-           `catch` reportOtherException output
+             Right req -> handleRequest opts respond app req
+           `catch` reportError respond
+           `catch` reportOtherException respond
 
     reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
-    reportError output exn =
-      output (JSON.encode exn)
+    reportError respond exn =
+      respond (JSON.encode exn)
 
     reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
     reportOtherException out exn =
@@ -1054,6 +1059,13 @@ serveHandlesNS opts hIn hOut app =
                     , errorStdErr = Nothing
                     }
 
+-- | Log that a JSON RPC was received as `[RX] <JSON contents>`.
+logRx :: MethodOptions -> BS.ByteString -> IO ()
+logRx opts bs = optLogger opts ("[RX] " <> (T.decodeUtf8 $ BS.toStrict bs))
+
+-- | Log that a JSON RPC response was sent as `[TX] <JSON contents>`.
+logTx :: MethodOptions -> BS.ByteString -> IO ()
+logTx opts bs = optLogger opts ("[TX] " <> (T.decodeUtf8 $ BS.toStrict bs))
 
 -- | Environment variable which, when set to a non-empty value not equal to "0",
 -- enables TLS connections over HTTPS.
@@ -1098,8 +1110,9 @@ serveHttp opts httpOpts app port = do
             ensureTextJSON "Accept" badRequest400
             validateLength
             b <- body
+            liftIO $ logRx opts b
             replyBodyContents <- liftIO $ newMVar mempty
-            let respond = \str -> modifyMVar replyBodyContents $ \old -> pure (old <> str, ())
+            let respond str = modifyMVar replyBodyContents $ \old -> pure (old <> str, ())
             res <-
               liftIO $
                 (case JSON.eitherDecode b of
@@ -1122,6 +1135,9 @@ serveHttp opts httpOpts app port = do
                    status $ if body == ""
                             then status204
                             else ok200
+                   liftIO $ if body == ""
+                            then logTx opts "[TX] 'NO CONTENT'"
+                            else logTx opts body
                    raw body
        -- Return a more informative status code when the wrong HTTP method is used
        for_ [GET, HEAD, PUT, DELETE, TRACE, CONNECT, OPTIONS] $

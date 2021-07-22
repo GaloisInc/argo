@@ -1136,7 +1136,7 @@ serveHttp opts httpOpts app port = do
                             then status204
                             else ok200
                    liftIO $ if body == ""
-                            then logTx opts "[TX] 'NO CONTENT'"
+                            then logTx opts "'NO CONTENT'"
                             else logTx opts body
                    raw body
        -- Return a more informative status code when the wrong HTTP method is used

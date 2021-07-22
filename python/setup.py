@@ -12,7 +12,7 @@ def get_README():
 setup(
     name="argo-client",
     python_requires=">=3.7",
-    version="0.0.5",
+    version="0.0.6",
     url="https://github.com/GaloisInc/argo",
     project_urls={
         "Changelog": "https://github.com/GaloisInc/argo/blob/master/python/CHANGELOG.md",

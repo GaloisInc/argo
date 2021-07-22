@@ -73,7 +73,9 @@ class GenericFileEchoTests():
     # to be implemented by classes extending this one
     def get_connection(self): pass
     def get_caching_iterations(self): pass
-    def get_server_log_file(self): pass
+
+    @staticmethod
+    def server_log_file(): pass
 
 
     def test_basics(self):
@@ -123,7 +125,7 @@ class GenericFileEchoTests():
 
         # check logger output
         self.check_log_contents(log_buffer.getvalue().splitlines())
-        self.check_log_contents(list(open(self.get_server_log_file())))
+        self.check_log_contents(list(open(self.server_log_file())))
 
     def check_log_contents(self, lines):
         """Check that the list of logged lines is non-empty and conforms to our
@@ -204,7 +206,8 @@ class RemoteSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
-            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "socket", "--port", "50005", "--log", "remote-socket-server.log"],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "socket", "--port", "50005"
+            , "--log", RemoteSocketProcessTests.server_log_file()],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -234,7 +237,8 @@ class RemoteSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
     def get_caching_iterations(self):
         return 30
 
-    def get_server_log_file(self):
+    @staticmethod
+    def server_log_file():
         return "remote-socket-server.log"
 
 
@@ -245,7 +249,7 @@ class DynamicSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
     @classmethod
     def setUpClass(self):
         self.c = argo.ServerConnection(
-                    argo.DynamicSocketProcess(f'cabal run exe:file-echo-api --verbose=0 -- socket --port 50006 --log dynamic-socket-server.log'))
+                    argo.DynamicSocketProcess(f'cabal run exe:file-echo-api --verbose=0 -- socket --port 50006 --log {DynamicSocketProcessTests.server_log_file()}'))
 
     # to be implemented by classes extending this one
     def get_connection(self):
@@ -254,7 +258,8 @@ class DynamicSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
     def get_caching_iterations(self):
         return 30
 
-    def get_server_log_file(self):
+    @staticmethod
+    def server_log_file():
         return "dynamic-socket-server.log"
 
 class StdIOProcessTests(GenericFileEchoTests, unittest.TestCase):
@@ -264,7 +269,7 @@ class StdIOProcessTests(GenericFileEchoTests, unittest.TestCase):
     @classmethod
     def setUpClass(self):
         self.c = argo.ServerConnection(
-                    argo.StdIOProcess(f'cabal run exe:file-echo-api --verbose=0 -- stdio --log stdio-server.log'))
+                    argo.StdIOProcess(f'cabal run exe:file-echo-api --verbose=0 -- stdio --log {StdIOProcessTests.server_log_file()}'))
 
     def get_connection(self):
         return self.c
@@ -272,7 +277,8 @@ class StdIOProcessTests(GenericFileEchoTests, unittest.TestCase):
     def get_caching_iterations(self):
         return 30
 
-    def get_server_log_file(self):
+    @staticmethod
+    def server_log_file():
         return "stdio-server.log"
 
 
@@ -285,7 +291,7 @@ class HttpTests(GenericFileEchoTests, unittest.TestCase):
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
-            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080", "--log", "http-server.log"],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080", "--log", HttpTests.server_log_file()],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -314,7 +320,8 @@ class HttpTests(GenericFileEchoTests, unittest.TestCase):
     def get_caching_iterations(self):
         return 30
 
-    def get_server_log_file(self):
+    @staticmethod
+    def server_log_file():
         return "http-server.log"
 
     def test_http_behaviors(self):
@@ -359,7 +366,7 @@ class TLSTests1(GenericFileEchoTests, unittest.TestCase):
         server_env = os.environ.copy()
         server_env["TLS_ENABLE"] = "1"
         p = subprocess.Popen(
-            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8083", "--log", "tls1-server.log"],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8083", "--log", TLSTests1.server_log_file()],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -389,7 +396,8 @@ class TLSTests1(GenericFileEchoTests, unittest.TestCase):
     def get_caching_iterations(self):
         return 30
 
-    def get_server_log_file(self):
+    @staticmethod
+    def server_log_file():
         return "tls1-server.log"
 
 class TLSTests2(GenericFileEchoTests, unittest.TestCase):
@@ -404,7 +412,8 @@ class TLSTests2(GenericFileEchoTests, unittest.TestCase):
                   + ' -subj "/C=GB/ST=London/L=London/O=Acme Widgets/OU=IT Department/CN=localhost"')
         os.system('openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt')
         p = subprocess.Popen(
-            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8083", "--tls", "--log", "tls2-server.log"],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/"
+            , "--port", "8083", "--tls", "--log", TLSTests2.server_log_file()],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -433,8 +442,8 @@ class TLSTests2(GenericFileEchoTests, unittest.TestCase):
     def get_caching_iterations(self):
         return 30
 
-    @classmethod
-    def get_server_log_file(self):
+    @staticmethod
+    def server_log_file():
         return "tls2-server.log"
 
 class LoadOnLaunchTests(unittest.TestCase):
@@ -447,7 +456,7 @@ class LoadOnLaunchTests(unittest.TestCase):
     def setUpClass(self):
         p = subprocess.Popen(
             ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port"
-            , "8081", "--file", str(hello_file), "--log", "load-on-launch-server.log"],
+            , "8081", "--file", str(hello_file), "--log", LoadOnLaunchTests.server_log_file()],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -479,7 +488,8 @@ class LoadOnLaunchTests(unittest.TestCase):
         expected = {'result':{'state':actual['result']['state'],'stdout':'','stderr':'','answer':{'value':'Hello World!\n'}},'jsonrpc':'2.0','id':uid}
         self.assertEqual(actual, expected)
 
-    def get_server_log_file(self):
+    @staticmethod
+    def server_log_file():
         return "load-on-launch-server.log"
 
 class OccupancyTests(unittest.TestCase):

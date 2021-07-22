@@ -1,3 +1,7 @@
+# argo-client v0.0.6 (22 Jul 2021)
++ Add logging option to client. See `ServerProcess.logging(..)` and
+  `ServerConnection.logging(..)`.
+
 # argo-client v0.0.5 (23 Jun 2021)
 + Add HTTP flag for TLS cert verification options.
 

@@ -79,11 +79,11 @@ class ServerProcess(metaclass=ABCMeta):
         else:
             self._logging_dest = None
 
-    def _log_tx(self, contents : str):
+    def _log_tx(self, contents : str) -> None:
         if self._logging_dest:
             self._logging_dest.write("[TX] " + contents.strip() + "\n")
 
-    def _log_rx(self, contents : str):
+    def _log_rx(self, contents : str) -> None:
         if self._logging_dest:
             self._logging_dest.write("[RX] " + contents.strip() + "\n")
 

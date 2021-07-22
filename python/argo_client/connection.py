@@ -72,11 +72,6 @@ class ServerProcess(metaclass=ABCMeta):
     @abstractmethod
     def send_one_message(self, the_message: str, *, expecting_response : bool = True) -> None: pass
 
-    @abstractmethod
-    def logging(self, on : bool, *, dest : TextIO = sys.stderr) -> None:
-        """Whether to log received and transmitted JSON."""
-        pass
-
     def logging(self, on : bool, *, dest : TextIO = sys.stderr) -> None:
         """Whether to log received and transmitted JSON."""
         if on:

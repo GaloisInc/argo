@@ -183,6 +183,27 @@ class CommandErrorInteractionTests3(unittest.TestCase):
             c.implode().result()
 
 
+class CommandErrorInteractionTests4(unittest.TestCase):
+    # Connection to server
+    c : FileEchoConnection = None
+
+    @classmethod
+    def setUpClass(self):
+        self.c = FileEchoConnection(
+                    argo.ServerConnection(
+                        StdIOProcess(
+                            "cabal run exe:file-echo-api --verbose=0 -- stdio")))
+
+    def test_load_after_reset(self):
+        c = self.c
+
+        hello_file = file_dir.joinpath('hello.txt')
+        self.assertTrue(False if not hello_file.is_file() else True)
+
+        # test loading and showing a valid file
+        c.load_file(str(hello_file))
+        self.assertEqual(c.show().result(), "Hello World!\n")
+
         c.reset()
 
         # post reset connection is in initial state
@@ -193,6 +214,7 @@ class CommandErrorInteractionTests3(unittest.TestCase):
         self.assertTrue(False if not base_file.is_file() else True)
         c.load_file(str(base_file))
         self.assertEqual(c.show().result(), "All your base are belong to us!\n")
+
 
 class CommandErrorInteractionTests5(unittest.TestCase):
     # Connection to server
@@ -216,12 +238,10 @@ class CommandErrorInteractionTests5(unittest.TestCase):
             print(p.stdout.read())
             print(p.stderr.read())
         assert(poll_result is None)
-
         self.p = p
         self.c = FileEchoConnection(
                     argo_conn.ServerConnection(
                         argo_conn.RemoteSocketProcess('localhost', 50005, ipv6=True)))
-
 
     @classmethod
     def tearDownClass(self):

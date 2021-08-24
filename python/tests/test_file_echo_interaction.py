@@ -256,11 +256,13 @@ class CommandErrorInteractionTests5(unittest.TestCase):
         with self.assertRaises(ArgoException):
             c.implode().result()
 
-        c.reset()
-
         hello_file = file_dir.joinpath('hello.txt')
         self.assertTrue(False if not hello_file.is_file() else True)
 
-        # test loading and showing a valid file
+        # test that loading and showing a valid file still works after an
+        # exception
         c.load_file(str(hello_file))
         self.assertEqual(c.show().result(), "Hello World!\n")
+
+        # test that a reset still works after an exception
+        c.reset()

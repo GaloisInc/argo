@@ -1,10 +1,15 @@
 import os
 import unittest
 import argo_client.interaction as argo
+import argo_client.connection as argo_conn
 from pathlib import Path
 from argo_client.interaction import HasProtocolState, ArgoException
 from argo_client.connection import ServerConnection, StdIOProcess
-from typing import Any, Optional
+from typing import Any, Optional, TextIO
+import sys
+import signal
+import time
+import subprocess
 
 class LoadFile(argo.Command):
     def __init__(self, connection : HasProtocolState, file_path : str) -> None:
@@ -74,6 +79,10 @@ class FileEchoConnection:
         """Reset the underlying server state."""
         Reset(self)
         self.most_recent_result = None
+
+    def logging(self, on : bool, *, dest : TextIO = sys.stderr) -> None:
+        """Whether to log received and transmitted JSON."""
+        self.server_connection.logging(on=on,dest=dest)
 
 dir_path = Path(os.path.dirname(os.path.realpath(__file__)))
 file_dir = dir_path.joinpath('test-data')
@@ -205,3 +214,56 @@ class CommandErrorInteractionTests4(unittest.TestCase):
         self.assertTrue(False if not base_file.is_file() else True)
         c.load_file(str(base_file))
         self.assertEqual(c.show().result(), "All your base are belong to us!\n")
+
+
+class CommandErrorInteractionTests5(unittest.TestCase):
+    # Connection to server
+    c : FileEchoConnection = None
+
+    @classmethod
+    def setUpClass(self):
+        p = subprocess.Popen(
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--",
+             "socket", "--port", "50005" #, "--log", "stderr"
+            ], # Uncomment the above for debug output
+            stdout=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            #stderr=subprocess.PIPE,
+            stderr=sys.stdout,
+            start_new_session=True)
+        time.sleep(3)
+        assert(p is not None)
+        poll_result = p.poll()
+        if poll_result is not None:
+            print(poll_result)
+            print(p.stdout.read())
+            print(p.stderr.read())
+        assert(poll_result is None)
+        self.p = p
+        self.c = FileEchoConnection(
+                    argo_conn.ServerConnection(
+                        argo_conn.RemoteSocketProcess('localhost', 50005, ipv6=True)))
+
+    @classmethod
+    def tearDownClass(self):
+        os.killpg(os.getpgid(self.p.pid), signal.SIGKILL)
+        super().tearDownClass()
+
+    def test_load_after_implosion(self):
+        c = self.c
+        self.c.logging(False) # Change this to 'True' for debug output
+
+        # test that internal errors without extra data raise proper exceptions
+        with self.assertRaises(ArgoException):
+            c.implode().result()
+
+        hello_file = file_dir.joinpath('hello.txt')
+        self.assertTrue(False if not hello_file.is_file() else True)
+
+        # test that loading and showing a valid file still works after an
+        # exception
+        c.load_file(str(hello_file))
+        self.assertEqual(c.show().result(), "Hello World!\n")
+
+        # test that a reset still works after an exception
+        c.reset()

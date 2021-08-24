@@ -224,7 +224,8 @@ class CommandErrorInteractionTests5(unittest.TestCase):
     def setUpClass(self):
         p = subprocess.Popen(
             ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--",
-            "socket", "--port", "50005", "--log", "stderr"],
+             "socket", "--port", "50005" #, "--log", "stderr"
+            ], # Uncomment the above for debug output
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             #stderr=subprocess.PIPE,
@@ -250,7 +251,7 @@ class CommandErrorInteractionTests5(unittest.TestCase):
 
     def test_load_after_implosion(self):
         c = self.c
-        self.c.logging(True)
+        self.c.logging(False) # Change this to 'True' for debug output
 
         # test that internal errors without extra data raise proper exceptions
         with self.assertRaises(ArgoException):

@@ -137,6 +137,18 @@ class Command(Interaction):
     corresponding command's appropriate representation.
     """
 
+    def state(self) -> Any:
+        """Return the protocol state after the command is complete if the
+        command did not error, or the protocol state prior to the the command
+        otherwise."""
+        res = self.raw_result()
+        if 'error' in res:
+            return self.init_state
+        elif 'result' in res:
+            return res['result']['state']
+        else:
+            raise ValueError("Invalid result type from JSON RPC")
+
     def _result_and_state_and_out_err(self) -> Tuple[Any, Any, str, str]:
         res = self.raw_result()
         if 'error' in res:
@@ -158,10 +170,6 @@ class Command(Interaction):
                     res['result']['stderr'])
         else:
             raise ValueError("Invalid result type from JSON RPC")
-
-    def state(self) -> Any:
-        """Return the protocol state after the command is complete."""
-        return self._result_and_state_and_out_err()[1]
 
     def result(self) -> Any:
         """Return the result of the command."""

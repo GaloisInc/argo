@@ -1,3 +1,8 @@
+# argo-client v0.0.7 (25 Aug 2021)
++ Change the behavior of the `Command` `state` method so that after a `Command`
+  raises an exception, subsequent interactions will not also raise the same
+  exception.
+
 # argo-client v0.0.6 (22 Jul 2021)
 + Add logging option to client. See `ServerProcess.logging(..)` and
   `ServerConnection.logging(..)`.

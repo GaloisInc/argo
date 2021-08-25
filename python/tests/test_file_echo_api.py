@@ -650,7 +650,8 @@ class InterruptTests(unittest.TestCase):
 
         # simple sleep for 3 seconds
         t1 = time.time()
-        uid1 = c1.send_query("sleep", {"microseconds": 3000000, "state": state1})
+        three_seconds = 3000000
+        uid1 = c1.send_query("sleep query", {"microseconds": three_seconds, "state": state1})
         actual1 = c1.wait_for_reply_to(uid1)
         t2 = time.time()
         self.assertIn('result', actual1)
@@ -673,7 +674,7 @@ class InterruptTests(unittest.TestCase):
         else:
             one_hundred_sec = 100000000
             t1 = time.time()
-            uid1 = c1.send_query("sleep", {"microseconds": one_hundred_sec, "state": state1})
+            uid1 = c1.send_query("sleep query", {"microseconds": one_hundred_sec, "state": state1})
 
         # check contents...?
         uid1 = assertShow(self, c1, state=state1, expected='Hello World!\n')
@@ -696,3 +697,21 @@ class InterruptTests(unittest.TestCase):
         # the state is not updated by the argo server backend).
         uid1 = assertShow(self, c1, state=state1, expected='Hello World!\n')
         uid2 = assertShow(self, c2, state=state2, expected='Hello World!\n')
+
+
+
+        # Ensure sleeping notification delays the subsequent request
+        # (i.e., requests can't interrupt or be interleaved with notification handling)
+        six_seconds = three_seconds * 2
+        newpid = os.fork()
+        if newpid == 0:
+            uid2 = c1.send_notification("sleep notification", {"microseconds": six_seconds})
+            time.sleep(2)
+            os._exit(0)
+        else:
+            t1 = time.time()
+            time.sleep(2)
+            uid2 = assertShow(self, c2, state=state2, expected='Hello World!\n')
+            t2 = time.time()
+            self.assertGreater(t2 - t1, 5.9)
+

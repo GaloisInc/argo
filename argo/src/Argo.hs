@@ -465,6 +465,9 @@ data App s =
   , appDocumentation :: [Doc.Block]
   , appActiveThreads :: !(MVar (IORef (Set ThreadId)))
   -- ^ Thread currently active processing requests or waiting to do so.
+  , appRequestLock :: MVar ()
+  -- ^ Lock used to pause new request handling when needed and prevent
+  -- multiple notifications from executing concurrently.
   }
 
 
@@ -481,6 +484,7 @@ mkApp ::
 mkApp name docs opts initAppState methods = do
   initialState <- newMVar =<< initServerState (appStateMutability opts) initAppState
   initThreadPool <- newMVar =<< newIORef Set.empty
+  reqLock <- newMVar ()
   pure $ App
     { serverState = initialState
     , appMethods = M.fromList [ (methodName m, m)
@@ -488,6 +492,7 @@ mkApp name docs opts initAppState methods = do
     , appName = name
     , appDocumentation = appDocs
     , appActiveThreads = initThreadPool
+    , appRequestLock = reqLock
     }
   where appDocs =
           docs ++
@@ -828,11 +833,21 @@ execNotification ::
 execNotification n nctx = do
   void $ tryOutErr hNoCapture IDNull (do runNotification n nctx; pure ((),()))
 
+-- | Execute an action while holding the lock for new requests (i.e.,
+-- delay new commands/queries until the action is done executing).
+withRequestLock :: App s -> IO a -> IO a
+withRequestLock app action = withMVar (appRequestLock app) (const action)
+
+-- | Wait on request lock (i.e., do not proceed until the lock is not acquired).
+waitOnRequestLock :: App s -> IO ()
+waitOnRequestLock app = withMVar (appRequestLock app) (const $ pure ())
+
 
 -- | Execute an IO action, during which the thread's @ThreadId@ is stored
 -- in the @appActiveThreads@ of the application.
 withActiveThread :: App s -> IO () -> IO ()
 withActiveThread app action = do
+  waitOnRequestLock app
   threadId <- myThreadId
   withMVar (appActiveThreads app) $ \threadsRef -> do
     modifyIORef' threadsRef $ Set.insert threadId
@@ -888,8 +903,10 @@ handleRequest opts respond app req = do
               result <- execQuery (q params) reqID qctx appState
               return $ addStateID stateID result
       respond (JSON.encode response)
-    Just (NotificationMethod m) ->
-      withoutRequestID $ withoutStateID $ do
+    Just (NotificationMethod m) -> do
+      -- Acquire the request lock so _new_ requests cannot be served
+      -- while the notification is executing.
+      withRequestLock app $ withoutRequestID $ withoutStateID $ do
         let nctx = NotificationContext
                     { ntfCtxMOptions = opts
                     , ntfCtxFileReader = B.readFile

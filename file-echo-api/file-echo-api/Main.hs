@@ -62,8 +62,9 @@ serverMethods =
   , Argo.query "implode" (Doc.Paragraph [Doc.Text "Throw an error immediately."]) FES.implodeCmd
   , Argo.query "show" (Doc.Paragraph [Doc.Text "Show a substring of the file."]) FES.showCmd
   , Argo.query "ignore" (Doc.Paragraph [Doc.Text "Ignore an ", Doc.Link (Doc.TypeDesc (typeRep (Proxy @FES.Ignorable))) "ignorable value", Doc.Text "."]) FES.ignoreCmd
-  , Argo.query "sleep" (Doc.Paragraph [Doc.Text "Sleep for a specified number of microseconds."]) FES.sleepQuery
+  , Argo.query "sleep query" (Doc.Paragraph [Doc.Text "Sleep for a specified number of microseconds."]) FES.sleepQuery
   , Argo.notification "destroy state" (Doc.Paragraph [Doc.Text "Destroy a state in the server."]) FES.destroyState
   , Argo.notification "destroy all states" (Doc.Paragraph [Doc.Text "Destroy all states in the server."]) FES.destroyAllStates
   , Argo.notification "interrupt" (Doc.Paragraph [Doc.Text "Interrupt all threads in the server."]) FES.interruptAllThreads
+  , Argo.notification "sleep notification" (Doc.Paragraph [Doc.Text "Sleep for a specified number of microseconds."]) FES.sleepNotification
   ]

@@ -170,6 +170,8 @@ data MethodOptions =
     -- ^ Where things are being logged _if_ a log file was specified.
     , optMaxOccupancy :: Natural
     -- ^ How many simultaneous states can be live at once?
+    , optEvictOldest :: Bool
+    -- ^ Should the server evict the oldest when full?
     }
 
 defaultMethodOptions :: MethodOptions
@@ -179,6 +181,7 @@ defaultMethodOptions =
     , optLogger = const (return ())
     , optLogFile = Nothing
     , optMaxOccupancy = 10
+    , optEvictOldest = True
     }
 
 data CommandContext =
@@ -871,10 +874,11 @@ handleRequest opts respond app req = do
     Just (CommandMethod m) -> withActiveThread app $ withRequestID $ \reqID -> do
       stateID <- getStateID req
       response <- withMVar theState $ \state -> do
-        when (stateID == initialStateID) $ do
-          stateCount <- statePoolCount state
-          when (stateCount >= (optMaxOccupancy opts)) $
-            throwIO serverAtCapacity
+        serverFull <- do cnt <- statePoolCount state
+                         pure $ cnt >= (optMaxOccupancy opts)
+                                && stateID == initialStateID
+        when (serverFull && not (optEvictOldest opts)) $ do
+          throwIO serverAtCapacity
         getAppState state stateID >>=
           \case
             Nothing -> throwIO $ unknownStateID stateID
@@ -885,6 +889,8 @@ handleRequest opts respond app req = do
                           }
               let cmd = commandImplementation m
               (newAppState, result) <- execCommand (cmd params) reqID cctx appState
+              when (serverFull && (optEvictOldest opts)) $
+                destroyLeastRecentState state
               sid' <- nextAppState state stateID newAppState
               return $ addStateID sid' result
       respond (JSON.encode response)

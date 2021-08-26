@@ -10,6 +10,7 @@ module Argo.ServerState (
   nextAppState,
   getAppState,
   destroyAppState,
+  destroyLeastRecentState,
   destroyAllAppStates,
   statePoolCount,
   -- * Server launch options
@@ -19,6 +20,7 @@ module Argo.ServerState (
   ) where
 
 import Control.Concurrent
+import Control.Monad (when)
 import Numeric.Natural ( Natural )
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
@@ -27,6 +29,8 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Aeson as JSON
 import Data.IORef
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import qualified Data.UUID.V4 as UUID
@@ -79,6 +83,9 @@ data InitialAppState appState
   = PureInitState appState
   | MutableInitState (() -> IO appState)
 
+-- | Index for ordering states, e.g., to know which is oldest.
+newtype Index = Index {indexNat :: Natural}
+  deriving (Eq, Show, Ord)
 
 -- | @ServerState@s contain cached application states and manage state
 -- identifiers. They are intended to be guarded by an 'MVar' to
@@ -87,10 +94,20 @@ data ServerState appState =
   ServerState
   { serverInitAppState :: !(InitialAppState appState)
   -- ^ State entered when server is started.
-  , serverStatePool :: !(IORef (HashMap UUID appState))
-  -- ^ Currently active states.
+  , serverStatePool :: !(IORef (HashMap UUID (Index, appState)))
+  -- ^ Currently active states and their order int.
+  , serverStateOrdering :: !(IORef (Set (Index, UUID)))
+  -- ^ Set used to provide constant-time oldest state calculation
+  -- (i.e., since pair ordering is calculated pointwise left-to-right).
+  , serverIndex :: !(IORef Index)
   }
 
+-- | Get the next index and increment the server's index.
+nextIndex :: ServerState appState -> IO Index
+nextIndex server = do
+  idx <- readIORef $ serverIndex server
+  writeIORef (serverIndex server) (Index $ (indexNat idx) + 1)
+  pure idx
 
 -- | Construct an initial server state, given a means of constructing
 -- the initial application state and a bound on the number of states 
@@ -104,10 +121,14 @@ initServerState mut mkInitState = do
     PureState -> PureInitState <$> (mkInitState B.readFile)
     MutableState -> pure $ MutableInitState $ \_ -> mkInitState $ B.readFile
   emptyStatePool <- newIORef HM.empty
+  emptyStateOrdering <- newIORef Set.empty
+  idx <- newIORef (Index 0)
   pure $
     ServerState
     { serverInitAppState = initState
     , serverStatePool = emptyStatePool
+    , serverStateOrdering = emptyStateOrdering
+    , serverIndex = idx
     }
 
 statePoolCount :: ServerState appState -> IO Natural
@@ -126,7 +147,9 @@ nextAppState ::
 nextAppState server prevStateID newAppState = do
   destroyAppState' server prevStateID
   uuid <- UUID.nextRandom
-  modifyIORef' (serverStatePool server) $ HM.insert uuid newAppState
+  idx <- nextIndex server
+  modifyIORef' (serverStatePool server) $ HM.insert uuid (idx, newAppState)
+  modifyIORef' (serverStateOrdering server) $ Set.insert (idx, uuid)
   return $ StateID uuid
 
 -- | Like @destroyAppState@ but ASSUMES the concerns regarding server state
@@ -137,7 +160,11 @@ destroyAppState' ::
   StateID ->
   IO ()
 destroyAppState' _server InitialStateID = pure ()
-destroyAppState' server (StateID uuid) = modifyIORef' (serverStatePool server) $ HM.delete uuid
+destroyAppState' server (StateID uuid) = do
+  HM.lookup uuid <$> readIORef (serverStatePool server) >>= \case
+    Nothing -> pure ()
+    Just (idx, _) -> modifyIORef' (serverStateOrdering server) $ Set.delete (idx, uuid)
+  modifyIORef' (serverStatePool server) $ HM.delete uuid
 
 -- | Destroy a non-initial app state so it is no longer available for requests.
 -- Explicitly requires the @MVar (ServerState s)@ so a notification---an action
@@ -151,6 +178,18 @@ destroyAppState ::
 destroyAppState serverMVar sid =
   withMVar serverMVar $ \server -> destroyAppState' server sid
 
+
+-- | Destroys the oldest state currently in cache. N.B., this function
+-- assumes the caller is maintaining invariants related to MVars
+-- and state shared between threads.
+destroyLeastRecentState ::
+  ServerState s ->
+  IO ()
+destroyLeastRecentState server = do
+  orderSet <- readIORef (serverStateOrdering server)
+  when (Set.size orderSet > 0) $ do
+    let (_, uuid) = Set.elemAt 0 orderSet
+    destroyAppState' server (StateID uuid)
 
 -- | Like @destroyAppState@ but destroys all non-initial app states.
 destroyAllAppStates ::
@@ -176,4 +215,4 @@ getAppState server InitialStateID =
     MutableInitState f -> Just <$> f ()
 getAppState server (StateID uuid) = do
   pool <- readIORef (serverStatePool server)
-  pure $ (HM.lookup uuid pool)
+  pure $ snd <$> (HM.lookup uuid pool)

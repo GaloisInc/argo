@@ -60,7 +60,7 @@ class MutableFileEchoTests(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
-            ["cabal", "run", "exe:mutable-file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080"],
+            ["cabal", "run", "exe:mutable-file-echo-api", "--verbose=0", "--", "--max-occupancy", "2", "http", "/", "--port", "8080"],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,

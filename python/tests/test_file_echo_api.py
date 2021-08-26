@@ -411,7 +411,7 @@ class TLSTests2(GenericFileEchoTests, unittest.TestCase):
     # process running the server
     p = None
     # port for the HTTP connection
-    port = "8084"
+    port = "8085"
 
     @classmethod
     def setUpClass(self):
@@ -459,7 +459,7 @@ class LoadOnLaunchTests(unittest.TestCase):
     # process running the server
     p = None
     # port for the HTTP connection
-    port = "8085"
+    port = "8086"
 
     @classmethod
     def setUpClass(self):
@@ -508,7 +508,7 @@ class Occupancy1Tests(unittest.TestCase):
     # process running the server
     p = None
     # port for the HTTP connection
-    port = "8086"
+    port = "8087"
 
     @classmethod
     def setUpClass(self):
@@ -554,7 +554,7 @@ class OccupancyNoEvictTests(unittest.TestCase):
     c = None
     # process running the server
     p = None
-    port = "8087"
+    port = "8088"
 
     @classmethod
     def setUpClass(self):
@@ -663,7 +663,7 @@ class InterruptTests(unittest.TestCase):
     c = None
     # process running the server
     p = None
-    port = "8088"
+    port = "8089"
 
     @classmethod
     def setUpClass(self):

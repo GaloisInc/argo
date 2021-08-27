@@ -11,6 +11,7 @@ import requests
 import socket
 import subprocess
 import signal
+import time
 import threading
 import sys
 from typing import Any, Dict, List, IO, Mapping, Optional, Union, TextIO
@@ -472,6 +473,11 @@ class ServerConnection:
                'params': params}
         msg_string = json.dumps(msg)
         self.process.send_one_message(msg_string, expecting_response = False)
+        # Since notifications require no response and can interrupt commands/queries,
+        # they can sometimes interrupt subsequent requests. We have tried to guarantee
+        # in-order servicing on the server. This short pause is an additional small
+        # safety measure to keep things running smoothly.
+        time.sleep(0.1)
 
     def wait_for_reply_to(self, request_id: int) -> Any:
         """Block until a reply is received for the given

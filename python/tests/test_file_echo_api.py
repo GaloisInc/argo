@@ -250,7 +250,7 @@ class DynamicSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
     @classmethod
     def setUpClass(self):
         self.c = argo.ServerConnection(
-                    argo.DynamicSocketProcess(f'cabal run exe:file-echo-api --verbose=0 -- socket --port 50006 --log {DynamicSocketProcessTests.server_log_file()}'))
+                    argo.DynamicSocketProcess(f'cabal run exe:file-echo-api --verbose=0 -- socket --log {DynamicSocketProcessTests.server_log_file()}'))
 
     # to be implemented by classes extending this one
     def get_connection(self):

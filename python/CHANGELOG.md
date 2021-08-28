@@ -1,3 +1,8 @@
+# argo-client v0.0.8 (27 Aug 2021)
++ Improvements related to notification/request interference
+  (i.e., when a single client sends a notification immediately
+   followed by a request).
+
 # argo-client v0.0.7 (25 Aug 2021)
 + Change the behavior of the `Command` `state` method so that after a `Command`
   raises an exception, subsequent interactions will not also raise the same

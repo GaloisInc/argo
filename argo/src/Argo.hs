@@ -870,6 +870,9 @@ handleRequest opts respond app req = do
     Just (CommandMethod m) -> withActiveThread app $ withRequestID $ \reqID -> do
       stateID <- getStateID req
       response <- withMVar theState $ \state -> do
+        -- N.B., the server is not "full" if `stateID == initialStateID`
+        -- because `stateID` will be evicted/destroyed once it is
+        -- used to create a new `stateID'`
         serverFull <- do cnt <- statePoolCount state
                          pure $ cnt >= (optMaxOccupancy opts)
                                 && stateID == initialStateID

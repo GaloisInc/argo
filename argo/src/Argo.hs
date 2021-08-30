@@ -906,8 +906,6 @@ handleRequest opts respond app req = do
               return $ addStateID stateID result
       respond (JSON.encode response)
     Just (NotificationMethod m) -> do
-      -- Acquire the request lock so _new_ requests cannot be served
-      -- while the notification is executing.
       withoutRequestID $ withoutStateID $ do
         let nctx = NotificationContext
                     { ntfCtxMOptions = opts

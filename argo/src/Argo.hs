@@ -950,7 +950,7 @@ handleRequest opts respond app req = do
       else act
 
 -- | Interrupts all threads currently executing requests in the server. N.B., if
--- the server state is immutable then cancelled threads will have no affect on
+-- the server state is immutable then cancelled threads will have no effect on
 -- the server state. If any parts of the server state are mutable, those parts
 -- will include mutations caused by the cancelled threads since there is no
 -- general purpose way to roll those back or omit them.
@@ -960,8 +960,10 @@ interruptAllAppThreads app = do
     activeThreads <- readIORef threadsRef
     mapM_ killThread activeThreads
     writeIORef threadsRef Set.empty
+    -- After killing the active threads, ensure none of them are taking up space
+    -- in the thread queue used to choose which thread goes next!
     withMVar (threadQueueMVar (appThreadQueue app)) $ \qRef -> do
-      modifyIORef' qRef (Seq.filter (flip Set.member activeThreads))
+      modifyIORef' qRef (Seq.filter (not . flip Set.member activeThreads))
 
 -- | Given an IO action, return an atomic-ified version of that same action,
 -- such that it closes over a lock. This is useful for synchronizing on output

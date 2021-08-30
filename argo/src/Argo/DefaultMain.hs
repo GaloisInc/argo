@@ -281,6 +281,10 @@ readOnlyOpt =
    (Opt.long "read-only" <>
     Opt.help "Do not generate any output files, for use on a read-only file system."))
 
+-- | Controls the maximum number of live states the server can maintain at once before
+-- either rejecting new connection's which create fresh states or evicting the oldest
+-- state. The default behavior is the latter (evict older states), but the former
+-- behavior can be selected via the `noEvictionOpt` option.
 maxOccupancyOpt :: Opt.Parser Natural
 maxOccupancyOpt =
   (Opt.option Opt.auto

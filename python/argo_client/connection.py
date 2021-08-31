@@ -11,7 +11,6 @@ import requests
 import socket
 import subprocess
 import signal
-import time
 import threading
 import sys
 from typing import Any, Dict, List, IO, Mapping, Optional, Union, TextIO

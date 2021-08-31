@@ -98,12 +98,14 @@ import Data.Foldable (for_)
 import Data.IORef
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
-import qualified Data.Map as M
+import qualified Data.Map as Map
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe (maybeToList)
 import Data.Scientific (Scientific)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import Data.Text ( Text )
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -117,6 +119,10 @@ import System.IO.Silently ( hCapture, hSilence )
 import System.Environment (lookupEnv)
 import Text.Read (readMaybe)
 import Web.Scotty
+    ( scottyApp,
+      scottyOpts,
+      ScottyM)
+import qualified Web.Scotty as Scotty
     ( addroute,
       body,
       finish,
@@ -124,13 +130,12 @@ import Web.Scotty
       literal,
       post,
       raw,
-      scotty,
-      scottyApp,
-      ScottyM,
+      Options(..),
       setHeader,
       status,
       text )
-import Network.Wai.Handler.Warp (Port, defaultSettings, setPort)
+
+import Network.Wai.Handler.Warp (Port, defaultSettings, setPort, setFork)
 import Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
 
 import qualified Argo.Doc as Doc
@@ -170,6 +175,8 @@ data MethodOptions =
     -- ^ Where things are being logged _if_ a log file was specified.
     , optMaxOccupancy :: Natural
     -- ^ How many simultaneous states can be live at once?
+    , optEvictOldest :: Bool
+    -- ^ Should the server evict the oldest when full?
     }
 
 defaultMethodOptions :: MethodOptions
@@ -179,6 +186,7 @@ defaultMethodOptions =
     , optLogger = const (return ())
     , optLogFile = Nothing
     , optMaxOccupancy = 10
+    , optEvictOldest = True
     }
 
 data CommandContext =
@@ -456,6 +464,8 @@ interruptAllThreads = Notification $ do
 
 --------------------------------------------------------------------------------
 
+newtype ThreadQueue = ThreadQueue {threadQueueMVar :: MVar (IORef (Seq ThreadId))}
+
 -- | An application is a state and a mapping from names to methods.
 data App s =
   App
@@ -465,6 +475,8 @@ data App s =
   , appDocumentation :: [Doc.Block]
   , appActiveThreads :: !(MVar (IORef (Set ThreadId)))
   -- ^ Thread currently active processing requests or waiting to do so.
+  , appThreadQueue :: ThreadQueue -- !(MVar (IORef (Natural, Set (Natural, ThreadId), Map ThreadId Natural)))
+  -- ^ Used to create an ordering on threads to ensure in-order servicing of requests.
   }
 
 
@@ -481,13 +493,15 @@ mkApp ::
 mkApp name docs opts initAppState methods = do
   initialState <- newMVar =<< initServerState (appStateMutability opts) initAppState
   initThreadPool <- newMVar =<< newIORef Set.empty
+  threadQueue <- ThreadQueue <$> (newMVar =<< newIORef Seq.empty)
   pure $ App
     { serverState = initialState
-    , appMethods = M.fromList [ (methodName m, m)
-                              | m <- methods]
+    , appMethods = Map.fromList [ (methodName m, m)
+                                | m <- methods]
     , appName = name
     , appDocumentation = appDocs
     , appActiveThreads = initThreadPool
+    , appThreadQueue = threadQueue
     }
   where appDocs =
           docs ++
@@ -836,11 +850,10 @@ withActiveThread app action = do
   threadId <- myThreadId
   withMVar (appActiveThreads app) $ \threadsRef -> do
     modifyIORef' threadsRef $ Set.insert threadId
+  removeFromThreadQueue threadId (appThreadQueue app)
   action
   withMVar (appActiveThreads app) $ \threadsRef -> do
     modifyIORef' threadsRef $ Set.delete threadId
-
-
 
 handleRequest ::
   forall s.
@@ -851,15 +864,20 @@ handleRequest ::
   Request ->
   IO ()
 handleRequest opts respond app req = do
-  case M.lookup method $ appMethods app of
-    Nothing -> throwIO $ (methodNotFound method) { errorID = reqID }
+  case Map.lookup method $ appMethods app of
+    Nothing -> do
+      throwIO $ (methodNotFound method) { errorID = reqID }
     Just (CommandMethod m) -> withActiveThread app $ withRequestID $ \reqID -> do
       stateID <- getStateID req
       response <- withMVar theState $ \state -> do
-        when (stateID == initialStateID) $ do
-          stateCount <- statePoolCount state
-          when (stateCount >= (optMaxOccupancy opts)) $
-            throwIO serverAtCapacity
+        -- N.B., the server is not "full" if `stateID == initialStateID`
+        -- because `stateID` will be evicted/destroyed once it is
+        -- used to create a new `stateID'`
+        serverFull <- do cnt <- statePoolCount state
+                         pure $ cnt >= (optMaxOccupancy opts)
+                                && stateID == initialStateID
+        when (serverFull && not (optEvictOldest opts)) $ do
+          throwIO serverAtCapacity
         getAppState state stateID >>=
           \case
             Nothing -> throwIO $ unknownStateID stateID
@@ -870,6 +888,8 @@ handleRequest opts respond app req = do
                           }
               let cmd = commandImplementation m
               (newAppState, result) <- execCommand (cmd params) reqID cctx appState
+              when (serverFull && (optEvictOldest opts)) $
+                destroyLeastRecentState state
               sid' <- nextAppState state stateID newAppState
               return $ addStateID sid' result
       respond (JSON.encode response)
@@ -888,7 +908,7 @@ handleRequest opts respond app req = do
               result <- execQuery (q params) reqID qctx appState
               return $ addStateID stateID result
       respond (JSON.encode response)
-    Just (NotificationMethod m) ->
+    Just (NotificationMethod m) -> do
       withoutRequestID $ withoutStateID $ do
         let nctx = NotificationContext
                     { ntfCtxMOptions = opts
@@ -899,6 +919,8 @@ handleRequest opts respond app req = do
                     }
             notify = notificationImplementation m
         execNotification (notify params) nctx
+      tid <- myThreadId
+      removeFromThreadQueue tid (appThreadQueue app)
   where
     method   = requestMethod req
     params   = JSON.Object $ requestParams req
@@ -928,15 +950,20 @@ handleRequest opts respond app req = do
       else act
 
 -- | Interrupts all threads currently executing requests in the server. N.B., if
--- the server state is immutable then cancelled threads will have no affect on
+-- the server state is immutable then cancelled threads will have no effect on
 -- the server state. If any parts of the server state are mutable, those parts
 -- will include mutations caused by the cancelled threads since there is no
 -- general purpose way to roll those back or omit them.
 interruptAllAppThreads :: App s -> IO ()
 interruptAllAppThreads app = do
   withMVar (appActiveThreads app) $ \threadsRef -> do
-    mapM_ killThread =<< readIORef threadsRef
+    activeThreads <- readIORef threadsRef
+    mapM_ killThread activeThreads
     writeIORef threadsRef Set.empty
+    -- After killing the active threads, ensure none of them are taking up space
+    -- in the thread queue used to choose which thread goes next!
+    withMVar (threadQueueMVar (appThreadQueue app)) $ \qRef -> do
+      modifyIORef' qRef (Seq.filter (not . flip Set.member activeThreads))
 
 -- | Given an IO action, return an atomic-ified version of that same action,
 -- such that it closes over a lock. This is useful for synchronizing on output
@@ -988,10 +1015,11 @@ serveHandles opts hIn hOut app = init >>= loop
       case input of
         [] -> return ()
         l:rest ->
-          do _ <- forkIO $
-               (case JSON.eitherDecode l of
-                  Left msg -> throw (parseError (T.pack msg))
-                  Right req -> handleRequest opts respond app req)
+          do threadQueueFork (appThreadQueue app) $ \unmask ->
+               (unmask
+                (case JSON.eitherDecode l of
+                   Left msg -> throw (parseError (T.pack msg))
+                   Right req -> handleRequest opts respond app req))
                `catch` reportError respond
                `catch` reportOtherException respond
              loop (respond, rest)
@@ -1040,10 +1068,11 @@ serveHandlesNS opts hIn hOut app =
 
     processLine respond line =
       do logRx opts $ decodeNetstring line
-         forkIO $
-           case JSON.eitherDecode (decodeNetstring line) of
-             Left  msg -> throwIO (parseError (T.pack msg))
-             Right req -> handleRequest opts respond app req
+         threadQueueFork (appThreadQueue app) $ \unmask ->
+           (unmask
+             (case JSON.eitherDecode (decodeNetstring line) of
+                Left  msg -> throwIO (parseError (T.pack msg))
+                Right req -> handleRequest opts respond app req))
            `catch` reportError respond
            `catch` reportOtherException respond
 
@@ -1081,35 +1110,94 @@ data HttpOptions =
     httpUseTLS :: Bool
   }
 
+
+removeFromThreadQueue ::
+  ThreadId ->
+  ThreadQueue ->
+  IO ()
+removeFromThreadQueue tid threadQueue =
+  withMVar (threadQueueMVar threadQueue) $ \qRef -> do
+    modifyIORef' qRef (Seq.filter (/= tid))
+
+-- | A fork which adds the forked thread to a queue to ensure they are served
+-- in a FIFO manner.
+threadQueueFork ::
+  ThreadQueue ->
+  ((forall a. IO a -> IO a) -> IO ()) ->
+  IO ()
+threadQueueFork tQueue io = withMVar (threadQueueMVar tQueue) $ \qRef -> do
+  tidMVar <- newEmptyMVar
+  tid <- forkFinally forkAction (forkHandler tidMVar)
+  modifyIORef' qRef (Seq.|> tid)
+  putMVar tidMVar tid
+  where forkAction = do
+          tid <- myThreadId
+          tids <- withMVar (threadQueueMVar tQueue) readIORef
+          case Seq.viewl tids of
+            Seq.EmptyL -> pure ()
+            next Seq.:< _ ->
+              if tid == next then do
+                (io interruptible)
+              else do
+                yield
+                forkAction
+        forkHandler tidMVar _ = do
+          tid <- readMVar tidMVar
+          removeFromThreadQueue tid tQueue
+
+
+
+-- | Essentially run `scotty` but use a custom forking strategy.
+scottyHttp ::
+  ThreadQueue ->
+  Port ->
+  ScottyM () ->
+  IO ()
+scottyHttp threadQueue port = scottyOpts (Scotty.Options verbosity cfg)
+  where verbosity = 0 {- verbosity: 0 = silent, 1(def) = startup banner -}
+        cfg = setPort port $
+              setFork (threadQueueFork threadQueue) defaultSettings
+
+
+
 -- | Essentially run `scotty` but using TLS.
 --   Derived from `scotty-tls` method `scottyTLS` with
 --   slight tweaks to suit our needs (and avoid a dependency
 --   for this one function).
-scottyTLS :: Port -> ScottyM () -> IO ()
-scottyTLS port = runTLS
-  (tlsSettings "server.crt" "server.key")
-  (setPort port defaultSettings) <=< scottyApp
+scottyHttps ::
+  ThreadQueue ->
+  Port ->
+  ScottyM () ->
+  IO ()
+scottyHttps threadQueue port scottyM = do
+  app <- scottyApp scottyM
+  runTLS (tlsSettings "server.crt" "server.key")
+         (setPort port $
+          setFork (threadQueueFork threadQueue) defaultSettings)
+         app
 
 -- | Serve the application over HTTP, according to the specification
 -- at https://www.simple-is-better.org/json-rpc/transport_http.html
 serveHttp ::
   HasCallStack =>
   MethodOptions     {- ^ options for how methods should execute -} ->
-  HttpOptions            {- ^ Request path -} ->
+  HttpOptions       {- ^ Request path -} ->
   App s             {- ^ JSON-RPC app -} ->
   Int               {- ^ port number  -} ->
   IO ()
 serveHttp opts httpOpts app port = do
   tls_enable <- lookupEnv tlsEnvVar
   let http_mode = case tls_enable of
-                    Just val | val `notElem` ["0", ""] -> scottyTLS
-                    _ -> if (httpUseTLS httpOpts) then scottyTLS else scotty
+                    Just val | val `notElem` ["0", ""] -> scottyHttps (appThreadQueue app)
+                    _ -> if (httpUseTLS httpOpts)
+                         then scottyHttps (appThreadQueue app)
+                         else scottyHttp (appThreadQueue app)
   http_mode port $
-    do post (literal (httpServerPath httpOpts)) $
+    do Scotty.post (Scotty.literal (httpServerPath httpOpts)) $
          do ensureTextJSON "Content-Type" unsupportedMediaType415
             ensureTextJSON "Accept" badRequest400
             validateLength
-            b <- body
+            b <- Scotty.body
             liftIO $ logRx opts b
             replyBodyContents <- liftIO $ newMVar mempty
             let respond str = modifyMVar replyBodyContents $ \old -> pure (old <> str, ())
@@ -1126,45 +1214,45 @@ serveHttp opts httpOpts app port = do
                                pure $ Left $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) }))
             case res of
               Left err ->
-                do setHeader "Content-Type" "application/json"
-                   status badRequest400
-                   raw $ err <> BS.singleton newline
+                do Scotty.setHeader "Content-Type" "application/json"
+                   Scotty.status badRequest400
+                   Scotty.raw $ err <> BS.singleton newline
               Right () ->
-                do setHeader "Content-Type" "application/json"
+                do Scotty.setHeader "Content-Type" "application/json"
                    body <- liftIO (readMVar replyBodyContents)
-                   status $ if body == ""
+                   Scotty.status $ if body == ""
                             then status204
                             else ok200
                    liftIO $ if body == ""
                             then logTx opts "'NO CONTENT'"
                             else logTx opts body
-                   raw body
+                   Scotty.raw body
        -- Return a more informative status code when the wrong HTTP method is used
        for_ [GET, HEAD, PUT, DELETE, TRACE, CONNECT, OPTIONS] $
          \method ->
-           addroute method (literal (httpServerPath httpOpts)) $
-           do status methodNotAllowed405
-              text "Please use POST requests to access the API."
+           Scotty.addroute method (Scotty.literal (httpServerPath httpOpts)) $
+           do Scotty.status methodNotAllowed405
+              Scotty.text "Please use POST requests to access the API."
 
   where
     newline = 0x0a -- ASCII/UTF8
     validateLength =
-      do len <- header "Content-Length"
+      do len <- Scotty.header "Content-Length"
          case len >>= (readMaybe . TL.unpack) of
-           Nothing -> do status lengthRequired411
-                         text "Missing or invalid \"Content-Length\" header."
-                         finish
+           Nothing -> do Scotty.status lengthRequired411
+                         Scotty.text "Missing or invalid \"Content-Length\" header."
+                         Scotty.finish
            Just l ->
-             do b <- body
+             do b <- Scotty.body
                 if BS.length b == l
                   then pure ()
-                  else do status badRequest400
-                          text "Mismatched length"
-                          finish
+                  else do Scotty.status badRequest400
+                          Scotty.text "Mismatched length"
+                          Scotty.finish
     ensureTextJSON h stat =
-      do contentType <- header h
+      do contentType <- Scotty.header h
          if contentType == Just "application/json"
            then pure ()
-           else do status stat
-                   text $ "The header \"" <> h <> "\" should be \"application/json\"."
-                   finish
+           else do Scotty.status stat
+                   Scotty.text $ "The header \"" <> h <> "\" should be \"application/json\"."
+                   Scotty.finish

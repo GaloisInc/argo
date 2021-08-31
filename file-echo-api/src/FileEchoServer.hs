@@ -293,14 +293,14 @@ destroyAllStates _ = Argo.destroyAllStates
 ------------------------------------------------------------------------
 -- Sleep Query
 
-newtype SleepParams = SleepParams Int
+newtype SleepQueryParams = SleepQueryParams Int
 
-instance JSON.FromJSON SleepParams where
+instance JSON.FromJSON SleepQueryParams where
   parseJSON =
-    JSON.withObject "params for \"sleep\"" $
-    \o -> SleepParams <$> o .: "microseconds"
+    JSON.withObject "params for \"sleep query\"" $
+    \o -> SleepQueryParams <$> o .: "microseconds"
 
-instance Doc.DescribedMethod SleepParams JSON.Value where
+instance Doc.DescribedMethod SleepQueryParams JSON.Value where
   parameterFieldDescription =
     [("microseconds",
       Doc.Paragraph [Doc.Text "The duration to sleep in microseconds."])]
@@ -310,14 +310,30 @@ instance Doc.DescribedMethod SleepParams JSON.Value where
       Doc.Paragraph [ Doc.Text "Duration in seconds sleep lasted."])
     ]
 
-sleepQuery :: SleepParams -> Argo.Query ServerState JSON.Value
-sleepQuery (SleepParams ms) = liftIO $ do
+sleepQuery :: SleepQueryParams -> Argo.Query ServerState JSON.Value
+sleepQuery (SleepQueryParams ms) = liftIO $ do
   t1 <- round `fmap` getPOSIXTime
   threadDelay ms
   t2 <- round `fmap` getPOSIXTime
   pure (JSON.object [ "value" .= (JSON.Number (scientific (t2 - t1) 0))])
 
+------------------------------------------------------------------------
+-- Sleep Notification
 
+newtype SleepNotificationParams = SleepNotificationParams Int
+
+instance JSON.FromJSON SleepNotificationParams where
+  parseJSON =
+    JSON.withObject "params for \"sleep notification\"" $
+    \o -> SleepNotificationParams <$> o .: "microseconds"
+
+instance Doc.DescribedMethod SleepNotificationParams () where
+  parameterFieldDescription =
+    [("microseconds",
+      Doc.Paragraph [Doc.Text "The duration to sleep in microseconds."])]
+
+sleepNotification :: SleepNotificationParams -> Argo.Notification ()
+sleepNotification (SleepNotificationParams ms) = liftIO $ threadDelay ms
 
 ------------------------------------------------------------------------
 -- Interrupt All Threads Command

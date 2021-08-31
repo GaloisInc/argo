@@ -60,7 +60,7 @@ class MutableFileEchoTests(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
-            ["cabal", "run", "exe:mutable-file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080"],
+            ["cabal", "run", "exe:mutable-file-echo-api", "--verbose=0", "--", "--max-occupancy", "2", "http", "/", "--port", "8080"],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -190,7 +190,7 @@ class InterruptTests(unittest.TestCase):
 
         # simple sleep for 3 seconds
         t1 = time.time()
-        uid1 = c1.send_query("sleep", {"microseconds": 3000000, "state": state1})
+        uid1 = c1.send_query("sleep query", {"microseconds": 3000000, "state": state1})
         actual1 = c1.wait_for_reply_to(uid1)
         t2 = time.time()
         self.assertIn('result', actual1)
@@ -210,7 +210,7 @@ class InterruptTests(unittest.TestCase):
             # parent tries to sleep
             one_hundred_sec = 100000000
             t1 = time.time()
-            uid1 = c1.send_query("sleep", {"microseconds": one_hundred_sec, "state": state1})
+            uid1 = c1.send_query("sleep query", {"microseconds": one_hundred_sec, "state": state1})
             t2 = time.time()
         else:
             # child does not allow sleep

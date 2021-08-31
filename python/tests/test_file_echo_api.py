@@ -202,11 +202,12 @@ class RemoteSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
     c = None
     # process running the server
     p = None
+    port = 50005
 
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
-            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "socket", "--port", "50005"
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "socket", "--port", str(self.port)
             , "--log", RemoteSocketProcessTests.server_log_file()],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
@@ -249,7 +250,7 @@ class DynamicSocketProcessTests(GenericFileEchoTests, unittest.TestCase):
     @classmethod
     def setUpClass(self):
         self.c = argo.ServerConnection(
-                    argo.DynamicSocketProcess(f'cabal run exe:file-echo-api --verbose=0 -- socket --port 50006 --log {DynamicSocketProcessTests.server_log_file()}'))
+                    argo.DynamicSocketProcess(f'cabal run exe:file-echo-api --verbose=0 -- socket --log {DynamicSocketProcessTests.server_log_file()}'))
 
     # to be implemented by classes extending this one
     def get_connection(self):
@@ -287,11 +288,13 @@ class HttpTests(GenericFileEchoTests, unittest.TestCase):
     c = None
     # process running the server
     p = None
+    # port for the HTTP connection
+    port = "8080"
 
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
-            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8080", "--log", HttpTests.server_log_file()],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", self.port, "--log", HttpTests.server_log_file()],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -306,7 +309,7 @@ class HttpTests(GenericFileEchoTests, unittest.TestCase):
         assert(poll_result is None)
 
         self.p = p
-        self.c = argo.ServerConnection(argo.HttpProcess('http://localhost:8080/'))
+        self.c = argo.ServerConnection(argo.HttpProcess(f'http://localhost:{self.port}/'))
 
 
     @classmethod
@@ -328,27 +331,27 @@ class HttpTests(GenericFileEchoTests, unittest.TestCase):
         ### Additional tests for the HTTP server ###
 
         # Ensure that only POST is allowed to the designated URL
-        get_response = requests.get("http://localhost:8080/")
+        get_response = requests.get(f'http://localhost:{self.port}/')
         self.assertEqual(get_response.status_code, 405)
 
         # Ensure that other URLs give 404
-        get_response = requests.get("http://localhost:8080/some/other/resource")
+        get_response = requests.get(f"http://localhost:{self.port}/some/other/resource")
         self.assertEqual(get_response.status_code, 404)
 
-        post_response = requests.post("http://localhost:8080/some/other/resource")
+        post_response = requests.post(f"http://localhost:{self.port}/some/other/resource")
         self.assertEqual(post_response.status_code, 404)
 
         # Wrong content-type
-        post_response = requests.post("http://localhost:8080/")
+        post_response = requests.post(f"http://localhost:{self.port}/")
         self.assertEqual(post_response.status_code, 415)
 
         good_headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
 
         # Parse error for request body
-        post_response = requests.post("http://localhost:8080/", headers=good_headers)
+        post_response = requests.post(f"http://localhost:{self.port}/", headers=good_headers)
         self.assertEqual(post_response.status_code, 400)
 
-        post_response = requests.request('POST', "http://localhost:8080/", headers=good_headers, data='{"id":0, "jsonrpc": "2.0", "method": "clear", "params":{"state": null}}')
+        post_response = requests.request('POST', f"http://localhost:{self.port}/", headers=good_headers, data='{"id":0, "jsonrpc": "2.0", "method": "clear", "params":{"state": null}}')
         self.assertEqual(post_response.status_code, 200)
 
 
@@ -357,6 +360,8 @@ class TLSTests1(GenericFileEchoTests, unittest.TestCase):
     c = None
     # process running the server
     p = None
+    # port for the HTTP connection
+    port = "8083"
 
     @classmethod
     def setUpClass(self):
@@ -366,7 +371,7 @@ class TLSTests1(GenericFileEchoTests, unittest.TestCase):
         server_env = os.environ.copy()
         server_env["TLS_ENABLE"] = "1"
         p = subprocess.Popen(
-            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", "8083", "--log", TLSTests1.server_log_file()],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port", self.port, "--log", TLSTests1.server_log_file()],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -405,6 +410,8 @@ class TLSTests2(GenericFileEchoTests, unittest.TestCase):
     c = None
     # process running the server
     p = None
+    # port for the HTTP connection
+    port = "8085"
 
     @classmethod
     def setUpClass(self):
@@ -413,7 +420,7 @@ class TLSTests2(GenericFileEchoTests, unittest.TestCase):
         os.system('openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt')
         p = subprocess.Popen(
             ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/"
-            , "--port", "8083", "--tls", "--log", TLSTests2.server_log_file()],
+            , "--port", self.port, "--tls", "--log", TLSTests2.server_log_file()],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -428,7 +435,7 @@ class TLSTests2(GenericFileEchoTests, unittest.TestCase):
         assert(poll_result is None)
 
         self.p = p
-        self.c = argo.ServerConnection(argo.HttpProcess('https://localhost:8083', verify=False))
+        self.c = argo.ServerConnection(argo.HttpProcess(f'https://localhost:{self.port}', verify=False))
 
 
     @classmethod
@@ -451,12 +458,14 @@ class LoadOnLaunchTests(unittest.TestCase):
     c = None
     # process running the server
     p = None
+    # port for the HTTP connection
+    port = "8086"
 
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
             ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "http", "/", "--port"
-            , "8081", "--file", str(hello_file), "--log", LoadOnLaunchTests.server_log_file()],
+            , self.port, "--file", str(hello_file), "--log", LoadOnLaunchTests.server_log_file()],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -471,7 +480,7 @@ class LoadOnLaunchTests(unittest.TestCase):
         assert(poll_result is None)
 
         self.p = p
-        self.c = argo.ServerConnection(argo.HttpProcess('http://localhost:8081/'))
+        self.c = argo.ServerConnection(argo.HttpProcess(f'http://localhost:{self.port}/'))
 
 
     @classmethod
@@ -492,17 +501,20 @@ class LoadOnLaunchTests(unittest.TestCase):
     def server_log_file():
         return "load-on-launch-server.log"
 
-class OccupancyTests(unittest.TestCase):
+
+class Occupancy1Tests(unittest.TestCase):
     # Connection to server
     c = None
     # process running the server
     p = None
+    # port for the HTTP connection
+    port = "8087"
 
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
             ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "--max-occupancy"
-            , "2", "http", "/", "--port", "8082", "--file", str(hello_file)],
+            , "1", "http", "/", "--port", self.port, "--file", str(hello_file)],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -525,8 +537,54 @@ class OccupancyTests(unittest.TestCase):
 
     # to be implemented by classes extending this one
     def test_occupancy_and_state_destruction(self):
-        c1 = argo.ServerConnection(argo.HttpProcess('http://localhost:8082/'))
-        c2 = argo.ServerConnection(argo.HttpProcess('http://localhost:8082/'))
+        for _ in range (0,100):
+            c1 = argo.ServerConnection(argo.HttpProcess(f'http://localhost:{self.port}/'))
+            # load a file
+            hello_file = file_dir.joinpath('hello.txt')
+            self.assertTrue(False if not hello_file.is_file() else True)
+            uid1 = c1.send_command("load", {"file path": str(hello_file), "state": None})
+            actual1 = c1.wait_for_reply_to(uid1)
+            self.assertIn('result', actual1)
+            self.assertIn('state', actual1['result'])
+            state1 = actual1['result']['state']
+
+
+class OccupancyNoEvictTests(unittest.TestCase):
+    # Connection to server
+    c = None
+    # process running the server
+    p = None
+    port = "8088"
+
+    @classmethod
+    def setUpClass(self):
+        p = subprocess.Popen(
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "--max-occupancy"
+            , "2", "--no-evict", "http", "/", "--port", self.port, "--file", str(hello_file)],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            start_new_session=True)
+        time.sleep(3)
+        assert(p is not None)
+        poll_result = p.poll()
+        if poll_result is not None:
+            print(poll_result)
+            print(p.stdout.read())
+            print(p.stderr.read())
+        assert(poll_result is None)
+
+        self.p = p
+
+    @classmethod
+    def tearDownClass(self):
+        os.killpg(os.getpgid(self.p.pid), signal.SIGKILL)
+        super().tearDownClass()
+
+    # to be implemented by classes extending this one
+    def test_occupancy_and_state_destruction(self):
+        c1 = argo.ServerConnection(argo.HttpProcess(f'http://localhost:{self.port}/'))
+        c2 = argo.ServerConnection(argo.HttpProcess(f'http://localhost:{self.port}/'))
         # load a file
         hello_file = file_dir.joinpath('hello.txt')
         self.assertTrue(False if not hello_file.is_file() else True)
@@ -542,7 +600,7 @@ class OccupancyTests(unittest.TestCase):
         state2 = actual2['result']['state']
 
         # check the next (3rd) connection is rejected
-        c3 = argo.ServerConnection(argo.HttpProcess('http://localhost:8082/'))
+        c3 = argo.ServerConnection(argo.HttpProcess(f'http://localhost:{self.port}/'))
         uid3 = c3.send_command("load", {"file path": str(hello_file), "state": None})
         actual3 = c3.wait_for_reply_to(uid3)
         expected = {'error':{'data':{'stdout':None,'stderr':None},'code':22,'message':'Server at max capacity'},'jsonrpc':'2.0','id':uid3}
@@ -591,7 +649,7 @@ class OccupancyTests(unittest.TestCase):
         state2 = actual2['result']['state']
 
         # check again that the next (3rd) connection is rejected
-        c3 = argo.ServerConnection(argo.HttpProcess('http://localhost:8082/'))
+        c3 = argo.ServerConnection(argo.HttpProcess(f'http://localhost:{self.port}/'))
         uid3 = c3.send_command("load", {"file path": str(hello_file), "state": None})
         actual3 = c3.wait_for_reply_to(uid3)
         expected = {'error':{'data':{'stdout':None,'stderr':None},'code':22,'message':'Server at max capacity'},'jsonrpc':'2.0','id':uid3}
@@ -605,11 +663,12 @@ class InterruptTests(unittest.TestCase):
     c = None
     # process running the server
     p = None
+    port = "8089"
 
     @classmethod
     def setUpClass(self):
         p = subprocess.Popen(
-            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "--max-occupancy", "2", "http", "/", "--port", "8083", "--file", str(hello_file)],
+            ["cabal", "run", "exe:file-echo-api", "--verbose=0", "--", "--max-occupancy", "2", "http", "/", "--port", self.port, "--file", str(hello_file)],
             stdout=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -632,8 +691,8 @@ class InterruptTests(unittest.TestCase):
 
     # to be implemented by classes extending this one
     def test_interrupts(self):
-        c1 = argo.ServerConnection(argo.HttpProcess('http://localhost:8083/'))
-        c2 = argo.ServerConnection(argo.HttpProcess('http://localhost:8083/'))
+        c1 = argo.ServerConnection(argo.HttpProcess(f'http://localhost:{self.port}/'))
+        c2 = argo.ServerConnection(argo.HttpProcess(f'http://localhost:{self.port}/'))
         # load a file
         hello_file = file_dir.joinpath('hello.txt')
         self.assertTrue(False if not hello_file.is_file() else True)
@@ -650,7 +709,8 @@ class InterruptTests(unittest.TestCase):
 
         # simple sleep for 3 seconds
         t1 = time.time()
-        uid1 = c1.send_query("sleep", {"microseconds": 3000000, "state": state1})
+        three_seconds = 3000000
+        uid1 = c1.send_query("sleep query", {"microseconds": three_seconds, "state": state1})
         actual1 = c1.wait_for_reply_to(uid1)
         t2 = time.time()
         self.assertIn('result', actual1)
@@ -673,7 +733,7 @@ class InterruptTests(unittest.TestCase):
         else:
             one_hundred_sec = 100000000
             t1 = time.time()
-            uid1 = c1.send_query("sleep", {"microseconds": one_hundred_sec, "state": state1})
+            uid1 = c1.send_query("sleep query", {"microseconds": one_hundred_sec, "state": state1})
 
         # check contents...?
         uid1 = assertShow(self, c1, state=state1, expected='Hello World!\n')
@@ -696,3 +756,21 @@ class InterruptTests(unittest.TestCase):
         # the state is not updated by the argo server backend).
         uid1 = assertShow(self, c1, state=state1, expected='Hello World!\n')
         uid2 = assertShow(self, c2, state=state2, expected='Hello World!\n')
+
+
+
+        # Ensure sleeping notification delays the subsequent request
+        # (i.e., requests can't interrupt or be interleaved with notification handling)
+        six_seconds = three_seconds * 2
+        newpid = os.fork()
+        if newpid == 0:
+            uid2 = c1.send_notification("sleep notification", {"microseconds": six_seconds})
+            time.sleep(2)
+            os._exit(0)
+        else:
+            t1 = time.time()
+            time.sleep(2)
+            uid2 = assertShow(self, c2, state=state2, expected='Hello World!\n')
+            t2 = time.time()
+            self.assertGreater(t2 - t1, 5.9)
+

@@ -135,9 +135,10 @@ mkGlobalOptions ::
   Maybe LogOption ->
   FileSystemMode ->
   Natural {- ^ max occupancy -} ->
+  Bool {- ^ disable auto eviction -} ->
   ProgramMode stdioOpts socketOpts httpOpts docOpts ->
   GlobalOptions stdioOpts socketOpts httpOpts docOpts
-mkGlobalOptions logging fsMode occupancy progMode =
+mkGlobalOptions logging fsMode occupancy disableAutoEviction progMode =
   GlobalOptions
   { methodOpts = defaultMethodOptions {
                    optFileSystemMode = fsMode
@@ -151,6 +152,7 @@ mkGlobalOptions logging fsMode occupancy progMode =
                        Just (FileLog path) -> Just path
                        _ -> Nothing
                  , optMaxOccupancy = occupancy
+                 , optEvictOldest = not disableAutoEviction
                  }
   , programMode = progMode
   }
@@ -218,6 +220,7 @@ allOptions stdioOpts socketOpts httpOpts docOpts desc =
   logOpt <*>
   readOnlyOpt <*>
   maxOccupancyOpt <*>
+  noEvictionOpt <*>
   (mode stdioOpts socketOpts httpOpts docOpts desc <**> Opt.helper)
 
 options ::
@@ -278,19 +281,29 @@ readOnlyOpt =
    (Opt.long "read-only" <>
     Opt.help "Do not generate any output files, for use on a read-only file system."))
 
+-- | Controls the maximum number of live states the server can maintain at once before
+-- either rejecting new connection's which create fresh states or evicting the oldest
+-- state. The default behavior is the latter (evict older states), but the former
+-- behavior can be selected via the `noEvictionOpt` option.
 maxOccupancyOpt :: Opt.Parser Natural
 maxOccupancyOpt =
   (Opt.option Opt.auto
    (Opt.long "max-occupancy" <>
     Opt.help "Maximum number of active sessions allowed at once." <>
     Opt.showDefault <>
-    Opt.value 10))
+    Opt.value 1))
 
 tlsOpt :: Opt.Parser Bool
 tlsOpt =
   (Opt.switch
    (Opt.long "tls" <>
     (Opt.help $ "Enable TLS mode for the connection (i.e., HTTPS), which can also be enabled via environment variable " ++ tlsEnvVar ++ ".")))
+
+noEvictionOpt :: Opt.Parser Bool
+noEvictionOpt =
+  (Opt.switch
+   (Opt.long "no-evict" <>
+    (Opt.help $ "Disable automatic eviction of oldest state when server reaches max occupancy.")))
 
 selectHost :: Maybe HostName -> HostName
 selectHost (Just name) = name

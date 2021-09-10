@@ -1,3 +1,8 @@
+# argo-client v0.0.8 (10 Sep 2021)
++ Add a `timeout` keyword to `argo_client.connection`'s
+  `send_command` and `send_query` to support user-specified
+  maximum durations for individual requests.
+
 # argo-client v0.0.7 (25 Aug 2021)
 + Change the behavior of the `Command` `state` method so that after a `Command`
   raises an exception, subsequent interactions will not also raise the same

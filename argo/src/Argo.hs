@@ -110,6 +110,7 @@ import Data.Text ( Text )
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
+import Data.Word (Word8)
 import GHC.Stack
 import Numeric.Natural ( Natural )
 import Network.HTTP.Types.Method (StdMethod(..))
@@ -145,6 +146,15 @@ import Argo.Netstring
 -- | We only support JSON-RPC 2.0.
 jsonRPCVersion :: Text
 jsonRPCVersion = "2.0"
+
+
+-- | Server thread exceptions with specific meaning to report to the user.
+data ArgoThreadException
+  = ArgoThreadTimedOut
+  | ArgoThreadInterrupted
+  deriving Show
+
+instance Exception ArgoThreadException
 
 --------------------------------------------------------------------------------
 
@@ -657,6 +667,28 @@ serverAtCapacity =
                    , errorStdOut = Nothing
                    , errorStdErr = Nothing
                    }
+-- ArgoThreadException
+-- | The request was terminated
+threadTimedOut :: JSONRPCException
+threadTimedOut =
+  JSONRPCException { errorCode = 23
+                   , message   = "Request timed out"
+                   , errorData = Nothing
+                   , errorID   = Nothing
+                   , errorStdOut = Nothing
+                   , errorStdErr = Nothing
+                   }
+
+-- | The request was terminated
+threadInterrupted :: JSONRPCException
+threadInterrupted =
+  JSONRPCException { errorCode = 24
+                   , message   = "Request interrupted"
+                   , errorData = Nothing
+                   , errorID   = Nothing
+                   , errorStdOut = Nothing
+                   , errorStdErr = Nothing
+                   }
 
 -- | Construct a 'JSONRPCException' from an error code, error text, and perhaps
 -- some data item to attach
@@ -704,6 +736,8 @@ data Request =
           -- and the field is Nothing.
           , requestParams :: !JSON.Object
           -- ^ The parameters to the method, if any exist
+          , requestTimeout :: !(Maybe Int)
+          -- ^ Timeout duration in microseconds.
           }
   deriving (Show)
 
@@ -720,7 +754,7 @@ instance JSON.FromJSON Request where
     JSON.withObject ("JSON-RPC " <> T.unpack jsonRPCVersion <> " request") $
     \o ->
       (o .: "jsonrpc" `suchThat` (== jsonRPCVersion)) *>
-      (Request <$> o .: "method" <*> o .:! "id" <*> o .: "params")
+      (Request <$> o .: "method" <*> o .:! "id" <*> o .: "params" <*> o .:! "timeout")
 
 instance JSON.ToJSON Request where
   toJSON req =
@@ -728,13 +762,15 @@ instance JSON.ToJSON Request where
       [ "jsonrpc" .= jsonRPCVersion
       , "method"  .= requestMethod req
       , "id"      .= requestID     req
-      , "params"  .= requestParams req ]
+      , "params"  .= requestParams req
+      , "timeout" .= requestTimeout req ]
   toEncoding req =
     JSON.pairs $
-      "jsonrpc" .= jsonRPCVersion         <>
+      "jsonrpc" .= jsonRPCVersion    <>
       "method"  .= requestMethod req <>
       "id"      .= requestID     req <>
-      "params"  .= requestParams req
+      "params"  .= requestParams req <>
+      "timeout" .= requestTimeout req
 
 -- | A response to a command or query.
 --
@@ -796,6 +832,15 @@ methodCapture opts
    | optFileSystemMode opts == ReadOnly = hNoCapture
    | otherwise = hCaptureWrap
 
+-- | Result from a server request, either the new app state from the request and
+-- its result, or a particular kind of exception.
+data RequestResult state res
+  = ReqResult state res
+  | ReqJSONExn JSONRPCException
+  | ReqThreadExn ArgoThreadException
+  | ReqSomeExn SomeException
+
+
 tryOutErr ::
   (forall a. [Handle] -> IO a -> IO (Maybe String, a)) ->
   RequestID ->
@@ -804,13 +849,19 @@ tryOutErr ::
 tryOutErr capturer reqID action = do
   (err, (out, res)) <-
      capturer [stderr] . capturer [stdout] $
-     try @SomeException (try @JSONRPCException action)
+     (do (s, a) <- action; pure $ ReqResult s a)
+      `catch` (pure . ReqJSONExn)
+      `catch` (pure . ReqThreadExn)
+      `catch` (pure . ReqSomeExn)
   tryPutOutErr out err
   case res of
-    Left e -> let message = Just (JSON.String (T.pack (displayException e)))
-                in throwIO $ internalError { errorData = message }
-    Right (Left e) -> throwIO $ e { errorStdOut = out, errorStdErr = err }
-    Right (Right (st, answer)) -> pure (st, Response reqID answer out err ())
+    ReqSomeExn e -> let message = Just (JSON.String (T.pack (displayException e)))
+                    in throwIO $ internalError { errorData = message }
+    ReqJSONExn e -> throwIO $ e { errorStdOut = out, errorStdErr = err }
+    ReqThreadExn e -> case e of
+                      ArgoThreadTimedOut    -> throwIO $ threadTimedOut { errorID   = Just reqID}
+                      ArgoThreadInterrupted -> throwIO $ threadInterrupted { errorID   = Just reqID}
+    ReqResult st answer -> pure (st, Response reqID answer out err ())
   where
     tryPutOutErr :: Maybe String -> Maybe String -> IO ()
     tryPutOutErr out err = do
@@ -845,15 +896,42 @@ execNotification n nctx = do
 
 -- | Execute an IO action, during which the thread's @ThreadId@ is stored
 -- in the @appActiveThreads@ of the application.
-withActiveThread :: App s -> IO () -> IO ()
-withActiveThread app action = do
+withActiveThread ::
+  App s ->
+  (Maybe Int) {- Optional timeout in microseconds. -} ->
+  IO () ->
+  IO ()
+withActiveThread app mTimeout action = do
   threadId <- myThreadId
   withMVar (appActiveThreads app) $ \threadsRef -> do
     modifyIORef' threadsRef $ Set.insert threadId
   removeFromThreadQueue threadId (appThreadQueue app)
+  maybeForkTimeoutThread app threadId mTimeout
   action
   withMVar (appActiveThreads app) $ \threadsRef -> do
     modifyIORef' threadsRef $ Set.delete threadId
+
+
+-- | If the request has a timeout specified, fork a "watchdog thread" which
+-- sleeps for that duration and then kills the parent thread if it is still active
+maybeForkTimeoutThread ::
+  App s ->
+  ThreadId ->
+  (Maybe Int) {- Optional timeout in microseconds. -} ->
+  IO ()
+maybeForkTimeoutThread app tid mTimeout = do
+  case mTimeout of
+    Nothing -> pure ()
+    Just timeLimit | timeLimit <= 0 -> pure ()
+                   | otherwise -> do
+      void $ forkIO $ do
+        threadDelay timeLimit
+        withMVar (appActiveThreads app) $ \threadsRef -> do
+          activeThreads <- readIORef threadsRef
+          when (Set.member tid activeThreads) $ do
+            throwTo tid ArgoThreadTimedOut
+            writeIORef threadsRef (Set.delete tid activeThreads)
+
 
 handleRequest ::
   forall s.
@@ -867,7 +945,7 @@ handleRequest opts respond app req = do
   case Map.lookup method $ appMethods app of
     Nothing -> do
       throwIO $ (methodNotFound method) { errorID = reqID }
-    Just (CommandMethod m) -> withActiveThread app $ withRequestID $ \reqID -> do
+    Just (CommandMethod m) -> withActiveThread app (requestTimeout req) $ withRequestID $ \reqID -> do
       stateID <- getStateID req
       response <- withMVar theState $ \state -> do
         -- N.B., the server is not "full" if `stateID == initialStateID`
@@ -893,7 +971,7 @@ handleRequest opts respond app req = do
               sid' <- nextAppState state stateID newAppState
               return $ addStateID sid' result
       respond (JSON.encode response)
-    Just (QueryMethod m) -> withActiveThread app $ withRequestID $ \reqID -> do
+    Just (QueryMethod m) -> withActiveThread app (requestTimeout req) $ withRequestID $ \reqID -> do
       stateID <- getStateID req
       response <- withMVar theState $ \state -> do
         getAppState state stateID >>=
@@ -958,7 +1036,7 @@ interruptAllAppThreads :: App s -> IO ()
 interruptAllAppThreads app = do
   withMVar (appActiveThreads app) $ \threadsRef -> do
     activeThreads <- readIORef threadsRef
-    mapM_ killThread activeThreads
+    mapM_ (flip throwTo ArgoThreadInterrupted) activeThreads
     writeIORef threadsRef Set.empty
     -- After killing the active threads, ensure none of them are taking up space
     -- in the thread queue used to choose which thread goes next!
@@ -1005,7 +1083,6 @@ serveHandles ::
   IO ()
 serveHandles opts hIn hOut app = init >>= loop
   where
-    newline = 0x0a -- ASCII/UTF8
 
     init = do respond <- synchronized (BS.hPutStr hOut)
               input <- (BS.split newline <$> BS.hGetContents hIn)
@@ -1019,19 +1096,32 @@ serveHandles opts hIn hOut app = init >>= loop
                (unmask
                 (case JSON.eitherDecode l of
                    Left msg -> throw (parseError (T.pack msg))
-                   Right req -> handleRequest opts respond app req))
+                   Right req -> handleRequest opts respond app req
+                                `catch` reportArgoThreadError respond req))
                `catch` reportError respond
                `catch` reportOtherException respond
              loop (respond, rest)
 
-    reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
-    reportError out exn =
-      out (JSON.encode exn <> BS.singleton newline)
+newline :: Word8
+newline = 0x0a
 
-    reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
-    reportOtherException out exn =
-      out $
-        JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
+reportError :: (BS.ByteString -> IO ()) -> JSONRPCException -> IO ()
+reportError out exn =
+  out $ JSON.encode exn
+        <> BS.singleton newline
+
+reportArgoThreadError :: (BS.ByteString -> IO ()) -> Request -> ArgoThreadException -> IO ()
+reportArgoThreadError out req ArgoThreadTimedOut =
+  out $ JSON.encode
+  (threadTimedOut { errorID   = requestID req
+                  , errorData = JSON.Number . fromIntegral <$> (requestTimeout req)})
+reportArgoThreadError out req ArgoThreadInterrupted =
+    out $ JSON.encode (threadInterrupted { errorID = requestID req })
+        <> BS.singleton newline
+
+reportOtherException :: (BS.ByteString -> IO ()) -> SomeException -> IO ()
+reportOtherException out exn =
+  out $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
         <> BS.singleton newline
 
 -- | Serve an application on stdio, with messages encoded as netstrings.
@@ -1072,7 +1162,8 @@ serveHandlesNS opts hIn hOut app =
            (unmask
              (case JSON.eitherDecode (decodeNetstring line) of
                 Left  msg -> throwIO (parseError (T.pack msg))
-                Right req -> handleRequest opts respond app req))
+                Right req -> handleRequest opts respond app req
+                             `catch` reportArgoThreadError respond req))
            `catch` reportError respond
            `catch` reportOtherException respond
 
@@ -1095,6 +1186,7 @@ logRx opts bs = optLogger opts ("[RX] " <> (T.decodeUtf8 $ BS.toStrict bs))
 -- | Log that a JSON RPC response was sent as `[TX] <JSON contents>`.
 logTx :: MethodOptions -> BS.ByteString -> IO ()
 logTx opts bs = optLogger opts ("[TX] " <> (T.decodeUtf8 $ BS.toStrict bs))
+
 
 -- | Environment variable which, when set to a non-empty value not equal to "0",
 -- enables TLS connections over HTTPS.
@@ -1200,18 +1292,26 @@ serveHttp opts httpOpts app port = do
             b <- Scotty.body
             liftIO $ logRx opts b
             replyBodyContents <- liftIO $ newMVar mempty
-            let respond str = modifyMVar replyBodyContents $ \old -> pure (old <> str, ())
-            res <-
+            res <- do
+              let respond str = modifyMVar replyBodyContents $ \old -> pure (old <> str, ())
+              let internalErr exn = pure $ Left $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) })
               liftIO $
                 (case JSON.eitherDecode b of
-                  Left msg ->
-                    throwIO (parseError (T.pack msg))
+                  Left msg -> pure $ Left $ JSON.encode $ (parseError (T.pack msg))
                   Right req ->
-                    Right <$> handleRequest opts respond app req)
+                    (Right <$> handleRequest opts respond app req)
                     `catch` (\ (exn :: JSONRPCException) ->
                                pure $ Left $ JSON.encode exn)
-                    `catch` (\ (exn :: SomeException) ->
-                               pure $ Left $ JSON.encode (internalError { errorData = Just (JSON.String (T.pack (show exn))) }))
+                    `catch` (\ (exn :: ArgoThreadException) ->
+                                case exn of
+                                  ArgoThreadTimedOut ->
+                                    pure $ Left $ JSON.encode
+                                    (threadTimedOut { errorID   = requestID req
+                                                    , errorData = JSON.Number . fromIntegral <$> (requestTimeout req)})
+                                  ArgoThreadInterrupted ->
+                                    pure $ Left $ JSON.encode
+                                    (threadInterrupted { errorID   = requestID req }))
+                    `catch` (\ (exn :: SomeException) -> internalErr exn))
             case res of
               Left err ->
                 do Scotty.setHeader "Content-Type" "application/json"

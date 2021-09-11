@@ -13,14 +13,14 @@ import subprocess
 
 class LoadFile(argo.Command):
     def __init__(self, connection : HasProtocolState, file_path : str) -> None:
-        super(LoadFile, self).__init__('load', {'file path': file_path}, connection)
+        super(LoadFile, self).__init__('load', {'file path': file_path}, connection, timeout=None)
 
     def process_result(self, res : Any) -> Any:
         return res
 
 class Implode(argo.Command):
     def __init__(self, connection : HasProtocolState) -> None:
-        super(Implode, self).__init__('implode', {}, connection)
+        super(Implode, self).__init__('implode', {}, connection, timeout=None)
 
     def process_result(self, res : Any) -> Any:
         return res
@@ -32,7 +32,7 @@ class Show(argo.Query):
             params['start'] += start
         if end is not None:
             params['end'] += end
-        super(Show, self).__init__('show', params, connection)
+        super(Show, self).__init__('show', params, connection, timeout=None)
 
     def process_result(self, res : Any) -> Any:
         return res['value']

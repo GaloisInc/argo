@@ -3,7 +3,7 @@
 from argo_client.connection import ServerConnection
 
 from abc import abstractmethod
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 from typing_extensions import Protocol
 
 
@@ -53,7 +53,9 @@ class Interaction:
     _params: Dict[str, Any]
 
     def __init__(self, method: str, params: Dict[str, Any],
-                 connection: HasProtocolState) -> None:
+                 connection: HasProtocolState,
+                 *,
+                 timeout: Optional[float]) -> None:
 
         self.connection = connection
         self._raw_response = None
@@ -64,7 +66,7 @@ class Interaction:
         self.request_id = \
             connection. \
             server_connection. \
-            send_command(self._method, self._params)
+            send_command(self._method, self._params, timeout=timeout)
 
     def add_param(self, name: str, val: Any) -> None:
         self._params[name] = val

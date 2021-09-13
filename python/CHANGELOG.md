@@ -1,3 +1,8 @@
+# argo-client v0.0.9 (13 Sep 2021)
++ Add an optional `timeout` keyword argument to `Interaction`'s
+  `__init__` method which passes any specified timeout to the
+  contained `send_command` call.
+
 # argo-client v0.0.8 (10 Sep 2021)
 + Add a `timeout` keyword to `argo_client.connection`'s
   `send_command` and `send_query` to support user-specified

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -99,7 +100,6 @@ import Data.IORef
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.HashMap.Strict as HM
 import Data.Maybe (maybeToList)
 import Data.Scientific (Scientific)
 import Data.Set (Set)
@@ -135,6 +135,13 @@ import qualified Web.Scotty as Scotty
       setHeader,
       status,
       text )
+
+#if MIN_VERSION_aeson(2,0,0)
+import Data.Aeson.Key (Key)
+import qualified Data.Aeson.KeyMap as KM
+#else
+import qualified Data.HashMap.Strict as HM
+#endif
 
 import Network.Wai.Handler.Warp (Port, defaultSettings, setPort, setFork)
 import Network.Wai.Handler.WarpTLS (runTLS, tlsSettings)
@@ -1023,7 +1030,7 @@ handleRequest opts respond app req = do
 
     withoutStateID :: IO a -> IO a
     withoutStateID act =
-      if HM.member "state" (requestParams req)
+      if memberKM "state" (requestParams req)
       then throwIO unexpectedStateID
       else act
 
@@ -1060,7 +1067,7 @@ serveStdIO opts = serveHandles opts stdin stdout
 
 getStateID :: Request -> IO StateID
 getStateID req =
-  case HM.lookup "state" (requestParams req) of
+  case lookupKM "state" (requestParams req) of
     Just sid ->
       case JSON.fromJSON sid of
         JSON.Success i -> pure i
@@ -1356,3 +1363,18 @@ serveHttp opts httpOpts app port = do
            else do Scotty.status stat
                    Scotty.text $ "The header \"" <> h <> "\" should be \"application/json\"."
                    Scotty.finish
+
+-- TODO: When the ecosystem widely uses aeson-2.0.0.0 or later, remove this CPP.
+#if MIN_VERSION_aeson(2,0,0)
+lookupKM :: Key -> KM.KeyMap JSON.Value -> Maybe JSON.Value
+lookupKM = KM.lookup
+
+memberKM :: Key -> KM.KeyMap JSON.Value -> Bool
+memberKM = KM.member
+#else
+lookupKM :: Text -> HM.HashMap Text JSON.Value -> Maybe JSON.Value
+lookupKM = HM.lookup
+
+memberKM :: Text -> HM.HashMap Text JSON.Value -> Bool
+memberKM = HM.member
+#endif

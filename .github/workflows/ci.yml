@@ -19,9 +19,9 @@ jobs:
     - uses: actions/setup-python@v2
       with:
         python-version: '3.x'
-    - uses: abatilo/actions-poetry@v2.0.0
+    - uses: abatilo/actions-poetry@v2.1.4
       with:
-        poetry-version: 1.1.6
+        poetry-version: 1.1.11
     - name: Checkout
       uses: actions/checkout@v2
       with:

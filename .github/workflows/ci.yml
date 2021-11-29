@@ -45,7 +45,9 @@ jobs:
       # steps are less verbose and major dependency failures are separate.
     - name: Install python dependencies
       working-directory: ./python
+      # see https://github.com/python-poetry/poetry/issues/4210 for new-installer workaround details below
       run: |
+        poetry config experimental.new-installer false
         poetry install
     - name: Typecheck python code
       working-directory: ./python

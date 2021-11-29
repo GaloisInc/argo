@@ -1,6 +1,24 @@
-[build-system]
-requires = [
-    "setuptools>=42",
-    "wheel"
+[tool.poetry]
+name = "argo-client"
+version = "0.0.9"
+readme = "README.md"
+keywords = ["cryptography", "verification"]
+description = "A JSON RPC client library."
+authors = ["Galois, Inc. <cryptol-team@galois.com>"]
+
+license = "BSD License"
+include = [
+    "LICENSE",
+    "mypy.ini"
 ]
-build-backend = "setuptools.build_meta"
+
+[tool.poetry.dependencies]
+python = ">=3.7.0,<4"
+requests = "^2.26.0"
+urllib3 = ">=1.26.5"
+
+[tool.poetry.dev-dependencies]
+mypy = "^0.812"
+
+[build-system]
+requires = ["poetry>=1.1.4", "setuptools>=40.8.0"]

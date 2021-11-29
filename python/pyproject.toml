@@ -2,15 +2,20 @@
 name = "argo-client"
 version = "0.0.9"
 readme = "README.md"
-keywords = ["cryptography", "verification"]
+keywords = ["JSON", "RPC"]
 description = "A JSON RPC client library."
 authors = ["Galois, Inc. <cryptol-team@galois.com>"]
 
 license = "BSD License"
 include = [
     "LICENSE",
+    "CHANGELOG.md",
     "mypy.ini"
 ]
+
+[tool.poetry.urls]
+"Source" = "https://github.com/GaloisInc/argo/tree/master/python"
+"Bug Tracker" = "https://github.com/GaloisInc/argo/issues"
 
 [tool.poetry.dependencies]
 python = ">=3.7.0,<4"

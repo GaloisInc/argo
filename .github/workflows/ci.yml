@@ -51,7 +51,7 @@ jobs:
         poetry install
     - name: Typecheck python code
       working-directory: ./python
-      run: mypy argo_client
+      run: poetry run mypy argo_client
     - name: Build
       run: |
         cabal build all

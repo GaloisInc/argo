@@ -1,3 +1,6 @@
+# argo-client v0.0.10 (9 Dec 2021)
++ Use poetry to manage package, bump dependency bounds.
+
 # argo-client v0.0.9 (13 Sep 2021)
 + Add an optional `timeout` keyword argument to `Interaction`'s
   `__init__` method which passes any specified timeout to the

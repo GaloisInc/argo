@@ -11,14 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ghc-ver: ["8.6.5", "8.8.4", "8.10.7", "9.0.2", "9.2.1"]
+        ghc-ver: ["8.6.5", "8.8.4", "8.10.7", "9.0.2", "9.2.1","9.4.3"]
       # complete all jobs
       fail-fast: false
     name: Argo - GHC v${{ matrix.ghc-ver }} - ubuntu-latest
     steps:
     - uses: actions/setup-python@v2
       with:
-        python-version: '3.x'
+        python-version: '3.7'
     - uses: abatilo/actions-poetry@v2.1.4
       with:
         poetry-version: 1.1.11

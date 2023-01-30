@@ -1,3 +1,9 @@
+# argo-client v0.0.11 (30 Jan 2023)
++ Bump the lower version bounds on various dependencies. `argo-client` now
+  requires Python 3.8 and `mypy-0.991` as the minimum. This has the benefit
+  of eliminating the `typed-ast` library as a dependency before `typed-ast`
+  is EOL'd.
+
 # argo-client v0.0.10 (9 Dec 2021)
 + Use poetry to manage package, bump dependency bounds.
 

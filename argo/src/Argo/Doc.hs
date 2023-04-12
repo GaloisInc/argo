@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Argo.Doc (LinkTarget(..), Block(..), Inline(..), Described(..), DescribedMethod(..), datatype) where
 

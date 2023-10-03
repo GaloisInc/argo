@@ -51,14 +51,14 @@ Build tools
 Requirements:
 
 * cabal-install 2.4.1.0 or newer
-* GHC-8.6.5 or GHC-8.8.4
+* GHC-8.8.4 or newer
 * Python 3.7 or higher
 
 Any easy to way get GHC and cabal-install installed is to use `ghcup`_;
 however any other method will be fine::
 
-    $ ghcup install 8.6.5
-    $ ghcup set 8.6.5 # optional
+    $ ghcup install 9.2.8
+    $ ghcup set 9.2.8 # optional
     $ ghcup install-cabal
 
 .. _ghcup: https://gitlab.haskell.org/haskell/ghcup

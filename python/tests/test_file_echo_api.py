@@ -190,11 +190,43 @@ class GenericFileEchoTests():
         self.assertEqual(actual, expected)
 
         # invalid request (Bad JSON)
-        invalid_request = "BAAAAAD JSON"
+        #
+        # Note that aeson's parse error messages differ depending on whether you
+        # are using:
+        #
+        # 1. aeson-2.2.* or later
+        # 2. An older version of aeson
+        #
+        # With (1), the parse error will be:
+        #
+        # > Unexpected "BAAAAADJSON", expecting JSON value
+        #
+        # With (2), the parse error will be:
+        #
+        # > Error in $: Failed reading: not a valid json value at 'BAAAAADJSON'
+        #
+        # (See also https://github.com/haskell/aeson/pull/1036, which introduced
+        # this change.)
+        #
+        # As a result, testing for an exact match with aeson's parse error
+        # message is fragile. Instead, we check that the result's parse error
+        # contains the invalid request ("BAAAAADJSON") as a substring, remove
+        # the parse error, and then check that the rest of the result matches
+        # what we expect.
+        invalid_request = "BAAAAADJSON"
         c.process.send_one_message(invalid_request)
         time.sleep(2) # pause before fetching response so we don't just read the previous response whose JSON-RPC id is `null`
         actual = c.wait_for_reply_to(None)
-        expected = {'error':{'data':{'stdout':None,'data':'Error in $: Failed reading: not a valid json value at \'BAAAAADJSON\'','stderr':None},'code':-32700,'message':'Parse error'},'jsonrpc':'2.0','id':None}
+        # Check that the result has a 'data' key in the place we expect
+        self.assertIn('error', actual)
+        self.assertIn('data', actual['error'])
+        self.assertIn('data', actual['error']['data'])
+        # Check that the invalid request is in the error message somewhere
+        self.assertIn(invalid_request, actual['error']['data']['data'])
+        # Remove the error message
+        del actual['error']['data']['data']
+        # Check that the rest of the result matches what we expect
+        expected = {'error':{'data':{'stdout':None,'stderr':None},'code':-32700,'message':'Parse error'},'jsonrpc':'2.0','id':None}
         self.assertEqual(actual, expected)
 
         # test timeout

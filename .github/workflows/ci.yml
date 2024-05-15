@@ -19,6 +19,7 @@ jobs:
     steps:
     - uses: actions/setup-python@v2
       with:
+        # Ensure pyproject.toml and python/mypy.ini are kept in sync with the Python version here.
         python-version: '3.12'
     - uses: abatilo/actions-poetry@v2.1.4
       with:

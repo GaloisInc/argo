@@ -1,4 +1,4 @@
-# argo-client next (TBA)
+# argo-client v0.0.12 (15 May 2024)
 + Bump `mypy` to  `mypy-1.10`, and update its dependencies to support the bump. This allows for Python 3.12 support.
 
 

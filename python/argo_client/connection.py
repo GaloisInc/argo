@@ -208,7 +208,6 @@ class DynamicSocketProcess(SocketProcess):
     """
 
     def setup(self) -> None:
-        super().setup()
         if self.proc is None or self.proc.poll() is not None:
             # To debug, consider setting stderr to sys.stdout instead (to see
             # server log messages).
@@ -260,8 +259,6 @@ class RemoteSocketProcess(ServerProcess):
         super().__init__()
 
     def setup(self) -> None:
-        super().setup()
-
         self.socket = socket.socket(socket.AF_INET6 if self.ipv6 else socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((self.host, self.port))
         self.socket.setblocking(False)
@@ -358,7 +355,6 @@ class StdIOProcess(ManagedProcess):
     __messages: queue.Queue[str] # multiprocessing.Queue[str] #
 
     def setup(self) -> None:
-        super().setup()
         if self.proc is None or self.proc.poll() is not None:
             # To debug, consider setting stderr to sys.stdout instead (to see
             # server log messages).

@@ -20,15 +20,12 @@ include = [
 [tool.poetry.dependencies]
 python = ">=3.8.0,<4"
 
-# argo does not directly depend on these but mypy does depend on these.
-# These not being locked caused CI to fail due to these updating automatically, see https://github.com/GaloisInc/argo/issues/207.
-# We will want to unlock these at some point, see https://github.com/GaloisInc/cryptol/issues/1645.
-requests = ">=2.26.0, <2.31.0.20240310"
-urllib3 = ">=1.26.5, <2.2.0"
-types-requests = "<2.31.0.20240310"
+requests = ">=2.31.0"
+urllib3 = ">=2.2.0"
+types-requests = ">=2.31.0"
 
 [tool.poetry.dev-dependencies]
-mypy = "^0.991"
+mypy = "^1.10"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

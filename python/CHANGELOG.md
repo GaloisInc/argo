@@ -1,3 +1,7 @@
+# argo-client next (TBA)
++ Bump `mypy` to  `mypy-1.10`, and update its dependencies to support the bump. This allows for Python 3.12 support.
+
+
 # argo-client v0.0.11 (30 Jan 2023)
 + Bump the lower version bounds on various dependencies. `argo-client` now
   requires Python 3.8 and `mypy-0.991` as the minimum. This has the benefit

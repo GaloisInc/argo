@@ -19,7 +19,7 @@ jobs:
     steps:
     - uses: actions/setup-python@v2
       with:
-        python-version: '3.11'
+        python-version: '3.12'
     - uses: abatilo/actions-poetry@v2.1.4
       with:
         poetry-version: 1.4.2

@@ -55,6 +55,9 @@ jobs:
     - name: Typecheck python code
       working-directory: ./python
       run: poetry run mypy --install-types --non-interactive argo_client
+    - name: Configure
+      run: |
+        cabal configure --enable-tests
     - name: Build
       run: |
         cabal build all

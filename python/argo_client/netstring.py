@@ -23,6 +23,11 @@ def decode(netstring : bytes) -> Optional[Tuple[str, bytes]]:
     """Decode the first valid netstring from a bytestring, returning its
     string contents and the remainder of the bytestring.
 
+    Returns None when the bytes are a prefix of a valid netstring.
+
+    Raises InvalidNetstring when the bytes are not a prefix of a valid
+    netstring.
+
     >>> decode(b'5:hello,more')
     ('hello', b'more')
 
@@ -30,7 +35,10 @@ def decode(netstring : bytes) -> Optional[Tuple[str, bytes]]:
 
     colon = netstring.find(b':')
     if colon == -1 and len(netstring) >= 10 or colon >= 10:
-        # cut things off at about a gigabyte
+        # Avoid cases where the incomplete length is already too
+        # long or the length is complete but is too long.
+        # A minimumten-digit length will be approximately 1GB or more
+        # which is larger than we should need to handle for this API
         raise InvalidNetstring("message length too long")
 
     if colon == -1:

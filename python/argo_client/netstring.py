@@ -2,7 +2,7 @@
 as a lightweight transport layer for JSON RPC.
 """
 
-from typing import Tuple
+from typing import Optional, Tuple
 
 def encode(string : str) -> bytes:
     """Encode a ``str`` into a netstring.
@@ -13,29 +13,49 @@ def encode(string : str) -> bytes:
     bytestring = string.encode()
     return str(len(bytestring)).encode() + b':' + bytestring + b','
 
-def decode(netstring : bytes) -> Tuple[str, bytes]:
+class InvalidNetstring(Exception):
+    """Exception for malformed netstrings"""
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)
+
+def decode(netstring : bytes) -> Optional[Tuple[str, bytes]]:
     """Decode the first valid netstring from a bytestring, returning its
     string contents and the remainder of the bytestring.
+
+    Returns None when the bytes are a prefix of a valid netstring.
+
+    Raises InvalidNetstring when the bytes are not a prefix of a valid
+    netstring.
 
     >>> decode(b'5:hello,more')
     ('hello', b'more')
 
     """
 
-    i = 0
-    length_bytes = bytearray(b'')
-    while chr(netstring[i]).isdigit():
-        length_bytes.append(netstring[i])
-        i += 1
-    if chr(netstring[i]).encode() != b':':
-        raise ValueError("Malformed netstring, missing :")
-    length = int(length_bytes.decode())
-    i += 1
-    out = bytearray(b'')
-    for j in range(0, length):
-        out.append(netstring[i])
-        i += 1
-    if chr(netstring[i]).encode() != b',':
-        raise ValueError("Malformed netstring, missing ,")
-    i += 1
-    return (out.decode(), netstring[i:])
+    colon = netstring.find(b':')
+    if colon == -1 and len(netstring) >= 10 or colon >= 10:
+        # Avoid cases where the incomplete length is already too
+        # long or the length is complete but is too long.
+        # A minimum ten-digit length will be approximately 1GB or more
+        # which is larger than we should need to handle for this API
+        raise InvalidNetstring("message length too long")
+
+    if colon == -1:
+        # incomplete length, wait for more bytes
+        return None
+
+    lengthstring = netstring[0:colon]
+    if colon == 0 or not lengthstring.isdigit():
+        raise InvalidNetstring("invalid format, malformed message length")
+
+    length = int(lengthstring)
+    comma = colon + length + 1
+    if len(netstring) <= comma:
+        # incomplete message, wait for more bytes
+        return None
+
+    if netstring[comma] != 44: # comma
+        raise InvalidNetstring("invalid format, missing comma")
+
+    return (netstring[colon + 1 : comma].decode(), netstring[comma+1:])

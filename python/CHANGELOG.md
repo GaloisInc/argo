@@ -1,3 +1,8 @@
+# argo-client next (TBA)
++ Use blocking IO to reduce CPU load when receiving replies
++ wait_for_reply_to now consumes the reply waited for. previously the reply was held in memory indefinitely
++ Removes RemoteSocketProcess.buffer_replies method. Replies are processed during wait_for_reply_to
+
 # argo-client v0.0.12 (15 May 2024)
 + Bump `mypy` to  `mypy-1.10`, and update its dependencies to support the bump. This allows for Python 3.12 support.
 

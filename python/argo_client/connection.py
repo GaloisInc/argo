@@ -158,32 +158,22 @@ class SocketProcess(ManagedProcess):
         self.persist = persist
         super().__init__(command, environment=environment)
 
-
-    def buffer_replies(self) -> None:
-        """Read any replies that the server has sent, and add their byte
-           representation to the internal buffer, freeing up space in
-           the pipe or socket.
-        """
-        try:
-            arrived = self.socket.recv(4096)
-            while arrived != b'':
-                self.buf.extend(arrived)
-                arrived = self.socket.recv(4096)
-            return None
-        except BlockingIOError:
-            return None
-
     def get_one_reply(self) -> Optional[str]:
-        """If a complete reply has been buffered, parse it from the buffer and
-           return it as a bytestring."""
-        self.buffer_replies()
-        try:
-            (msg, rest) = netstring.decode(self.buf)
-            self.buf = bytearray(rest)
-            self._log_rx(msg)
-            return msg
-        except (ValueError, IndexError):
-            return None
+        """Return the next message if there is one. Block until the message
+        is ready or the socket has closed. Return None if the socket closes
+        and there are no buffered messages ready."""
+        while True:
+            got = netstring.decode(self.buf)
+            if got is None:
+                arrived = self.socket.recv(4096)
+                if arrived == '':
+                    return None
+                self.buf.extend(arrived)
+            else:
+                (msg, rest) = got
+                self.buf = bytearray(rest)
+                self._log_rx(msg)
+                return msg
 
     def send_one_message(self, message: str, expecting_response : bool = True) -> None:
         self._log_tx(message)
@@ -233,7 +223,6 @@ class DynamicSocketProcess(SocketProcess):
 
         self.socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
         self.socket.connect(("localhost", self.port))
-        self.socket.setblocking(False)
 
 
 
@@ -261,33 +250,23 @@ class RemoteSocketProcess(ServerProcess):
     def setup(self) -> None:
         self.socket = socket.socket(socket.AF_INET6 if self.ipv6 else socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((self.host, self.port))
-        self.socket.setblocking(False)
-
-    def buffer_replies(self) -> None:
-        """Read any replies that the server has sent, and add their byte
-           representation to the internal buffer, freeing up space in
-           the pipe or socket.
-        """
-        try:
-            arrived = self.socket.recv(4096)
-            while arrived != b'':
-                self.buf.extend(arrived)
-                arrived = self.socket.recv(4096)
-            return None
-        except BlockingIOError:
-            return None
 
     def get_one_reply(self) -> Optional[str]:
-        """If a complete reply has been buffered, parse it from the buffer and
-           return it as a bytestring."""
-        self.buffer_replies()
-        try:
-            (msg, rest) = netstring.decode(self.buf)
-            self.buf = bytearray(rest)
-            self._log_rx(msg)
-            return msg
-        except (ValueError, IndexError):
-            return None
+        """Return the next message if there is one. Block until the message
+        is ready or the socket has closed. Return None if the socket closes
+        and there are no buffered messages ready."""
+        while True:
+            got = netstring.decode(self.buf)
+            if got is None:
+                arrived = self.socket.recv(4096)
+                if arrived == '':
+                    return None
+                self.buf.extend(arrived)
+            else:
+                (msg, rest) = got
+                self.buf = bytearray(rest)
+                self._log_rx(msg)
+                return msg
 
     def send_one_message(self, message: str, *, expecting_response : bool = True) -> None:
         self._log_tx(message)
@@ -425,16 +404,6 @@ class ServerConnection:
            this connection."""
         return self.ids.get()
 
-    def _process_replies(self) -> None:
-        """Remove all pending replies from the internal buffer, parse them
-           into JSON, and add them to the internal collection of replies.
-        """
-        reply_bytes = self.process.get_one_reply()
-        while reply_bytes is not None:
-            the_reply = json.loads(reply_bytes)
-            self.replies[the_reply['id']] = the_reply
-            reply_bytes = self.process.get_one_reply()
-
     def send_command(self, method: str, params: dict, *, timeout : Optional[float] = None) -> int:
         """Send a message to the server with the given JSONRPC command
            method and parameters. The return value is the unique request
@@ -478,11 +447,18 @@ class ServerConnection:
     def wait_for_reply_to(self, request_id: int) -> Any:
         """Block until a reply is received for the given
            ``request_id``. Return the reply."""
-        self._process_replies()
-        while request_id not in self.replies:
-            self._process_replies()
 
-        return self.replies[request_id] #self.replies.pop(request_id)  # delete reply while returning it
+        if request_id in self.replies:
+            return self.replies.pop(request_id)
+
+        while True:
+            reply_bytes = self.process.get_one_reply()
+            if reply_bytes is not None:
+                the_reply = json.loads(reply_bytes)
+                if the_reply['id'] == request_id:
+                    return the_reply
+                else:
+                    self.replies[the_reply['id']] = the_reply
 
     def logging(self, on : bool, *, dest : TextIO = sys.stderr) -> None:
         """Whether to log received and transmitted JSON."""

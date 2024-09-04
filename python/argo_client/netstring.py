@@ -37,7 +37,7 @@ def decode(netstring : bytes) -> Optional[Tuple[str, bytes]]:
     if colon == -1 and len(netstring) >= 10 or colon >= 10:
         # Avoid cases where the incomplete length is already too
         # long or the length is complete but is too long.
-        # A minimumten-digit length will be approximately 1GB or more
+        # A minimum ten-digit length will be approximately 1GB or more
         # which is larger than we should need to handle for this API
         raise InvalidNetstring("message length too long")
 

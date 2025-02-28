@@ -54,6 +54,8 @@ executable file-echo-api
   hs-source-dirs:      file-echo-api
   build-depends:
     file-echo-api
+  other-modules:
+    Paths_file_echo_api
 
 executable mutable-file-echo-api
   import:              deps, warnings
@@ -61,3 +63,5 @@ executable mutable-file-echo-api
   hs-source-dirs:      mutable-file-echo-api
   build-depends:
     file-echo-api
+  other-modules:
+    Paths_file_echo_api

@@ -5,6 +5,7 @@
 module Main ( main ) where
 
 import Data.ByteString (ByteString)
+import Data.Version (showVersion)
 import Data.Typeable
 import qualified Options.Applicative as Opt
 
@@ -13,9 +14,10 @@ import qualified Argo.Doc as Doc
 import Argo.DefaultMain ( customMain, userOptions )
 
 import qualified FileEchoServer as FES
+import qualified Paths_file_echo_api
 
 main :: IO ()
-main = customMain parseServerOptions parseServerOptions parseServerOptions parseServerOptions description getApp
+main = customMain parseServerOptions parseServerOptions parseServerOptions parseServerOptions version description getApp
   where
     getApp opts =
       Argo.mkApp
@@ -51,6 +53,10 @@ parseServerOptions = ServerOptions <$> filename
       Opt.long "file" <>
       Opt.metavar "FILENAME" <>
       Opt.help "Initial file to echo"
+
+-- Display the version number when the --version option is supplied.
+version :: Opt.Parser (a -> a)
+version = Opt.simpleVersioner (showVersion Paths_file_echo_api.version)
 
 serverMethods :: [Argo.AppMethod FES.ServerState]
 serverMethods =

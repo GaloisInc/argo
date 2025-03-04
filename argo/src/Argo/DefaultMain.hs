@@ -4,7 +4,10 @@ module Argo.DefaultMain
     defaultMain, customMain,
     -- * Options
     UserOptions(..),
-    userOptions) where
+    userOptions,
+    NoOpts(..),
+    parseNoOpts,
+  ) where
 
 import Control.Applicative ( Alternative((<|>)), (<**>) )
 import Control.Monad ( when )
@@ -92,8 +95,13 @@ defaultMain ::
 defaultMain str app =
   customMain parseNoOpts parseNoOpts parseNoOpts parseNoOpts str $ const $ pure app
 
+-- | A simple data type that represents the absence of additional command-line
+-- options (other than the default ones). See also 'parseNoOpts'.
 data NoOpts = NoOpts
 
+-- | Do not parse any additional command-line options (other than the default
+-- ones). This can be useful to pass to 'customMain' if you do not wish to
+-- customize a particular subcommand's command-line options further.
 parseNoOpts :: Opt.Parser NoOpts
 parseNoOpts = pure NoOpts
 

@@ -1,10 +1,14 @@
-{-# LANGUAGE LambdaCase, OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase, OverloadedStrings, RankNTypes, ScopedTypeVariables #-}
 module Argo.DefaultMain
   ( -- * Main functions
     defaultMain, customMain,
     -- * Options
     UserOptions(..),
-    userOptions) where
+    userOptions,
+    NoOpts(..),
+    parseNoOpts,
+    parseNoTopLevelOpts
+  ) where
 
 import Control.Applicative ( Alternative((<|>)), (<**>) )
 import Control.Monad ( when )
@@ -67,15 +71,24 @@ customMain ::
   Opt.Parser socketOpts {- ^ A command-line parser for the options for socket mode -} ->
   Opt.Parser httpOpts {- ^ A command-line parser for the options for HTTP mode -} ->
   Opt.Parser docOpts {- ^ A command-line parser for the options for documenation -} ->
+  (forall a. Opt.Parser (a -> a))
+    {- ^ A command-line parser for top-level options. A common use case for
+         this parser is to configure options that only display messages
+         (e.g., @--version@). -}
+
+    {- Implementation note: we use a higher-rank type above so that the type
+       signature does not leak the GlobalOptions data type, which is an
+       implementation detail.
+    -} ->
   String {- ^ A description to be shown to users in the --help text -} ->
   (UserOptions stdIOOpts socketOpts httpOpts docOpts -> IO (App s))
     {- ^ An initialization procedure for the application that transforms the
          parsed custom options into an application -} ->
   IO ()
-customMain stdioOpts socketOpts httpOpts docOpts str app =
+customMain stdioOpts socketOpts httpOpts docOpts globalOpts str app =
   do opts <- Opt.customExecParser
                (Opt.prefs $ Opt.showHelpOnError <> Opt.showHelpOnEmpty)
-               (options stdioOpts socketOpts httpOpts docOpts str)
+               (options stdioOpts socketOpts httpOpts docOpts globalOpts str)
      case optLogFile $ methodOpts opts of
        Just path -> do
          alreadyExists <- doesFileExist path
@@ -90,12 +103,23 @@ defaultMain ::
   App s {- ^ The application to be run -} ->
   IO ()
 defaultMain str app =
-  customMain parseNoOpts parseNoOpts parseNoOpts parseNoOpts str $ const $ pure app
+  customMain parseNoOpts parseNoOpts parseNoOpts parseNoOpts parseNoTopLevelOpts str $ const $ pure app
 
+-- | A simple data type that represents the absence of additional command-line
+-- options (other than the default ones). See also 'parseNoOpts'.
 data NoOpts = NoOpts
 
+-- | Do not parse any additional command-line options (other than the default
+-- ones). This can be useful to pass to 'customMain' if you do not wish to
+-- customize a particular subcommand's command-line options further.
 parseNoOpts :: Opt.Parser NoOpts
 parseNoOpts = pure NoOpts
+
+-- | Do not parse any additional top-level command-line options (other than the
+-- default ones). This can be useful to pass to 'customMain' if you do not wish
+-- to customize the top-level application's command-line options further.
+parseNoTopLevelOpts :: Opt.Parser (a -> a)
+parseNoTopLevelOpts = pure id
 
 -- | Options that are common to the network server modes of operation,
 -- like socket and HTTP.
@@ -228,11 +252,13 @@ options ::
   Opt.Parser socketOpts ->
   Opt.Parser httpOpts ->
   Opt.Parser docOpts ->
+  (forall a. Opt.Parser (a -> a)) ->
   String ->
   Opt.ParserInfo (GlobalOptions stdioOpts socketOpts httpOpts docOpts)
-options stdioOpts socketOpts httpOpts docOpts desc =
-  (Opt.info (allOptions stdioOpts socketOpts httpOpts docOpts desc) $
-   Opt.fullDesc <> Opt.progDesc desc)
+options stdioOpts socketOpts httpOpts docOpts globalOpts desc =
+  Opt.info
+    (allOptions stdioOpts socketOpts httpOpts docOpts desc <**> globalOpts)
+    (Opt.fullDesc <> Opt.progDesc desc)
 
 hostOpt :: Opt.Parser (Maybe HostName)
 hostOpt =

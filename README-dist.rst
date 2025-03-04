@@ -8,7 +8,7 @@ convenient interaction with that API.
 Environment Setup
 =================
 
-The package contains two directories that external tools need ot be able
+The package contains two directories that external tools need to be able
 to find: `bin` and `python`. The former contains the server executables,
 and the latter contains Python code to make it convenient to interact
 with the servers.

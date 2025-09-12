@@ -1,4 +1,5 @@
 {-# Language OverloadedStrings #-}
+{-# Language ScopedTypeVariables #-}
 module Argo.Socket
   ( serveSocket
   , serveSocketDynamic
@@ -36,7 +37,8 @@ serveSocket ::
 serveSocket opts hostName serviceName app =
 
      -- resolve listener addresses, throws exception on failure
-  do infos <- N.getAddrInfo (Just hints) (Just hostName) (Just serviceName)
+  do (infos :: [N.AddrInfo]) <-
+       N.getAddrInfo (Just hints) (Just hostName) (Just serviceName)
 
      -- open listener sockets on all matched addresses, typically
      -- one per address family.

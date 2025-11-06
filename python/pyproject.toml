@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "argo-client"
-version = "0.0.13.99"
+version = "0.0.14"
 readme = "README.md"
 keywords = ["JSON", "RPC"]
 description = "A JSON RPC client library."

@@ -1,3 +1,6 @@
+# argo-client v0.0.14 (TBA)
++ Allow user-specified global options in Argo's CLI
+
 # argo-client v0.0.13 (17 Sep 2024)
 + Use blocking IO to reduce CPU load when receiving replies
 + wait_for_reply_to now consumes the reply waited for. previously the reply was held in memory indefinitely

@@ -1,4 +1,8 @@
-# argo-client v0.0.14 (TBA)
+# next (TBA)
++ Bump `urllib3` to 2.6.0 for a security advisory, and drop Python 3.8,
+  which is long EOL; we now require at least Python 3.9.
+
+# argo-client v0.0.14 (6 Nov 2025)
 + Allow user-specified global options in Argo's CLI
 
 # argo-client v0.0.13 (17 Sep 2024)

@@ -18,10 +18,10 @@ include = [
 "Bug Tracker" = "https://github.com/GaloisInc/argo/issues"
 
 [tool.poetry.dependencies]
-python = ">=3.8.0,<4"
+python = ">=3.9.0,<4"
 
 requests = ">=2.31.0"
-urllib3 = ">=2.2.0"
+urllib3 = ">=2.6.0"
 types-requests = ">=2.31.0"
 
 [tool.poetry.dev-dependencies]

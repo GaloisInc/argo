@@ -21,20 +21,20 @@ jobs:
       with:
         # Ensure pyproject.toml and python/mypy.ini are kept in sync with the Python version here.
         python-version: '3.12'
-    - uses: abatilo/actions-poetry@v2.1.4
+    - uses: abatilo/actions-poetry@v4
       with:
         poetry-version: 1.4.2
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v6
       with:
         submodules: true
     - name: Get GHC and Cabal
-      uses: haskell/actions/setup@v1
+      uses: haskell-actions/setup@v2
       id: setup-haskell
       with:
         ghc-version: ${{ matrix.ghc-ver }}
         cabal-version: ${{ matrix.cabal-ver }}
-    - uses: actions/cache/restore@v3
+    - uses: actions/cache/restore@v5
       name: Restore cabal store cache
       with:
         path: /home/runner/.cabal/store/ghc-${{ matrix.ghc-ver }}
@@ -66,7 +66,7 @@ jobs:
     - name: Python argo-client unit tests
       working-directory: ./python
       run: poetry run python -m unittest discover --verbose tests
-    - uses: actions/cache/save@v3
+    - uses: actions/cache/save@v5
       name: Save cabal store cache
       if: always()
       with:

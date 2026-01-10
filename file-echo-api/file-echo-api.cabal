@@ -10,6 +10,10 @@ extra-source-files:  CHANGELOG.md
 data-files:          test-scripts/**/*.py
                      test-scripts/**/*.txt
 
+common rts
+  ghc-options:
+    -threaded
+
 common warnings
   ghc-options:
     -Wall
@@ -49,7 +53,7 @@ library
     MutableFileEchoServer
 
 executable file-echo-api
-  import:              deps, warnings
+  import:              deps, rts, warnings
   main-is:             Main.hs
   hs-source-dirs:      file-echo-api
   build-depends:
@@ -58,7 +62,7 @@ executable file-echo-api
     Paths_file_echo_api
 
 executable mutable-file-echo-api
-  import:              deps, warnings
+  import:              deps, rts, warnings
   main-is:             Main.hs
   hs-source-dirs:      mutable-file-echo-api
   build-depends:

@@ -6,12 +6,21 @@ on:
   pull_request:
     branches: [master]
 
+env:
+  # The CABAL_CACHE_VERSION environment variable can be updated to
+  # force the use of a new cabal cache if the current cache contents
+  # become corrupted/invalid.  This can sometimes happen when (for
+  # example) the OS version is changed but older .so files are cached,
+  # which can have various effects (e.g. cabal complains it can't find
+  # a valid version of the "happy" tool).
+  CABAL_CACHE_VERSION: 0
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        ghc-ver: ["8.10.7", "9.0.2", "9.2.8", "9.4.5", "9.6.2", "9.8.1"]
+        ghc-ver: ["8.10.7", "9.0.2", "9.2.8", "9.4.8", "9.6.7", "9.8.4", "9.10.3", "9.12.2"]
         cabal-ver: ["3.10.1.0"]
       # complete all jobs
       fail-fast: false
@@ -41,9 +50,9 @@ jobs:
           ${{ steps.setup-haskell.outputs.cabal-store }}
           dist-newstyle
         # Prefer previous SHA hash if it is still cached
-        key: linux-${{ matrix.ghc-ver }}-${{ hashFiles('cabal.project.freeze') }}-${{ github.sha }}
+        key: ${{ env.CABAL_CACHE_VERSION }}-linux-${{ matrix.ghc-ver }}-${{ hashFiles('cabal.project.freeze') }}-${{ github.sha }}
         # otherwise just use most recent build.
-        restore-keys: linux-${{ matrix.ghc-ver }}-${{ hashFiles('cabal.project.freeze') }}
+        restore-keys: ${{ env.CABAL_CACHE_VERSION }}-linux-${{ matrix.ghc-ver }}-${{ hashFiles('cabal.project.freeze') }}
     - name: Cabal update
       run: cabal update
       # Build macaw-base dependencies and crucible separately just so later
@@ -76,4 +85,4 @@ jobs:
           ${{ steps.setup-haskell.outputs.cabal-store }}
           dist-newstyle
         # Prefer previous SHA hash if it is still cached
-        key: linux-${{ matrix.ghc-ver }}-${{ hashFiles('cabal.project.freeze') }}-${{ github.sha }}
+        key: ${{ env.CABAL_CACHE_VERSION }}-linux-${{ matrix.ghc-ver }}-${{ hashFiles('cabal.project.freeze') }}-${{ github.sha }}

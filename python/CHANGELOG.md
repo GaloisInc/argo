@@ -1,3 +1,5 @@
+# next
+
 # 0.0.15 -- 2026-01-26
 + Bump `urllib3` to 2.6.0 for a security advisory, and drop Python 3.8,
   which is long EOL; we now require at least Python 3.9.

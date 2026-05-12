@@ -1,4 +1,6 @@
 # next
++ Bump `urllib3` to 2.7.0 for a security advisory, and drop Python 3.9,
+  which it no longer supports; we now require at least Python 3.10.
 
 # 0.0.15 -- 2026-01-26
 + Bump `urllib3` to 2.6.0 for a security advisory, and drop Python 3.8,

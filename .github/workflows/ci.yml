@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         ghc-ver: ["8.10.7", "9.0.2", "9.2.8", "9.4.8", "9.6.7", "9.8.4", "9.10.3", "9.12.2"]
-        cabal-ver: ["3.10.1.0"]
+        cabal-ver: ["3.16.1.0"]
       # complete all jobs
       fail-fast: false
     name: Argo - GHC v${{ matrix.ghc-ver }} - ubuntu-latest

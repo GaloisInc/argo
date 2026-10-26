@@ -24,6 +24,9 @@ requests = ">=2.33.0"
 urllib3 = ">=2.8.0"
 types-requests = ">=2.31.0"
 
+# add a fake dep on certifi (used by requests) for security issues
+certifi = ">=2026.10.19"
+
 [tool.poetry.dev-dependencies]
 mypy = "^1.10"
 
